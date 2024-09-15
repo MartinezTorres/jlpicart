@@ -26,28 +26,36 @@ set(PICO_BOARD pico2 CACHE STRING "Board type")
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
-project(blink C CXX ASM)
+project(picocd C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(blink
-    printf.c
-    blink.cc
-    spelunk-en.rom.cc
+add_executable(picocd
+    src/main.cc
+    
+    src/printf/printf.c
+    src/printf/putchar.c
+    
+    src/roms/spelunk-en.rom.cc
     )
 
+pico_generate_pio_header(picocd ${CMAKE_CURRENT_SOURCE_DIR}/src/bus.pio)
+
 # pull in common dependencies
-target_link_libraries(blink pico_stdlib)
+target_link_libraries(picocd 
+    pico_stdlib 
+    hardware_pio 
+    pico_multicore)
 
 if (PICO_CYW43_SUPPORTED)
     target_link_libraries(blink pico_cyw43_arch_none)
 endif()
 
 # create map/bin/hex file etc.
-pico_add_extra_outputs(blink)
+pico_add_extra_outputs(picocd)
 
 set (PICO_COPY_TO_RAM 1)
 
