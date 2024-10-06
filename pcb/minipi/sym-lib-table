@@ -1,0 +1,8 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "msx-cartridge_dummy")(type "KiCad")(uri "${KIPRJMOD}/Libraries/Symbols/msx-cartridge_dummy.kicad_sym")(options "")(descr ""))
+  (lib (name "msx_slot")(type "KiCad")(uri "${KIPRJMOD}/Libraries/Symbols/msx_slot.kicad_sym")(options "")(descr ""))
+  (lib (name "msx")(type "KiCad")(uri "${KIPRJMOD}/Libraries/Symbols/msx.kicad_sym")(options "")(descr ""))
+  (lib (name "banana_pi_m2_zero")(type "KiCad")(uri "${KIPRJMOD}/Libraries/Symbols/banana_pi_m2_zero.kicad_sym")(options "")(descr ""))
+  (lib (name "gameboy")(type "Legacy")(uri "${KIPRJMOD}/Libraries/Gameboy.lib")(options "")(descr ""))
+)
