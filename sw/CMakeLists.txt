@@ -10,18 +10,23 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Initialise pico_sdk from installed location
 # (note this can come from environment, CMake cache etc)
 
-# == DO NEVER EDIT THE NEXT LINES for Raspberry Pi Pico VS Code Extension to work ==
+# == DO NOT EDIT THE FOLLOWING LINES for the Raspberry Pi Pico VS Code Extension to work ==
 if(WIN32)
     set(USERHOME $ENV{USERPROFILE})
 else()
     set(USERHOME $ENV{HOME})
 endif()
-set(sdkVersion 2.0.0)
-set(toolchainVersion 13_2_Rel1)
-set(picotoolVersion 2.0.0)
-include(${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
+set(sdkVersion 2.1.0)
+set(toolchainVersion 13_3_Rel1)
+set(picotoolVersion 2.1.0)
+set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
+if (EXISTS ${picoVscode})
+    include(${picoVscode})
+endif()
 # ====================================================================================
-set(PICO_BOARD pico2 CACHE STRING "Board type")
+set(PICO_BOARD megapi CACHE STRING "Board type")
+set(PICO_PLATFORM rp2350-arm-s CACHE STRING "Platform type")
+
 
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
@@ -42,9 +47,14 @@ add_executable(picocd
     
     src/roms/spelunk-en.rom.cc
     src/roms/pwnd.rom.cc
+
+    src/oled/oled.cc
+
+    src/vga/vga.cc
     )
 
 pico_generate_pio_header(picocd ${CMAKE_CURRENT_SOURCE_DIR}/src/bus.pio)
+pico_generate_pio_header(picocd ${CMAKE_CURRENT_SOURCE_DIR}/src/vga/vga.pio)
 
 # Make sure TinyUSB can find tusb_config.h
 target_include_directories(picocd PUBLIC ${CMAKE_CURRENT_LIST_DIR}/src)
@@ -62,6 +72,7 @@ target_link_libraries(picocd
 #    pico_stdio
 
     hardware_pio 
+    hardware_dma 
     pico_multicore
     tinyusb_host 
     tinyusb_board)

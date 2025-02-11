@@ -1,0 +1,16 @@
+.pio_version RP2350
+
+.program msx_bus_write
+.out 8
+
+.wrap_target
+    pull block
+    out pins, 32
+    mov pindirs, ~null
+    wait 1 GPIO 26
+    mov pindirs, null
+.wrap
+    
+% c-sdk {
+
+%}
