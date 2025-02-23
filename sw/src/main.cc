@@ -1,25 +1,13 @@
 #include "board.h"
-#include "printf/printf.h"
-
-//#include "pico/stdlib.h"
-
-#include "pico.h"
-//#include "pico/stdio.h"
-#include "pico/time.h"
-#include "hardware/gpio.h"
-//#include "hardware/uart.h"
-
+#include "util.h"
 
 #include "bus.pio.h"
-
-
 #include "roms/roms.h"
-
 #include "oled/oled.h"
+#include "crt/crt.h"
+#include "vdp99x8/vdp99x8.h"
 
-#include "vga/vga.h"
 
-#include <initializer_list>
 
 
 static inline void init_msx_pio(
@@ -62,102 +50,7 @@ static inline void init_msx_pio(
 
 extern bool exit_usb;
 
-namespace init {
 
-    void set_flash_divider(int div) {
-
-        uint32_t m0 = qmi_hw->m[0].timing;
-        m0 = m0 & ~QMI_M0_TIMING_CLKDIV_BITS;
-        m0 += div;
-        qmi_hw->m[0].timing = m0;
-    }
-
-    void set_clock_266Mhz() {
-
-        const unsigned vco = 532000000; // 266MHz/133MHz
-        const unsigned div1 = 2, div2 = 1;
-
-        set_flash_divider(2);
-
-        vreg_set_voltage(VREG_VOLTAGE_1_15);
-        sleep_ms(2);
-        set_sys_clock_pll(vco, div1, div2);
-        sleep_ms(5);
-    }
-
-    //https://forums.raspberrypi.com/viewtopic.php?t=375975
-    void set_clock_302Mhz() { // VGA 640x480 @ 60Hz // 25.166Mhz pixel clock, 12 bits x pixel
-
-        const unsigned vco = 906000000;   // (12/2*151) 1206 MHz 
-        const unsigned div1 = 3, div2 = 1; // 302 MHz
-
-        set_flash_divider(3);
-
-        vreg_set_voltage(VREG_VOLTAGE_1_20);
-        sleep_ms(20);
-        set_sys_clock_pll(vco, div1, div2);
-        sleep_ms(5);
-    }
-
-
-    void set_clock_297Mhz() {
-
-        const unsigned vco = 1188000000;   // (12*99) 1188 MHz 
-        const unsigned div1 = 4, div2 = 1; // 297 MHz
-
-        set_flash_divider(3);
-
-        vreg_set_voltage(VREG_VOLTAGE_1_20);
-        sleep_ms(20);
-        set_sys_clock_pll(vco, div1, div2);
-        sleep_ms(5);
-    }
-    void set_clock_286_8Mhz() {
-
-        const unsigned vco = 1434000000;   // (6 * 239) 1434 MHz 
-        const unsigned div1 = 5, div2 = 1; // 286.8 MHz
-
-        set_flash_divider(3);
-
-        vreg_set_voltage(VREG_VOLTAGE_1_20);
-        sleep_ms(20);
-        set_sys_clock_pll(vco, div1, div2);
-        sleep_ms(5);
-    }
-
-
-    void set_clock_324Mhz() { //1296 / 4 = 324 MHz 
-
-        const unsigned vco = 1296000000;   // (12*108) 1296 MHz 
-        const unsigned div1 = 4, div2 = 1; // 324 MHz
-
-        set_flash_divider(3);
-
-        vreg_set_voltage(VREG_VOLTAGE_1_40);
-        sleep_ms(20);
-        set_sys_clock_pll(vco, div1, div2);
-        sleep_ms(5);
-    }
-
-    void init() {
-
-        //save_and_disable_interrupts();
-        //set_clock_266Mhz();
-        set_clock_302Mhz();
-        //set_clock_297Mhz();
-        //set_clock_324Mhz();
-        sleep_ms(50);
-        for (uint8_t i=0; i < 16; i++) { gpio_init( GPIO0_A0  + i); gpio_set_dir( GPIO0_A0  + i, GPIO_IN ); }
-        for (uint8_t i=0; i <  8; i++) { gpio_init( GPIO16_D0 + i); gpio_set_dir( GPIO16_D0 + i, GPIO_IN ); }
-
-
-        for (int i : { GPIO24_WR, GPIO25_IORQ, GPIO26_MERQ, GPIO27_RD, GPIO28_BUSDIR, GPIO29_INT, GPIO30_WAIT, GPIO31_SLTSL } ) {
-            gpio_init(i); 
-            gpio_put(i, false); 
-            gpio_set_dir(i, GPIO_IN);
-        }
-    }
-}
 
 #include "bsp/board_api.h"
 #include "tusb.h"
@@ -399,58 +292,81 @@ namespace tests_old {
 
 namespace tests {
 
-    void log_test_game() {
+    void __no_inline_not_in_flash_func(log_test_game)() {
 
-        init_msx_pio( pio0, GPIO16_D0);
+        const uint8_t *rom_ = (const uint8_t *)&spelunk_en_rom[0];
+        static uint8_t rom[32*1024];
+        for (int i=0; i<32*1024; i++) rom[i] = rom_[i];
 
-        uint32_t address = (uint32_t) &spelunk_en_rom[0];
-        //address += 0x04000000;
+        gpio_put(GPIO30_WAIT, false); 
 
-        uint8_t *rom = (uint8_t *)address;
-        uint8_t ram[32*1024];
-        for (int x=0; x<32*1024; x++) {
-            ram[x] = rom[x];
-        }
-
+        systick_hw->csr |= 0x00000005U;
+        systick_hw->rvr = 0x00FFFFFFU;
         while (true) {
-            uint32_t ios = gpio_get_all();
-                
-            if (ios & (1U<<GPIO31_SLTSL)) continue;
 
-            bool is_mem_read  = !(ios & (1U<<GPIO27_RD));
-            bool is_mem_write = !(ios & (1U<<GPIO24_WR));
-            while ( (is_mem_read or is_mem_write) == false) {
-                is_mem_read  = !(ios & (1U<<GPIO27_RD));
-                is_mem_write = !(ios & (1U<<GPIO24_WR));
-                ios = gpio_get_all();
-            }
+            auto gpio_get_all_int = [](){ return sio_hw->gpio_in; };
+            auto gpio_wait_zero = [](uint32_t neg_bitmask){ uint32_t io; do { io = sio_hw->gpio_in; } while ( (io & neg_bitmask) == 0 ); };
 
-            if (is_mem_read) {
-
-                if(false) {
-                    _putchar('R');                
-                    ios = gpio_get_all();
-                    _putchar('[');                
-                    _putchar("0123456789ABCDEF"[(address >> 12) & 15]);
-                    _putchar("0123456789ABCDEF"[(address >> 8) & 15]);
-                    _putchar("0123456789ABCDEF"[(address >> 4) & 15]);
-                    _putchar("0123456789ABCDEF"[address & 15]);
-                    _putchar(']');
-                    _putchar('\n');  
-                }
-
-                gpio_set_dir(GPIO30_WAIT, GPIO_OUT);
-                uint32_t address = ( ios + 0x4000 ) & 0x7FFF;
-                uint8_t v = ram[address];
-                pio0->txf[0] = v;
-                gpio_set_dir(GPIO30_WAIT, GPIO_IN);
-
-
-            } else {
-
-            }
+            uint32_t start_tick = systick_hw->cvr;
+            uint32_t ios = gpio_get_all_int();
             
-            while ( !(gpio_get_all() & (1U<<GPIO31_SLTSL)) );
+            constexpr uint32_t operation_mask         = BIT25_IORQ + BIT26_MERQ + BIT27_RD + BIT24_WR + BIT31_SLTSL;
+            constexpr uint32_t operation_memory_read  = operation_mask - BIT26_MERQ - BIT27_RD - BIT31_SLTSL;
+            constexpr uint32_t operation_memory_write = operation_mask - BIT26_MERQ - BIT24_WR - BIT31_SLTSL;
+            constexpr uint32_t operation_io_read      = operation_mask - BIT25_IORQ - BIT27_RD;
+            constexpr uint32_t operation_io_write     = operation_mask - BIT25_IORQ - BIT24_WR ; 
+            uint32_t operation = ios & operation_mask; 
+            
+            if ( operation == operation_memory_read ) {
+                uint32_t rom_32k_address = ( ios + 0x4000 ) & 0x7FFF;
+
+                gpio_set_dir_all_bits(BIT30_WAIT);            
+                uint8_t v = rom[rom_32k_address];
+                
+                uint32_t elapsed_tick = start_tick - systick_hw->cvr;
+                if(0) if (elapsed_tick > 31) {
+
+                    uint32_t bus_address = ios & 0xFFFF;
+                    uint32_t elapsed_tick = start_tick - systick_hw->cvr;
+                    _putchar('R');
+                    _putchar(':');                
+                    _putchar("0123456789ABCDEF"[(elapsed_tick >> 12)&0xF]);
+                    _putchar("0123456789ABCDEF"[(elapsed_tick >>  8)&0xF]);
+                    _putchar("0123456789ABCDEF"[(elapsed_tick >>  4)&0xF]);
+                    _putchar("0123456789ABCDEF"[(elapsed_tick      )&0xF]);
+                    _putchar(':');                
+                    _putchar("0123456789ABCDEF"[(bus_address >> 12)&0xF]);
+                    _putchar("0123456789ABCDEF"[(bus_address >>  8)&0xF]);
+                    _putchar("0123456789ABCDEF"[(bus_address >>  4)&0xF]);
+                    _putchar("0123456789ABCDEF"[(bus_address      )&0xF]);
+                    _putchar(':');                
+                    _putchar("0123456789ABCDEF"[(v >> 4 )&0xF]);
+                    _putchar("0123456789ABCDEF"[(v      )&0xF]);
+                    _putchar('\n');
+                }
+                
+                gpio_put_all(uint32_t(v) << GPIO16_D0);
+                gpio_set_dir_all_bits(0xFFU << GPIO16_D0);
+                gpio_wait_zero( BIT27_RD );   
+                gpio_set_dir_all_bits(0);
+
+            } else if (operation == operation_memory_write) {
+
+                gpio_wait_zero( BIT24_WR );   
+
+            } else if (operation == operation_io_read) {
+
+                uint8_t port = ios & 0xFF;
+                VDP99X8::io_read( port );
+                gpio_wait_zero( BIT27_RD );   
+
+            } else if (operation == operation_io_write) {
+
+                uint8_t port = ios & 0xFF;
+                uint8_t data = (ios >> 16) & 0xFF;
+                VDP99X8::io_write( port, data );
+                gpio_wait_zero( BIT24_WR );   
+            }            
         }
     }    
 }
@@ -458,21 +374,62 @@ namespace tests {
 
 int main() {
 
-    init::init();
-    putstring("\n\nInitialized\n\n");
-
-
     SSD1306::init();
     SSD1306::enable_display(true);
-    SSD1306::puts("SPELUNKER");
+    SSD1306::puts("MEGA PI 2");
 
+    _putchar_reset();
     putstring("SSD1306 Initialized\n");
 
-    vga320_init();
+    // INIT BOARD
+    {
+        set_speed(798, 3, 2, VREG_VOLTAGE_1_15);
 
-    putstring("VGA Initialized\n");
+        auto activate_gpio = [](int i) { 
+            gpio_init( i ); 
+            gpio_set_dir( i, GPIO_IN );
+            gpio_put(i, false); 
+            //gpio_set_input_hysteresis_enabled( i, true );
+            //gpio_set_slew_rate( i, GPIO_SLEW_RATE_FAST );
+            //gpio_set_drive_strength( i, GPIO_DRIVE_STRENGTH_12MA );
+        };
+
+        for (uint8_t i=0; i < 16; i++) activate_gpio(GPIO0_A0 + i);
+        
+        for (uint8_t i=0; i <  8; i++) activate_gpio(GPIO16_D0 + i);
+
+        for (int i : { GPIO24_WR, GPIO25_IORQ, GPIO26_MERQ, GPIO27_RD, GPIO28_BUSDIR, GPIO29_INT, GPIO30_WAIT, GPIO31_SLTSL } ) activate_gpio( i );
+
+        gpio_init(GPIO46_VUSB_EN); 
+        gpio_put(GPIO46_VUSB_EN, true); 
+        gpio_set_dir(GPIO46_VUSB_EN, GPIO_OUT);
+
+        adc_init();
+        adc_gpio_init(GPIO47_BATSENS);
+        adc_set_temp_sensor_enabled(true);
+    }
+    _putchar_reset();
+    putstring("\n\nInitialized\n\n");
+
+    VDP99X8::init();
+
+    //CRT::init(CRT::SCART_HI_240p_60Hz);
+    
+    if (0) CRT::add_hook_line(1, [](){
+        int temp = get_temp();
+        printf("Temp: %d.%d\n", temp/10, temp%10);
+    });
+    if (0) CRT::add_hook_line(2, [](){
+        int vbat = get_vbat();
+        printf("Vbat: %d\n", vbat);
+    });
+
+    putstring("CRT Initialized\n");
+
+    //do { busy_wait_us(64000000); } while ( true );
 
     //tests::log_test_usb();
-    //__disable_irq();
+    save_and_disable_interrupts();
     tests::log_test_game();
+    //while (true);
 }

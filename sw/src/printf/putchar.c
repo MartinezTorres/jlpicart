@@ -1,5 +1,4 @@
 #include "printf.h"
-//#include "pico/stdlib.h"
 #include "pico.h"
 #include "pico/time.h"
 #include "hardware/gpio.h"
@@ -9,6 +8,8 @@
 #define GPIO44_UART_TX 44
 #define GPIO45_UART_RX 45
 
+#define GPIO38_OLEDSCK 38
+
 #define UART_HARDWARE
 //#define UART_SOFTWARE
 //#define UART_SOFTWARE_MULTICORE
@@ -17,19 +18,21 @@
 static uint8_t init = 0;
 void _putchar(char c) {
 
-    uint8_t character = c;
-
     if (init == 0) {
 
-        gpio_set_function(GPIO44_UART_TX, UART_FUNCSEL_NUM(uart0, 0));
-        gpio_set_function(GPIO45_UART_RX, UART_FUNCSEL_NUM(uart0, 1));
+        //gpio_set_function(GPIO44_UART_TX, UART_FUNCSEL_NUM(uart0, 0));
+        //gpio_set_function(GPIO45_UART_RX, UART_FUNCSEL_NUM(uart0, 1));
 
-        uart_init(uart0, 115200);
+        //uart_init(uart0, 115200);
+        gpio_set_function(GPIO38_OLEDSCK, GPIO_FUNC_UART_AUX);
+
+        uart_init(uart1, 115200);
 
         init = 1;
     }
 
-    uart_putc_raw(uart0, c);
+    //uart_putc_raw(uart0, c);
+    uart_putc_raw(uart1, c);
 }
 
 void _putchar_reset() {
