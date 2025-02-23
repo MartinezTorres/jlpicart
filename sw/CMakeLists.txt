@@ -50,11 +50,16 @@ add_executable(picocd
 
     src/oled/oled.cc
 
-    src/vga/vga.cc
+    src/crt/crt.cc
+
+    src/vdp99x8/vdp99x8.cc
+
+    #src/vga/vga.cc
     )
 
 pico_generate_pio_header(picocd ${CMAKE_CURRENT_SOURCE_DIR}/src/bus.pio)
-pico_generate_pio_header(picocd ${CMAKE_CURRENT_SOURCE_DIR}/src/vga/vga.pio)
+#pico_generate_pio_header(picocd ${CMAKE_CURRENT_SOURCE_DIR}/src/vga/vga.pio)
+pico_generate_pio_header(picocd ${CMAKE_CURRENT_SOURCE_DIR}/src/crt/crt.pio)
 
 # Make sure TinyUSB can find tusb_config.h
 target_include_directories(picocd PUBLIC ${CMAKE_CURRENT_LIST_DIR}/src)
@@ -73,6 +78,7 @@ target_link_libraries(picocd
 
     hardware_pio 
     hardware_dma 
+    hardware_adc 
     pico_multicore
     tinyusb_host 
     tinyusb_board)
@@ -88,7 +94,7 @@ pico_add_extra_outputs(picocd)
 set (PICO_COPY_TO_RAM 1)
 
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Os")
 
 # add url via pico_set_program_url
 
