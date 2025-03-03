@@ -1,0 +1,3 @@
+To generate the roms, it's best to use the following command:
+
+xdd -i
