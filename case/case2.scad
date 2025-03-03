@@ -1,6 +1,6 @@
 //https://solder-stencil.me/
 
-$fn=72;
+$fn=6;
 
 module Tower() {
     
@@ -228,11 +228,6 @@ module pcb() {
         }
 
         hull() {
-            if(0) color([0.8,0.0,0]) 
-            rotate([0,180,0]) 
-            translate ([-25.5+1.5,13.65+1.5,-17.0]) 
-            cube([25-3,11-3,10]);
-
             color([0.8,0.0,0]) 
             rotate([0,180,0]) 
             translate ([-25.5-11,13.65-11,-16.0]) 
@@ -248,6 +243,11 @@ module pcb() {
         rotate([0,180,0]) 
         translate ([-23.5+1.5,13.65+2,-17.0]) 
         cube([23-3,11-4,10]);
+
+        color([0.8,0.0,0]) 
+        rotate([0,180,0]) 
+        translate ([-23.5,13.65-2,-7.25]) 
+        cube([23+10,11+4,4]);
     }
 }
 
@@ -341,7 +341,7 @@ module hull_vga() {
 translate([-14.5,-1.29,0.25]) Tower();
 translate([116.5,-1.29,0.25]) rotate([0,180,0]) Tower();
 
-if(1) translate([0,0,-5]) difference() { union() {
+if(0) translate([0,0,-5]) difference() { union() {
 
     bottom_cart();
     hull_vga();
@@ -350,12 +350,12 @@ if(1) translate([0,0,-5]) difference() { union() {
     translate([83.88,15.7,-7.5125+0.05]) translate([-3,-3,0]) cube([6,6,2.4]);
 
     translate([-0.1,0,0])hull() {
-        translate([0,3,0.5]) rotate([-90,0,0]) cylinder(60,1.75,1.75,$fn=6);
-        translate([0,1,0.5]) rotate([-90,0,0]) cylinder(64,0.25,0.25,$fn=6);
+        translate([0,3+0.5,0.5]) rotate([-90,0,0]) cylinder(60-1,1.75-0.125,1.75-0.125,$fn=6);
+        translate([0,1+0.5,0.5]) rotate([-90,0,0]) cylinder(64-1,0.25-0.125,0.25-0.125,$fn=6);
     }
     translate([102.1,0,0]) hull() {
-        translate([0,3,0.5]) rotate([-90,0,0]) cylinder(60,1.75,1.75,$fn=6);
-        translate([0,1,0.5]) rotate([-90,0,0]) cylinder(64,0.25,0.25,$fn=6);
+        translate([0,3+0.5,0.5]) rotate([-90,0,0]) cylinder(60-1,1.75-0.25,1.75-0.125,$fn=6);
+        translate([0,1+0.5,0.5]) rotate([-90,0,0]) cylinder(64-1,0.25-0.125,0.25-0.125,$fn=6);
     }
 } union() {
 
@@ -371,17 +371,6 @@ if(1) translate([0,0,-5]) difference() { union() {
     
     translate([27.65,20.9,-7.5125]) M3_12_S();
     translate([83.88,15.7,-7.5125]) M3_12_S();
-    
-    if(0) {
-        translate([-0.1,0,0])hull() {
-            translate([0,3,0.5]) rotate([-90,0,0]) cylinder(60,1.75,1.75,$fn=6);
-            translate([0,1,0.5]) rotate([-90,0,0]) cylinder(64,0.25,0.25,$fn=6);
-        }
-        translate([102.1,0,0]) hull() {
-            translate([0,3,0.5]) rotate([-90,0,0]) cylinder(60,1.75,1.75,$fn=6);
-            translate([0,1,0.5]) rotate([-90,0,0]) cylinder(64,0.25,0.25,$fn=6);
-        }
-    }
 } }
 
 
