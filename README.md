@@ -1,6 +1,6 @@
 # JLPiCart - MSX Cartridge Based on RP2350B
 
-![JLPiCart Logo](link_to_logo)
+![JLPiCart Logo](doc/jlpicart_logo.jpg)
 
 JLPiCart is an experimental MSX cartridge design based on the RP2350B. This is a preliminary version with several known bugs, but early tests show promising results. We have ordered a small production run, and we are offering units to those interested in developing their own RP2350B firmware. If you'd like to obtain one, please contact me.
 
@@ -25,17 +25,17 @@ The firmware for the PCB is a work in progress. Some features are already functi
 Below are various images related to the JLPiCart hardware design:
 
 ### Schematic
-![Schematic](link_to_schematic)
+![Schematic](doc/schematic_jlpicart_dev.jpg)
 
 ### Top Assembly Drawing
-![Top Assembly](link_to_top_assembly)
+![Top Assembly](doc/assembly_picart_dev.jpg)
 
 ### PCB Images
 #### Front
-![PCB Front](link_to_pcb_front)
+![PCB Front](doc/pcb_front.jpg)
 
 #### Back
-![PCB Back](link_to_pcb_back)
+![PCB Back](doc/pcb_back.jpg)
 
 ## Development
 We are actively working on improving the firmware. Contributions and feedback are welcome. If you encounter any issues or have suggestions, feel free to reach out.
