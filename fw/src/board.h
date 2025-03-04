@@ -163,7 +163,9 @@ constexpr uint32_t RAM_EXT         = 0x20020000U; // 384K
 
 
 #include <debug/debug_device.h>
-using DBG = DebugDevice<DEBUG_INFO, DEBUG_DEVICE_GPIO38_OLEDSCK>;
+//using DBG = DebugDevice<DEBUG_WARNING, DEBUG_DEVICE_GPIO38_OLEDSCK>;
+//using DBG = DebugDevice<DEBUG_INFO, DEBUG_DEVICE_GPIO38_OLEDSCK>;
+using DBG = DebugDevice<DEBUG_ERROR, DEBUG_DEVICE_DISABLED>;
 
 
 inline void set_speed(size_t vco_mhz, size_t system_divider, size_t flash_divider, enum vreg_voltage voltage) {

@@ -61,10 +61,6 @@ namespace Config {
         crc_config_to_write.config = *this;
         crc_config_to_write.crc32 = compute_crc32(crc_config_to_write.config);
 
-        // Determine which flash slot to use
-        const CRCConfig& crc_config_rom_a = *(const CRCConfig*)FLASH_CONF_A;
-        const CRCConfig& crc_config_rom_b = *(const CRCConfig*)FLASH_CONF_B;
-
         // Disable interrupts to prevent execution from Flash during erase/write
         uint32_t interrupts = save_and_disable_interrupts();
 
