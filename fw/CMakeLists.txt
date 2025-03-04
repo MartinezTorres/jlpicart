@@ -14,9 +14,9 @@ function(create_roms dir output section)
     list(LENGTH bin_paths bin_count)
 
     # Create empty output file
-    file(WRITE ${CMAKE_BINARY_DIR}/${output}.cc "#include <cstdint>\n\n")
+    file(WRITE ${CMAKE_BINARY_DIR}/${output}.cc "#include <cstdint>\n#include \"${output}.h\"\n\n")
     file(WRITE ${CMAKE_BINARY_DIR}/${output}.h  "#pragma once\n#include <cstdint>\n\n")
-    file(WRITE ${CMAKE_BINARY_DIR}/${output}.list.h "#pragma once\nstatic const RomDescription rom_list[${bin_count}] = {\n")
+    file(WRITE ${CMAKE_BINARY_DIR}/${output}.list.h "#pragma once\n#include \"${output}.h\"\nstatic const Cartridge cartridge_list[${bin_count}] = {\n")
 
     # Iterate through input files
     foreach(bin ${bin_paths})
@@ -39,14 +39,14 @@ function(create_roms dir output section)
         # Append data to output file
         file(APPEND ${CMAKE_BINARY_DIR}/${output}.cc "const uint8_t  ${rom_escaped_name}[${filesize}] ${section} = {${filedata}};\n" )
         file(APPEND ${CMAKE_BINARY_DIR}/${output}.h "extern const uint8_t  ${rom_escaped_name}[${filesize}];\n" )
-        file(APPEND ${CMAKE_BINARY_DIR}/${output}.list.h "{.name=\"${rom_name}\", .mapper=${mapper}, .rom=${rom_escaped_name} },\n")
+        file(APPEND ${CMAKE_BINARY_DIR}/${output}.list.h "{.name=\"${rom_name}\", .cartridge_type=MAPPER_${mapper}, .rom_base=${rom_escaped_name} },\n")
     endforeach()
     
     file(APPEND ${CMAKE_BINARY_DIR}/${output}.list.h "};\n")
 
 endfunction()
 
-create_roms( roms/ generated_roms/roms  "__attribute__ ((section (\".flash_extra_data\")))" )
+create_roms( roms/ generated_roms/roms  "__attribute__ ((section (\".flash1M\")))" )
 
 
 # Initialise pico_sdk from installed location
@@ -79,6 +79,7 @@ project(jlpicart C CXX ASM)
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
+#add_compile_options(-Wall -Wextra -pedantic -Wnull-dereference)
 
 add_executable(jlpicart
     src/main.cc
@@ -89,9 +90,13 @@ add_executable(jlpicart
     src/bus/bus.cc
     src/bus/slot.cc
 
+    src/adc/adc.cc
     src/oled/ssd1306.cc
     src/esp32/esp32.cc
 
+    src/video/crt.cc
+    src/video/vdp99x8.cc
+    
     ${CMAKE_BINARY_DIR}/generated_roms/roms.cc
 #    src/usb.c
 
@@ -128,7 +133,7 @@ target_link_libraries(jlpicart
 #    pico_stdio
 #    tinyusb_host 
 #    tinyusb_board
- 
+
     hardware_gpio
     hardware_flash
     hardware_divider
@@ -137,8 +142,8 @@ target_link_libraries(jlpicart
     pico_platform
     pico_runtime
 
-    hardware_pio 
-    hardware_dma 
+    hardware_pio
+    hardware_dma
     hardware_adc 
     pico_multicore
 )
@@ -149,10 +154,12 @@ set_target_properties(jlpicart PROPERTIES PICO_TARGET_LINKER_SCRIPT ${CMAKE_CURR
 
 # create map/bin/hex file etc.
 pico_add_extra_outputs(jlpicart)
-add_compile_options(-Wall -Wextra -Wnull-dereference)
 
 #set (PICO_COPY_TO_RAM 1)
 
 # add url via pico_set_program_url
 
 # family_configure_host_example(jlpicart noos)
+
+target_compile_options(jlpicart PRIVATE -Wall -Wextra -Wpedantic -Wnull-dereference -Winvalid-pch -Wformat=2 -Winit-self -Winline -Wpacked -Wpointer-arith -Wmissing-declarations -Wmissing-format-attribute -Wmissing-noreturn -Wredundant-decls -Wsign-compare -Wswitch-enum -Wundef -Wunreachable-code -Wwrite-strings)
+# -Wstrict-aliasing=2

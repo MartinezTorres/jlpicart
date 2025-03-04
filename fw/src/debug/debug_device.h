@@ -71,7 +71,7 @@ struct DebugDevice {
         if (a == 0) { putchar<BlockingStatus>('0'); return; }
         if (a < 0)  { putchar<BlockingStatus>('-'); a = -a; }
         int sz = 0;
-        char rnum[40];
+        static char rnum[40];
         while (a) { rnum[sz++] = (a % 10); a /= 10; }
         while (sz) putchar<BlockingStatus>(rnum[--sz]);
     }

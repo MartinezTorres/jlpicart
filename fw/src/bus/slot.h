@@ -40,11 +40,16 @@ MAKE_ENUM( CartridgeType , uint32_t,
     MAPPER_LINEAR,
     MAPPER_32K_MIRRORED,
 
+    MAPPER_KONAMI,
+    MAPPER_KONAMI_Z,
+
     MAPPER_ASCII8,
     MAPPER_ASCII16
 );
 
 struct Cartridge {
+
+    const char *name = "disabled";
 
     CartridgeType cartridge_type = SUBSLOT_DISABLED;
 

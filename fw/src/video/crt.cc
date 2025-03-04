@@ -1,8 +1,7 @@
 #include "crt.h"
 
-#include "../board.h"
-#include "../util.h"
-
+#include <board.h>
+#include <multitask/multitask.h>
 
 #include "crt.pio.h"
 #include <functional>
@@ -11,7 +10,7 @@
 #include "hardware/regs/busctrl.h"
 #include "hardware/structs/bus_ctrl.h"
 
-using namespace CRT;
+namespace CRT {
 
 ///////////////////////////////////////////////////////////////////////////////
 // CRT Type
@@ -33,7 +32,7 @@ volatile static ECRTEngineState CRT_engine_state= CRT_NOT_INITIALIZED;
 static uint8_t linebuffer_blank[LINE_BUFFER_SIZE];
 static uint8_t linebuffer_vsync[LINE_BUFFER_SIZE];
 static uint8_t linebuffer_visible[2][LINE_BUFFER_SIZE];
-static uint line_idx, frame_idx;
+uint32_t line_idx, frame_idx;
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -45,7 +44,6 @@ struct alignas(4) PixelPattern  {
 
     PixelPattern(bool sync = false, uint64_t red = 0, uint64_t green = 0, uint64_t blue = 0) {
 
-        int idx = 0;
         for (int i=0; i<32; i++) {
 
             uint8_t d = 0;
@@ -64,10 +62,10 @@ struct alignas(4) PixelPattern  {
         }
     }
 
-    void draw(uint8_t *linebuffer, size_t idx, size_t dither_pattern = 0) {
+    void draw(uint8_t *linebuffer, size_t idx /*, size_t dither_pattern = 0*/) {
 
         linebuffer += idx * (crt_type.cycles_per_pixel/2);
-        for (int i = 0; i < crt_type.cycles_per_pixel / 2; i++) {
+        for (size_t i = 0; i < crt_type.cycles_per_pixel / 2; i++) {
             linebuffer[i] = data[i];
         }
     } 
@@ -134,12 +132,11 @@ static void init_dither_patterns_VGA640_LG_LCD() {
         int step_goal = ( i * 180 ) / 255;
 
         int current_goal = 0;
-        int current_score = 0;
 
         int l = 0;
         {
             for (int k = 0; k < 10 - 1; k++) {
-                if ( pat[k][1] >= step_goal)
+                if ( int(pat[k][1]) >= step_goal)
                     break;
                 l = k;
             }
@@ -150,12 +147,12 @@ static void init_dither_patterns_VGA640_LG_LCD() {
 
             uint32_t *dp = (uint32_t *)&dither_patterns[i];
 
-            if (current_goal >  pat[l+1][1]) {
+            if (current_goal >  int(pat[l+1][1])) {
                 dp[j] = pat[l+1][0];
-                current_goal -= pat[l+1][1];
+                current_goal -= int(pat[l+1][1]);
             } else {
                 dp[j] = pat[l][0];
-                current_goal -= pat[l][1];
+                current_goal -= int(pat[l][1]);
             }
         }
     }
@@ -165,7 +162,7 @@ static void init_dither_patterns_VGA640_LG_LCD() {
 
 static void init_dither_patterns_Analog() {
 
-    auto srgbToLinear = [](double x) {
+    /*auto srgbToLinear = [](double x) {
         if (x <= 0.0)
             return 0.0;
         else if (x >= 1.0)
@@ -174,7 +171,7 @@ static void init_dither_patterns_Analog() {
             return x / 12.92;
         else
             return std::pow((x + 0.055) / 1.055, 2.4);
-    };
+    };*/
 
 
     const uint8_t pat[5][2] = {
@@ -235,13 +232,13 @@ static void init_PIO() {
     pio_sm_claim(crt_pio, crt_sm);
     crt_offset = pio_add_program(crt_pio, &crt_program);
     crt_config = crt_program_get_default_config( crt_offset );
-    sm_config_set_out_pin_base(&crt_config, GPIO40_V_HSYNC);
+    sm_config_set_out_pin_base(&crt_config, GPIO64_V_HSYNC);
 
     // Init pins (V_SYNC may be used either for sync, or audio output)
-    gpio_init(GPIO39_V_VSYNC); 
-    gpio_put(GPIO39_V_VSYNC, false);
-    gpio_set_dir(GPIO39_V_VSYNC, GPIO_OUT); 
-    for (int pin = GPIO40_V_HSYNC; pin <= GPIO43_V_RED; pin++) {
+    gpio_init(GPIO64_V_VSYNC); 
+    gpio_put(GPIO64_V_VSYNC, false);
+    gpio_set_dir(GPIO64_V_VSYNC, GPIO_OUT); 
+    for (int pin = GPIO64_V_HSYNC; pin <= GPIO64_V_RED; pin++) {
         
         //gpio_set_drive_strength(pin, GPIO_DRIVE_STRENGTH_2MA);
         //gpio_set_slew_rate(pin, GPIO_SLEW_RATE_SLOW);
@@ -324,7 +321,7 @@ static void init_precomputed_sync_patterns() {
 
     // INIT SYNC PATTERNS
     if (crt_type.sync_type == CRT_Type::VGA_H_V_SYNC and crt_type.interlace == CRT_Type::NON_INTERLACED) {
-        for (int i=0; i<h_whole; i++) {
+        for (size_t i=0; i<h_whole; i++) {
 
             bool hsync = inactive_hsync_polarity_level();
             if (i < crt_type.h_sync_pulse) hsync = active_hsync_polarity_level();
@@ -334,12 +331,12 @@ static void init_precomputed_sync_patterns() {
             PixelPattern( hsync ).draw(&linebuffer_visible[0][0], i);
             PixelPattern( hsync ).draw(&linebuffer_visible[1][0], i);
         }
-        gpio_init(GPIO39_V_VSYNC); 
-        gpio_put(GPIO39_V_VSYNC, false);
-        gpio_set_dir(GPIO39_V_VSYNC, GPIO_OUT);
+        gpio_init(GPIO64_V_VSYNC); 
+        gpio_put(GPIO64_V_VSYNC, false);
+        gpio_set_dir(GPIO64_V_VSYNC, GPIO_OUT);
 
     } else if (crt_type.sync_type == CRT_Type::COMPOSITE_SYNC_XOR and crt_type.interlace == CRT_Type::NON_INTERLACED) {
-        for (int i=0; i<h_whole; i++) {
+        for (size_t i=0; i<h_whole; i++) {
 
             bool hsync = inactive_hsync_polarity_level();
             if (i < crt_type.h_sync_pulse) hsync = active_hsync_polarity_level();
@@ -350,10 +347,10 @@ static void init_precomputed_sync_patterns() {
             PixelPattern( hsync xor inactive_vsync_polarity_level() ).draw(&linebuffer_visible[1][0], i);
         }
 
-        gpio_set_function(GPIO39_V_VSYNC, GPIO_FUNC_PWM);
+        gpio_set_function(GPIO64_V_VSYNC, GPIO_FUNC_PWM);
 
     } else if (crt_type.sync_type == CRT_Type::COMPOSITE_SYNC_AND and crt_type.interlace == CRT_Type::NON_INTERLACED) {
-        for (int i=0; i<h_whole; i++) {
+        for (size_t i=0; i<h_whole; i++) {
 
             bool hsync = inactive_hsync_polarity_level();
             if (i < crt_type.h_sync_pulse) hsync = active_hsync_polarity_level();
@@ -364,10 +361,10 @@ static void init_precomputed_sync_patterns() {
             PixelPattern( hsync and inactive_vsync_polarity_level() ).draw(&linebuffer_visible[1][0], i);
         }
 
-        gpio_set_function(GPIO39_V_VSYNC, GPIO_FUNC_PWM);
+        gpio_set_function(GPIO64_V_VSYNC, GPIO_FUNC_PWM);
 
     } else if (crt_type.sync_type == CRT_Type::DISABLED_SYNC) {
-        for (int i=0; i<h_whole; i++) {
+        for (size_t i=0; i<h_whole; i++) {
 
             bool hsync = inactive_hsync_polarity_level();
             PixelPattern( hsync ).draw(&linebuffer_blank[0],      i);
@@ -375,17 +372,17 @@ static void init_precomputed_sync_patterns() {
             PixelPattern( hsync ).draw(&linebuffer_visible[0][0], i);
             PixelPattern( hsync ).draw(&linebuffer_visible[1][0], i);
         }
-        gpio_set_function(GPIO39_V_VSYNC, GPIO_FUNC_PWM);
+        gpio_set_function(GPIO64_V_VSYNC, GPIO_FUNC_PWM);
     } else {
 
-        _putchar('X');
+        //_putchar('X');
     }
 }
 
 static void init_test_pattern() {
     // DRAW A TEST PATTERN
-    for (int l=0; l<2; l++) {
-        for (int i=0; i < crt_type.h_visible_area; i++) {
+    for (size_t l=0; l<2; l++) {
+        for (size_t i=0; i < crt_type.h_visible_area; i++) {
             palette_patterns[(i/2) % 256 ].draw( &linebuffer_visible[l][0], crt_type.h_sync_pulse + crt_type.h_back_porch + i);
         }
     }
@@ -401,12 +398,12 @@ static void fill_line(const uint8_t *framebuffer_line) {
 
     dma_line += ( (crt_type.h_sync_pulse + crt_type.h_back_porch) * CYCLES ) / 8;
 
-    for (int i=0; i < crt_type.h_visible_area; i+=4) {
-        for (int j=0; j < 4; j++) {
+    for (size_t i=0; i < crt_type.h_visible_area; i+=4) {
+        for (size_t j=0; j < 4; j++) {
             uint8_t color_idx = *framebuffer_line++;
             const uint32_t *palette_idx = (const uint32_t *)&palette_patterns[color_idx].data[0];
 
-            for (int k=0; k < CYCLES / 8; k++) {
+            for (size_t k=0; k < CYCLES / 8; k++) {
                 *dma_line++ = *palette_idx++;
             }
         }
@@ -442,8 +439,8 @@ static void dma_irq_handler_crt() {
     }
 
     if ( crt_type.sync_type == CRT_Type::VGA_H_V_SYNC) {
-        if (line_idx == 0                     ) gpio_put(GPIO39_V_VSYNC,   active_vsync_polarity_level());
-        if (line_idx == crt_type.v_sync_pulse ) gpio_put(GPIO39_V_VSYNC, inactive_vsync_polarity_level());
+        if (line_idx == 0                     ) gpio_put(GPIO64_V_VSYNC,   active_vsync_polarity_level());
+        if (line_idx == crt_type.v_sync_pulse ) gpio_put(GPIO64_V_VSYNC, inactive_vsync_polarity_level());
     }
 
     line_idx = line_idx + 1;
@@ -496,7 +493,7 @@ static void dma_irq_handler_crt() {
 
 ///////////////////////////////////////////////////////////////////////////////
 // INIT CORE1
-void core1_init_crt() {
+static Multitask::CallAgain core1_init_crt() {
 
     // INIT PIO
     init_PIO();
@@ -506,17 +503,13 @@ void core1_init_crt() {
     dma_channels[1] = dma_claim_unused_channel(true);
     configure_dma();
 
-    while (1)
-        tight_loop_contents();
+    return Multitask::DO_NOT_CALL_AGAIN;
 }
 
 
 
 
 
-
-
-namespace CRT {
 
 void set_palette(uint8_t idx, uint8_t r, uint8_t g, uint8_t b) {
 
@@ -535,7 +528,7 @@ void init(const CRT_Type &crt_type_, std::function<const uint8_t *(uint16_t)> ge
         do { busy_wait_us(64000); } while ( CRT_engine_state != CRT_PARKED );
     }
 
-    putstring("CRT_A\n");
+    //putstring("CRT_A\n");
 
     // Update variables
     crt_type = crt_type_;
@@ -547,7 +540,7 @@ void init(const CRT_Type &crt_type_, std::function<const uint8_t *(uint16_t)> ge
     // We need to replace the precomputed sync patterns.
     init_precomputed_sync_patterns();
 
-    putstring("CRT_B\n");
+    //putstring("CRT_B\n");
 
     // Recalculate the palette.
     if (crt_type.dither_type == CRT_Type::DITHER_ANALOG) init_dither_patterns_Analog();
@@ -558,10 +551,10 @@ void init(const CRT_Type &crt_type_, std::function<const uint8_t *(uint16_t)> ge
     if (CRT_engine_state == CRT_NOT_INITIALIZED) {
         queue_init(&queue, sizeof(QueueItem), 16);
         init_test_pattern();
-        multicore_launch_core1(core1_init_crt);
+        Multitask::add_task(core1_init_crt);
     }
 
-    putstring("CRT_D\n");
+    //putstring("CRT_D\n");
 
     // we request the core to start:         
     CRT_engine_state = CRT_REQUEST_RUN;
