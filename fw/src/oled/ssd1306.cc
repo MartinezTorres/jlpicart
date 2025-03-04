@@ -5,12 +5,12 @@ namespace I2C {
 
     namespace Private {
 
-        void sda_high() { gpio_set_dir( GPIO64_OLEDSDA, GPIO_IN ); };
-        void sda_low()  { gpio_set_dir( GPIO64_OLEDSDA, GPIO_OUT ); };
-        void scl_high() { gpio_set_dir( GPIO64_OLEDSCK, GPIO_IN ); };
-        void scl_low()  { gpio_set_dir( GPIO64_OLEDSCK, GPIO_OUT ); };
+        static void sda_high() { gpio_set_dir( GPIO64_OLEDSDA, GPIO_IN ); };
+        static void sda_low()  { gpio_set_dir( GPIO64_OLEDSDA, GPIO_OUT ); };
+        static void scl_high() { gpio_set_dir( GPIO64_OLEDSCK, GPIO_IN ); };
+        static void scl_low()  { gpio_set_dir( GPIO64_OLEDSCK, GPIO_OUT ); };
 
-        void init() {
+        static void init() {
 
             gpio_init(GPIO64_OLEDSCK); 
             gpio_set_drive_strength(GPIO64_OLEDSCK, GPIO_DRIVE_STRENGTH_8MA);
@@ -25,8 +25,7 @@ namespace I2C {
             sda_high();
         }
 
-
-        void start() {
+        static void start() {
 
             busy_wait_us_32(4);
             sda_low();
@@ -35,7 +34,7 @@ namespace I2C {
             busy_wait_us_32(4);
         }
 
-        int send_byte(uint8_t data) {
+        static int send_byte(uint8_t data) {
 
             for(uint8_t i=0; i<8; i++) {
 
@@ -61,17 +60,17 @@ namespace I2C {
             return 0;
         }
 
-
-        void stop() {
+        static void stop() {
             sda_low();
             busy_wait_us_32(4);
             scl_high();
             busy_wait_us_32(4);
             sda_high();
         }
+        
+        static int write(uint8_t address, const uint8_t *src, size_t len) {
 
-
-        int write(uint8_t address, const uint8_t *src, size_t len) {
+            //auto interrupt_status = save_and_disable_interrupts();
 
             start();
             if (send_byte(address+address)) return -1;
@@ -81,6 +80,9 @@ namespace I2C {
                 if ( send_byte(*src++) ) return -1;
             
             stop();
+
+            //restore_interrupts(interrupt_status);
+            
             return false;
         }
 
@@ -399,7 +401,7 @@ namespace SSD1306 {
         //enum Mode { WRITE_MODE = 0xFE, READ_MODE = 0xFF };
 
 
-        void send_cmd(uint8_t cmd) {
+        static void send_cmd(uint8_t cmd) {
             // I2C write process expects a control byte followed by data
             // this "data" can be a command or data to follow up a command
             // Co = 1, D/C = 0 => the driver expects a command
@@ -408,11 +410,11 @@ namespace SSD1306 {
 
         }
 
-        void write_data(uint8_t *buf, size_t len) {
+        static void write_data(uint8_t *buf, size_t len) {
             I2C::write(I2C_ADDR, buf, len);
         }
 
-        void init() {
+        static void init() {
 
             I2C::init();
 

@@ -38,20 +38,30 @@ namespace Config {
         } flash;
 
         struct {
-            Status expander = ENABLED;
+            Status expander = DISABLED;
 
             Cartridge subslots[4] = {
 
-                { .cartridge_type = SUBSLOT_RAM_DEBUG, .rom_base = nullptr, .ram_base = (uint8_t *)0x20020000U },
-                { .cartridge_type = SUBSLOT_RAM_DEBUG, .rom_base = nullptr, .ram_base = (uint8_t *)0x20030000U },
-                { .cartridge_type = SUBSLOT_RAM_DEBUG, .rom_base = nullptr, .ram_base = (uint8_t *)0x20040000U },
-                { .cartridge_type = SUBSLOT_RAM_DEBUG, .rom_base = nullptr, .ram_base = (uint8_t *)0x20050000U },
+                //{ .cartridge_type = SUBSLOT_DISABLED, .rom_base = nullptr, .ram_base = nullptr },
+                //{ .cartridge_type = SUBSLOT_DISABLED, .rom_base = nullptr, .ram_base = nullptr },
+                //{ .cartridge_type = SUBSLOT_DISABLED, .rom_base = nullptr, .ram_base = nullptr },
+                //{ .cartridge_type = SUBSLOT_DISABLED, .rom_base = nullptr, .ram_base = nullptr },
+
+                //{ .cartridge_type = SUBSLOT_RAM, .rom_base = nullptr, .ram_base = (uint8_t *)0x20020000U },
+                //{ .cartridge_type = SUBSLOT_RAM, .rom_base = nullptr, .ram_base = (uint8_t *)0x20030000U },
+                //{ .cartridge_type = SUBSLOT_RAM, .rom_base = nullptr, .ram_base = (uint8_t *)0x20040000U },
+                //{ .cartridge_type = SUBSLOT_RAM, .rom_base = nullptr, .ram_base = (uint8_t *)0x20050000U },
+
+                { .cartridge_type = SUBSLOT_DISABLED, .rom_base = nullptr, .ram_base = nullptr },
+                { .cartridge_type = SUBSLOT_DISABLED, .rom_base = nullptr, .ram_base = nullptr },
+                { .cartridge_type = SUBSLOT_DISABLED, .rom_base = nullptr, .ram_base = nullptr },
+                { .cartridge_type = SUBSLOT_DISABLED, .rom_base = nullptr, .ram_base = nullptr },
 
 
             };
         } slot;
 
-        struct {
+        struct USB {
 
             Status status = DISABLED;
             Status host_mode = DISABLED;
@@ -59,7 +69,7 @@ namespace Config {
         } usb;
 
         struct {
-            Status status = DISABLED;
+            Status status = ENABLED;
             Status respond_to_reads = DISABLED;
             Status irq_generation = DISABLED;
             VDPDevice vdp_device = TMS9918;
@@ -68,7 +78,7 @@ namespace Config {
         } vdp;
 
         struct {
-            Status status = DISABLED;
+            Status status = ENABLED;
         } oled;
 
         struct {

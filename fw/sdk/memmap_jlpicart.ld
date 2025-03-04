@@ -24,7 +24,7 @@
 MEMORY
 {
     FLASH(rx) :           ORIGIN = 0x10000000, LENGTH = 192k
-    FLASH_EXTRA(rx) :     ORIGIN = 0x10100000, LENGTH = 15M
+    FLASH1M(rx) :         ORIGIN = 0x10100000, LENGTH = 15m
      
     RAM(rwx) :            ORIGIN = 0x20000000, LENGTH = 128k
     SCRATCH_X(rwx) :      ORIGIN = 0x20080000, LENGTH = 4k
@@ -35,10 +35,6 @@ ENTRY(_entry_point)
 
 SECTIONS
 {
-
-    .flash_extra_data : {
-        *(.flash_extra*)
-    } > FLASH_EXTRA
 
     .flash_begin : {
         __flash_binary_start = .;
@@ -104,7 +100,7 @@ SECTIONS
         PROVIDE_HIDDEN (__fini_array_end = .);
 
         *(.eh_frame*)
-        . = ALIGN(4);
+        . = ALIGN(4);        
     } > FLASH
 
     /* Note the boot2 section is optional, and should be discarded if there is
@@ -278,6 +274,17 @@ SECTIONS
         KEEP(*(.embedded_end_block*))
         PROVIDE(__flash_binary_end = .);
     } > FLASH =0xaa
+
+    .flash1M_start : {
+        //. = __flash_binary_start + 0x100000;
+        __flash1M_start__ = .;
+        *(.flash1M)
+        __flash1M_end__ = .;
+    } > FLASH1M
+
+    ASSERT(__flash1M_start__ - __flash_binary_start == 1024 * 1024,
+        "ERROR: Flash1M wrong address")
+
 
     /* stack limit is poorly named, but historically is maximum heap ptr */
     __StackLimit = ORIGIN(RAM) + LENGTH(RAM);

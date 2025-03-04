@@ -1,6 +1,6 @@
 #pragma once 
 
-#include "../board.h"
+#include <board.h>
 
 namespace CRT {
 
@@ -31,7 +31,7 @@ namespace CRT {
     };
 
     static const CRT_Type VGA320x480_60Hz = { // 302 MHz
-        .vco = 906, .sys_div = 3, .flash_div = 3, .voltage = VREG_VOLTAGE_1_20,
+        .vco = 906, .sys_div = 3, .flash_div = 3, .voltage = VREG_VOLTAGE_1_25,
         .cycles_per_pixel = 24, .pio_clk_divider = 1, 
         .dither_type = CRT_Type::DITHER_ANALOG,
 
@@ -77,6 +77,8 @@ namespace CRT {
         .h_sync_pulse = 25 * 2, .h_back_porch = 36 * 2 - 5 , .h_visible_area = 262 * 2, .h_front_porch = 20 * 2,
         .v_sync_pulse =  3, .v_back_porch = 13, .v_visible_area = 243, .v_front_porch = 3,
     };  
+
+    extern uint32_t line_idx, frame_idx;
 
     void init(const CRT_Type &type, std::function<const uint8_t *(uint16_t)> get_framebuffer_line = std::function<const uint8_t *(uint16_t)>() );
     void set_palette(uint8_t idx, uint8_t r, uint8_t g, uint8_t b);

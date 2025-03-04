@@ -14,9 +14,9 @@ namespace Multitask {
             core1Idle = true; // Mark core1 as idle when waiting for tasks
             tight_loop_contents(); // Yield execution without unnecessary delay
             
-            if (queue_try_remove(&taskQueue, &task)) {
+            while (queue_try_remove(&taskQueue, &task)) {
                 core1Idle = false; // Mark core1 as busy
-                if (clearRequested) break; // Exit loop safely if clearing is requested
+                if (clearRequested) continue; // Exit loop safely if clearing is requested
                 
                 if (task() == CALL_AGAIN) { // If the task returns true, re-queue it
                     if (!queue_try_add(&taskQueue, &task)) {
@@ -35,10 +35,6 @@ namespace Multitask {
 
     void clear_tasks() {
         clearRequested = true; // Signal core1 to stop re-queuing tasks
-        Task task;
-        while (queue_try_remove(&taskQueue, &task)) {
-            // Removing all tasks from the queue
-        }
         while (!core1Idle) {
             tight_loop_contents(); // Wait for Core 1 to finish its current task
         }

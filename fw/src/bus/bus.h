@@ -10,7 +10,7 @@ namespace BUS {
             SubslotIndex subslot1 : 2;
             SubslotIndex subslot2 : 2;
             SubslotIndex subslot3 : 2;
-        };
+        } subslots;
     };
 
     using GPIOBus32 = uint32_t;
@@ -36,5 +36,5 @@ namespace BUS {
 
     extern ResetCallback reset_callback;
     
-    void start();
+    [[noreturn]] void start();
 }

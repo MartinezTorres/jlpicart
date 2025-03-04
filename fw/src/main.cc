@@ -6,7 +6,10 @@
 #include <oled/ssd1306.h>
 #include <esp32/esp32.h>
 #include <bus/bus.h>
+#include <adc/adc.h>
+#include <video/vdp99x8.h>
 
+#include "generated_roms/roms.list.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 // Ideally, after a reset, we would set the following:
@@ -16,7 +19,44 @@
 // Subslot 3: ROM / GAME Payload, if enabled
 static Config::Config config; 
 
+static Multitask::CallAgain temp_and_voltage_callback() {
+    static uint32_t old_frame_idx = 0;
+    if (CRT::frame_idx != old_frame_idx) {
+        old_frame_idx = CRT::frame_idx;
+
+        if (CRT::frame_idx % 2 == 0) {
+            int temp = ADC::get_temp();
+
+            if (temp > 1000) temp = 999;
+
+            SSD1306::locate(3,2);
+            SSD1306::puts("Temp: ");
+            SSD1306::putchar('0' + (temp / 100)%10);
+            SSD1306::putchar('0' + (temp / 10)%10);
+            SSD1306::putchar('.');
+            SSD1306::putchar('0' + (temp / 1)%10);
+            SSD1306::putchar('0');
+        } else {
+            int vbat = ADC::get_vbat();
+
+            if (vbat > 9999) vbat = 9999;
+
+            SSD1306::locate(3,3);
+            SSD1306::puts("Vbat: ");
+            if (vbat >= 1000) SSD1306::putchar('0' + (vbat / 1000)%10); else SSD1306::putchar(' ');
+            SSD1306::putchar('.');
+            SSD1306::putchar('0' + (vbat / 100)%10);
+            SSD1306::putchar('0' + (vbat /  10)%10);
+            SSD1306::putchar('0' + (vbat /   1)%10);
+        }
+        
+    }
+    return Multitask::CALL_AGAIN;
+}
+
 static void on_reset() {
+
+    static int n_cart = 0;
 
     DBG::msg<DEBUG_INFO>("Reset routine started");
 
@@ -31,6 +71,8 @@ static void on_reset() {
     // INIT BOARD DEVICES
 
     if (config.vdp.status == ENABLED) {
+
+        VDP99X8::init();
     }
 
     if (config.audio.PSG0.status == ENABLED) {
@@ -45,7 +87,9 @@ static void on_reset() {
     if (config.oled.status == ENABLED) {
         SSD1306::init();
         SSD1306::enable_display(true);
-        //SSD1306::puts("MEGA PI 2");
+        SSD1306::puts(cartridge_list[n_cart].name);
+
+        //Multitask::add_task(temp_and_voltage_callback);    
     }
 
     if (config.eink.status == ENABLED) {
@@ -73,11 +117,18 @@ static void on_reset() {
         BUS::init_subslot( config.slot.subslots[1], BUS::SUBSLOT1 );
         BUS::init_subslot( config.slot.subslots[2], BUS::SUBSLOT2 );
         BUS::init_subslot( config.slot.subslots[3], BUS::SUBSLOT3 );
+        BUS::init_subslot( cartridge_list[n_cart], BUS::SUBSLOT2 );
     } else {
         BUS::is_expanded = false;
         BUS::subslots[0] = BUS::SUBSLOT0;
-        BUS::init_subslot( config.slot.subslots[0], BUS::SUBSLOT0 );
+        //BUS::init_subslot( config.slot.subslots[0], BUS::SUBSLOT0 );
+        BUS::init_subslot( cartridge_list[n_cart], BUS::SUBSLOT0 );
+        
     }
+
+    n_cart++;
+    if (n_cart == sizeof( cartridge_list) / sizeof (cartridge_list[0]) ) n_cart = 0;
+
 
     DBG::msg<DEBUG_INFO>("Reset routine finished");
 }
@@ -104,7 +155,6 @@ int main() {
         for (int i : { GPIO_WR, GPIO_IORQ, GPIO_MERQ, GPIO_RD, GPIO_BUSDIR, GPIO_INT, GPIO_WAIT, GPIO_SLTSL, GPIO64_RESET } ) activate_gpio( i );
 
         // ENABLE WAIT SIGNAL TO PAUSE MSX
-        gpio_init(GPIO_WAIT); 
         gpio_put(GPIO_WAIT, false); 
         gpio_set_dir(GPIO_WAIT, GPIO_OUT);
         
