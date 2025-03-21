@@ -549,7 +549,7 @@ void init(const CRT_Type &crt_type_, std::function<const uint8_t *(uint16_t)> ge
 
     // And init the core if needed:
     if (CRT_engine_state == CRT_NOT_INITIALIZED) {
-        queue_init(&queue, sizeof(QueueItem), 16);
+        queue_init(&queue, sizeof(QueueItem), 32);
         init_test_pattern();
         Multitask::add_task(core1_init_crt);
     }

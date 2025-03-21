@@ -3,6 +3,7 @@
 #include <bus/bus.h>
 #include <bus/slot.h>
 
+using namespace Config;
 
 namespace BUS {
 
@@ -99,14 +100,22 @@ namespace BUS {
                     memory_write_callbacks[subslot_idx][i] = DEBUG_Write_Callback;
                 }
                 break;
+            case Z80_STUB:
+                memory_read_addresses[subslot_idx][2] = &cartridge.rom_base[0];
+                memory_write_addresses[subslot_idx][2] = &cartridge.ram_base[0];
+                memory_read_callbacks[subslot_idx][2] = Z80_Stub_Read_Callback;
+                memory_write_callbacks[subslot_idx][2] = Z80_Stub_Write_Callback;
+                break;
+                
             case MAPPER_LINEAR:
-                for (int i = 0; i < 8; i++) 
+                for (int i = 0; i < 8; i++) {
                     memory_read_addresses[subslot_idx][i] = &cartridge.rom_base[i * 8 * 1024];
+                    memory_read_callbacks[subslot_idx][i] = DEBUG_Read_Callback;
+                }
                 break;
             case MAPPER_32K_MIRRORED:
                 for (int i = 2; i < 6; i++) {
                     memory_read_addresses[subslot_idx][i] = &cartridge.rom_base[((i+2)%4) * 8 * 1024];
-                    memory_read_callbacks[subslot_idx][i] = DEBUG_Read_Callback;
                 }
                 break;
             case MAPPER_KONAMI:

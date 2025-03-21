@@ -5,6 +5,9 @@
 
 namespace VDP99X8 {
 
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wpedantic"
+    
     typedef struct {
         union {
             uint8_t reg[0x40];
@@ -73,6 +76,8 @@ namespace VDP99X8 {
     }
     State;
 
+    #pragma GCC diagnostic pop
+
     extern RegisterSet register_set;
     extern State state;
     extern uint8_t vram[0x4000];
@@ -84,3 +89,4 @@ namespace VDP99X8 {
     
 
 }
+
