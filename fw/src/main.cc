@@ -6,17 +6,13 @@
 #include <oled/ssd1306.h>
 #include <esp32/esp32.h>
 #include <bus/bus.h>
+
 #include <adc/adc.h>
 #include <video/vdp99x8.h>
+#include <video/tms9918i.h>
 
 #include "generated_roms/roms.list.h"
 
-///////////////////////////////////////////////////////////////////////////////
-// Ideally, after a reset, we would set the following:
-// Subslot 0: disk and network routines, if enabled
-// Subslot 1: boot and configuration room, if enabled
-// Subslot 2: 64KB of RAM, if enabled
-// Subslot 3: ROM / GAME Payload, if enabled
 static Config::Config config; 
 
 static Multitask::CallAgain temp_and_voltage_callback() {
@@ -60,6 +56,15 @@ static void on_reset() {
 
     DBG::msg<DEBUG_INFO>("Reset routine started");
 
+    ///////////////////////////////////////////////////////////////////////////
+    // DISABLE ALL EXISTING CARTRIDGES
+    for (auto &cartridge : BUS::cartridges) 
+        if (cartridge.deinit != nullptr) 
+            cartridge.deinit( cartridge );
+
+    for (auto &cartridge : BUS::cartridges) 
+        cartridge = Cartridge()
+
     Multitask::clear_tasks();
 
     using namespace Config;
@@ -72,7 +77,8 @@ static void on_reset() {
 
     if (config.vdp.status == ENABLED) {
 
-        VDP99X8::init();
+        //VDP99X8::init();
+        //TMS9918I::init();  
     }
 
     if (config.audio.PSG0.status == ENABLED) {
@@ -89,7 +95,7 @@ static void on_reset() {
         SSD1306::enable_display(true);
         SSD1306::puts(cartridge_list[n_cart].name);
 
-        //Multitask::add_task(temp_and_voltage_callback);    
+        //Multitask::add_task(temp_and_voltage_callback);
     }
 
     if (config.eink.status == ENABLED) {
@@ -106,6 +112,7 @@ static void on_reset() {
     ///////////////////////////////////////////////////////////////////////////
     // INIT BUS AND SUBSLOTS
 
+
     if (config.slot.expander == ENABLED) {
         BUS::is_expanded = true;
         BUS::subslots[0] = BUS::SUBSLOT0;
@@ -117,14 +124,13 @@ static void on_reset() {
         BUS::init_subslot( config.slot.subslots[1], BUS::SUBSLOT1 );
         BUS::init_subslot( config.slot.subslots[2], BUS::SUBSLOT2 );
         BUS::init_subslot( config.slot.subslots[3], BUS::SUBSLOT3 );
-        BUS::init_subslot( cartridge_list[n_cart], BUS::SUBSLOT2 );
+
     } else {
         BUS::is_expanded = false;
         BUS::subslots[0] = BUS::SUBSLOT0;
-        //BUS::init_subslot( config.slot.subslots[0], BUS::SUBSLOT0 );
-        BUS::init_subslot( cartridge_list[n_cart], BUS::SUBSLOT0 );
-        
     }
+    
+    BUS::init_subslot( cartridge_list[n_cart], BUS::SUBSLOT0 );
 
     n_cart++;
     if (n_cart == sizeof( cartridge_list) / sizeof (cartridge_list[0]) ) n_cart = 0;
@@ -157,6 +163,12 @@ int main() {
         // ENABLE WAIT SIGNAL TO PAUSE MSX
         gpio_put(GPIO_WAIT, false); 
         gpio_set_dir(GPIO_WAIT, GPIO_OUT);
+
+        // ENABLE WAIT SIGNAL TO PAUSE MSX
+        gpio_put(GPIO64_RESET, false); 
+        gpio_set_dir(GPIO64_RESET, GPIO_OUT);
+        busy_wait_us(50 * 1000);
+        gpio_set_dir(GPIO64_RESET, GPIO_IN);
         
         // ENABLE USB POWER 
         // TODO: Make it configurable, maybe bring it to USB

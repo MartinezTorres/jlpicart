@@ -70,7 +70,7 @@ namespace I2C {
         
         static int write(uint8_t address, const uint8_t *src, size_t len) {
 
-            //auto interrupt_status = save_and_disable_interrupts();
+            auto interrupt_status = save_and_disable_interrupts();
 
             start();
             if (send_byte(address+address)) return -1;
@@ -81,7 +81,7 @@ namespace I2C {
             
             stop();
 
-            //restore_interrupts(interrupt_status);
+            restore_interrupts(interrupt_status);
             
             return false;
         }
