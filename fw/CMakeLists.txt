@@ -6,47 +6,11 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+include(cmake/add_roms.cmake)
+add_roms( roms/ generated_roms/roms )
 
-# Creates C resources file from files in given directory recursively
-function(create_roms dir output section)
-    # Collect input files
-    file(GLOB bin_paths ${dir}/*.rom)
-    list(LENGTH bin_paths bin_count)
-
-    # Create empty output file
-    file(WRITE ${CMAKE_BINARY_DIR}/${output}.cc "#include <cstdint>\n#include \"${output}.h\"\n\n")
-    file(WRITE ${CMAKE_BINARY_DIR}/${output}.h  "#pragma once\n#include <cstdint>\n\n")
-    file(WRITE ${CMAKE_BINARY_DIR}/${output}.list.h "#pragma once\n#include \"${output}.h\"\nstatic const Cartridge cartridge_list[${bin_count}] = {\n")
-
-    # Iterate through input files
-    foreach(bin ${bin_paths})
-        # Get short filenames
-        get_filename_component(filename ${bin} NAME)
-
-        string(REGEX MATCH "^(.*)\\.(.*)\\.rom$" matched_name ${filename})
-
-        # Extract 'name' and 'mapper' from the match
-        set(rom_name ${CMAKE_MATCH_1})
-        set(mapper ${CMAKE_MATCH_2})
-
-        # Replace filename spaces & extension separator for C compatibility
-        string(REGEX REPLACE "[\ \\./-]" "_" rom_escaped_name ${rom_name})
-        # Read hex data from file
-        file(READ ${bin} filedata HEX)
-        file(SIZE ${bin} filesize)
-        # Convert hex data for C compatibility
-        string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," filedata ${filedata})
-        # Append data to output file
-        file(APPEND ${CMAKE_BINARY_DIR}/${output}.cc "const uint8_t  ${rom_escaped_name}[${filesize}] ${section} = {${filedata}};\n" )
-        file(APPEND ${CMAKE_BINARY_DIR}/${output}.h "extern const uint8_t  ${rom_escaped_name}[${filesize}];\n" )
-        file(APPEND ${CMAKE_BINARY_DIR}/${output}.list.h "{.name=\"${rom_name}\", .cartridge_type=MAPPER_${mapper}, .rom_base=${rom_escaped_name} },\n")
-    endforeach()
-    
-    file(APPEND ${CMAKE_BINARY_DIR}/${output}.list.h "};\n")
-
-endfunction()
-
-create_roms( roms/ generated_roms/roms  "__attribute__ ((section (\".flash1M\")))" )
+include(cmake/add_binaries.cmake)
+add_binaries( bin_data/ generated_binaries/binaries )
 
 
 # Initialise pico_sdk from installed location
@@ -88,16 +52,22 @@ add_executable(jlpicart
     src/multitask/multitask.cc
 
     src/bus/bus.cc
-    src/bus/slot.cc
+#    src/bus/cartridge.cc
+#    src/bus/z80stub.cc
 
     src/adc/adc.cc
     src/oled/ssd1306.cc
+
     src/esp32/esp32.cc
+    src/esp32/esp_jlpicart_port.cc
 
     src/video/crt.cc
-    src/video/vdp99x8.cc
+#    src/video/vdp99x8.cc
+#    src/video/tms9918i.cc
+
     
     ${CMAKE_BINARY_DIR}/generated_roms/roms.cc
+    ${CMAKE_BINARY_DIR}/generated_binaries/binaries.cc
 #    src/usb.c
 
 #    src/printf/printf.c
@@ -126,6 +96,10 @@ pico_enable_stdio_usb(jlpicart 0)
 # Add the standard include files to the build
 target_include_directories(jlpicart PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src)
 
+#set(PORT PI_PICO)
+set(FLASHER_DIR ${CMAKE_CURRENT_LIST_DIR}/ext/esp32/esp-serial-flasher)
+add_subdirectory(${FLASHER_DIR} ${CMAKE_BINARY_DIR}/flasher)
+
 # pull in common dependencies
 target_link_libraries(jlpicart
 #    pico_stdlib
@@ -146,6 +120,8 @@ target_link_libraries(jlpicart
     hardware_dma
     hardware_adc 
     pico_multicore
+
+    flasher
 )
 
 set_target_properties(jlpicart PROPERTIES PICO_TARGET_LINKER_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/sdk/memmap_jlpicart.ld)

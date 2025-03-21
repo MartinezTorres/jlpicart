@@ -1,7 +1,6 @@
 #pragma once
 
 #include <board.h>
-#include <bus/slot.h>
 
 ///////////////////////////////////////////////////////////////////////////////
 // config represents the saved configuration of the cartridge.
@@ -10,13 +9,16 @@
 
 namespace Config {
 
+    static constexpr const size_t NUM_SUBSLOTS = 8;
+
     enum Status : bool { DISABLED = false,  ENABLED = true };
 
     enum CRTDevice : uint8_t  { VGA320x480_60Hz };
 
-    enum VDPDevice : uint8_t { TMS9918 };
+    enum VDPDevice : uint8_t { VDP_TMS9918, VDP_TMS9918I };
 
     enum WIFI_MODE : uint8_t { HOST, CLIENT, AUTO };
+
 
     struct Config {
 
@@ -34,31 +36,13 @@ namespace Config {
 
             struct { Status write_access = ENABLED; } firmware;
             struct { Status write_access = ENABLED; } configuration;
-            std::bitset<32*1024/4> block_access = {0};
+            //std::array<uint8_t, 32*1024/4> block_access = {0};
         } flash;
 
         struct {
-            Status expander = DISABLED;
+            Status expander = ENABLED;
 
-            Cartridge subslots[4] = {
-
-                //{ .cartridge_type = SUBSLOT_DISABLED, .rom_base = nullptr, .ram_base = nullptr },
-                //{ .cartridge_type = SUBSLOT_DISABLED, .rom_base = nullptr, .ram_base = nullptr },
-                //{ .cartridge_type = SUBSLOT_DISABLED, .rom_base = nullptr, .ram_base = nullptr },
-                //{ .cartridge_type = SUBSLOT_DISABLED, .rom_base = nullptr, .ram_base = nullptr },
-
-                //{ .cartridge_type = SUBSLOT_RAM, .rom_base = nullptr, .ram_base = (uint8_t *)0x20020000U },
-                //{ .cartridge_type = SUBSLOT_RAM, .rom_base = nullptr, .ram_base = (uint8_t *)0x20030000U },
-                //{ .cartridge_type = SUBSLOT_RAM, .rom_base = nullptr, .ram_base = (uint8_t *)0x20040000U },
-                //{ .cartridge_type = SUBSLOT_RAM, .rom_base = nullptr, .ram_base = (uint8_t *)0x20050000U },
-
-                { .cartridge_type = SUBSLOT_DISABLED, .rom_base = nullptr, .ram_base = nullptr },
-                { .cartridge_type = SUBSLOT_DISABLED, .rom_base = nullptr, .ram_base = nullptr },
-                { .cartridge_type = SUBSLOT_DISABLED, .rom_base = nullptr, .ram_base = nullptr },
-                { .cartridge_type = SUBSLOT_DISABLED, .rom_base = nullptr, .ram_base = nullptr },
-
-
-            };
+            //Cartridge subslots[NUM_SUBSLOTS] = { 0 };
         } slot;
 
         struct USB {
@@ -72,18 +56,18 @@ namespace Config {
             Status status = ENABLED;
             Status respond_to_reads = DISABLED;
             Status irq_generation = DISABLED;
-            VDPDevice vdp_device = TMS9918;
+            VDPDevice vdp_device = VDP_TMS9918;
             CRTDevice crt_device = VGA320x480_60Hz;
             uint8_t base_port = 0x98;
         } vdp;
 
         struct {
-            Status status = ENABLED;
+            Status status = DISABLED;
         } oled;
 
         struct {
 
-            Status status = ENABLED;
+            Status status = DISABLED;
             WIFI_MODE mode = AUTO;
             char access_point[128] = "MSX_JLPiCart";
             char password[128] = "Backed Potaito";

@@ -72,8 +72,8 @@ struct DebugDevice {
         if (a < 0)  { putchar<BlockingStatus>('-'); a = -a; }
         int sz = 0;
         static char rnum[40];
-        while (a) { rnum[sz++] = (a % 10); a /= 10; }
-        while (sz) putchar<BlockingStatus>(rnum[--sz]);
+        while (a) { rnum[sz++] = '0' + (a % 10); a /= 10; }
+        while (sz--) putchar<BlockingStatus>(rnum[sz]);
     }
 
     template <DebugBlocking BlockingStatus = DEBUG_BLOCKING_ENABLED, typename T>

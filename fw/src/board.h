@@ -1,4 +1,5 @@
 #pragma once
+#define	_STDIO_H_
 
 #include <pico.h>
 #include <pico/time.h>
@@ -25,7 +26,9 @@
 
 #include <functional>
 #include <initializer_list>
-#include <bitset>
+#include <array>
+#include <string_view>
+//#include <bitset>
 
 enum PinMapping :int {
     GPIO_A0  = 0,
@@ -143,7 +146,7 @@ enum PinBitMapping : uint64_t {
 // ******* YOU MUST ALSO UPDATE THE MEMORY LAYOUT IN memmap_jlpicart.d ********
 // MEMORY
 // {
-//    FLASH(rx) :           ORIGIN = 0x10000000, LENGTH = 192k
+//    FLASH(rx) :           ORIGIN = 0x10000000, LENGTH = 256k
 //
 //    RAM(rwx) :            ORIGIN = 0x20000000, LENGTH = 128k
 //    SCRATCH_X(rwx) :      ORIGIN = 0x20080000, LENGTH = 4k
@@ -151,21 +154,21 @@ enum PinBitMapping : uint64_t {
 // }
 //
 
-constexpr uint32_t FLASH_BIOS      = 0x10030000U; //  32K 
-constexpr uint32_t FLASH_CONF_A    = 0x10038000U; //  16K
-constexpr uint32_t FLASH_CONF_B    = 0x1003C000U; //  16K
-constexpr uint32_t FLASH_SAVES     = 0x10040000U; // 256K
+constexpr uint32_t FLASH_BIOS      = 0x10040000U; //  32K 
+constexpr uint32_t FLASH_CONF_A    = 0x10048000U; //  16K
+constexpr uint32_t FLASH_CONF_B    = 0x1004C000U; //  16K
+constexpr uint32_t FLASH_SAVES     = 0x10060000U; // 128K
 constexpr uint32_t FLASH_PAYLOAD_A = 0x10080000U; // 512K
 constexpr uint32_t FLASH_PAYLOAD_B = 0x10100000U; //  15M
 
 constexpr uint32_t RAM_EXT         = 0x20020000U; // 384K
 
 
-
 #include <debug/debug_device.h>
 //using DBG = DebugDevice<DEBUG_WARNING, DEBUG_DEVICE_GPIO38_OLEDSCK>;
-//using DBG = DebugDevice<DEBUG_INFO, DEBUG_DEVICE_GPIO38_OLEDSCK>;
-using DBG = DebugDevice<DEBUG_ERROR, DEBUG_DEVICE_DISABLED>;
+using DBG = DebugDevice<DEBUG_INFO, DEBUG_DEVICE_GPIO38_OLEDSCK>;
+//using DBG = DebugDevice<DEBUG_ERROR, DEBUG_DEVICE_DISABLED>;
+
 
 
 inline void set_speed(size_t vco_mhz, size_t system_divider, size_t flash_divider, enum vreg_voltage voltage) {
