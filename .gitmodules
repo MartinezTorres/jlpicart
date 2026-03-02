@@ -1,0 +1,6 @@
+[submodule "fw/ext/tinyusb"]
+	path = fw/ext/tinyusb
+	url = https://github.com/hathach/tinyusb.git
+[submodule "fw/ext/esp32/esp-at"]
+	path = fw/ext/esp32/esp-at
+	url = https://github.com/espressif/esp-at.git
