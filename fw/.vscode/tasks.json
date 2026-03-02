@@ -5,8 +5,7 @@
             "label": "Compile Project",
             "type": "shell",
             //"isBuildCommand": true,
-            "command": "${userHome}/.pico-sdk/toolchain/14_2_Rel1/bin/arm-none-eabi-size -A -x ${workspaceFolder}/build/jlpicart.elf",
-            //"args": [ "-A", "-x", "${command:raspberry-pi-pico.launchTargetPath}" ],
+            "command": "${workspaceFolder}/.pico-sdk/toolchain/14_2_Rel1/bin/arm-none-eabi-size -A -x ${workspaceFolder}/build/jlpicart.elf",
             "group": "build",
             "presentation": {
                 "echo": true,
@@ -15,15 +14,12 @@
                 "panel": "shared"
             },
             "problemMatcher": [],
-            "windows": {
-                "command": "${env:USERPROFILE}/.pico-sdk/toolchain/14_2_Rel1/bin/arm-none-eabi-size.exe -A -x ${workspaceFolder}/build/jlpicart.elf"
-            },
             "dependsOn": ["Ninja"]
         },
         {
             "label": "Ninja",
             "type": "process",
-            "command": "${userHome}/.pico-sdk/ninja/v1.12.1/ninja",
+            "command": "${workspaceFolder}/.pico-sdk/ninja/v1.12.1/ninja",
             "args": ["-C", "${workspaceFolder}/build"],
             //"group": "build",
             "presentation": {
@@ -32,10 +28,7 @@
                 "reveal": "always",
                 "panel": "shared"
             },
-            "problemMatcher": [],
-            "windows": {
-                "command": "${env:USERPROFILE}/.pico-sdk/ninja/v1.12.1/ninja.exe"
-            }
+            "problemMatcher": []
         },
         {
             "label": "Run Project",
@@ -46,57 +39,14 @@
                 "reveal": "always",
                 "panel": "dedicated"
             },
-            "problemMatcher": [],
-            "windows": {
-                "command": "${workspaceFolder}/util/flash_swr.bat",
-            }
-        },
-        {
-            "label": "Old Run Project",
-            "type": "process",
-            "command": "${env:HOME}/.pico-sdk/picotool/2.0.0/picotool/picotool",
-            "args": [
-                "load",
-                "${command:raspberry-pi-pico.launchTargetPath}",
-                "-fx"
-            ],
-            "presentation": {
-                "reveal": "always",
-                "panel": "dedicated"
-            },
-            "problemMatcher": [],
-            "windows": {
-                "command": "${env:USERPROFILE}/.pico-sdk/picotool/2.0.0/picotool/picotool.exe"
-            }
-        },
-        {
-            "label": "Flash",
-            "type": "process",
-            "command": "${userHome}/.pico-sdk/openocd/0.12.0+dev/openocd.exe",
-            "args": [
-                "-s",
-                "${userHome}/.pico-sdk/openocd/0.12.0+dev/scripts",
-                "-f",
-                "interface/cmsis-dap.cfg",
-                "-f",
-                "target/${command:raspberry-pi-pico.getTarget}.cfg",
-                "-c",
-                "adapter speed 5000; program \"${command:raspberry-pi-pico.launchTargetPath}\" verify reset exit"
-            ],
-            "problemMatcher": [],
-            "windows": {
-                "command": "${env:USERPROFILE}/.pico-sdk/openocd/0.12.0+dev/openocd.exe",
-            }
+            "problemMatcher": []
         },
         {
             "label": "Flash_205",
             "type": "process",
             "command": "${workspaceFolder}/util/flash_swr.bat",
             "args": [],
-            "problemMatcher": [],
-            "windows": {
-                "command": "${workspaceFolder}/util/flash_swr.bat",
-            }
+            "problemMatcher": []
         }
     ]
 }

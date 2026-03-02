@@ -1,0 +1,177 @@
+diff --git a/hw/bsp/rp2040/board.h b/hw/bsp/rp2040/board.h
+index 3849894ce..6a4b15e78 100644
+--- a/hw/bsp/rp2040/board.h
++++ b/hw/bsp/rp2040/board.h
+@@ -32,22 +32,22 @@
+ #endif
+ 
+ // LED
+-#ifdef PICO_DEFAULT_LED_PIN
+-#define LED_PIN               PICO_DEFAULT_LED_PIN
+-#define LED_STATE_ON          (!(PICO_DEFAULT_LED_PIN_INVERTED))
+-#endif
++//#ifdef PICO_DEFAULT_LED_PIN
++//#define LED_PIN               PICO_DEFAULT_LED_PIN
++//#define LED_STATE_ON          (!(PICO_DEFAULT_LED_PIN_INVERTED))
++//#endif
+ 
+ // Button pin is BOOTSEL which is flash CS pin
+-#define BUTTON_BOOTSEL
+-#define BUTTON_STATE_ACTIVE   0
++//#define BUTTON_BOOTSEL
++//#define BUTTON_STATE_ACTIVE   0
+ 
+ // UART
+-#if defined(PICO_DEFAULT_UART_TX_PIN) && defined(PICO_DEFAULT_UART_RX_PIN) && \
++//#if defined(PICO_DEFAULT_UART_TX_PIN) && defined(PICO_DEFAULT_UART_RX_PIN) && \
+     defined(PICO_DEFAULT_UART) && defined(LIB_PICO_STDIO_UART)
+-#define UART_DEV              PICO_DEFAULT_UART
+-#define UART_TX_PIN           PICO_DEFAULT_UART_TX_PIN
+-#define UART_RX_PIN           PICO_DEFAULT_UART_RX_PIN
+-#endif
++//#define UART_DEV              PICO_DEFAULT_UART
++//#define UART_TX_PIN           PICO_DEFAULT_UART_TX_PIN
++//#define UART_RX_PIN           PICO_DEFAULT_UART_RX_PIN
++//#endif
+ 
+ //--------------------------------------------------------------------+
+ // PIO_USB
+diff --git a/hw/bsp/rp2040/family.c b/hw/bsp/rp2040/family.c
+index 9360f7f57..a9c586ef7 100644
+--- a/hw/bsp/rp2040/family.c
++++ b/hw/bsp/rp2040/family.c
+@@ -25,7 +25,13 @@
+  * This file is part of the TinyUSB stack.
+  */
+ 
+-#include "pico/stdlib.h"
++//#include "pico/stdlib.h"
++
++//#include "pico.h"
++//#include "pico/stdio.h"
++//#include "pico/time.h"
++//#include "hardware/gpio.h"
++
+ #include "pico/binary_info.h"
+ #include "pico/unique_id.h"
+ #include "hardware/gpio.h"
+@@ -50,7 +56,7 @@ static uart_inst_t *uart_inst;
+ #include "hardware/spi.h"
+ static void max3421_init(void);
+ #endif
+-
++/*
+ #ifdef BUTTON_BOOTSEL
+ // This example blinks the Picoboard LED when the BOOTSEL button is pressed.
+ //
+@@ -91,10 +97,10 @@ bool __no_inline_not_in_flash_func(get_bootsel_button)(void) {
+ 
+   return button_state;
+ }
+-#endif
++#endif*/
+ 
+ //------------- Segger RTT retarget -------------//
+-#if defined(LOGGER_RTT)
++/*#if defined(LOGGER_RTT)
+ // Logging with RTT
+ // - If RTT Control Block is not found by 'Auto Detection` try to use 'Search Range` with '0x20000000 0x10000'
+ // - SWD speed is rather slow around 1000Khz
+@@ -118,7 +124,7 @@ static stdio_driver_t stdio_rtt = {
+ void stdio_rtt_init(void) {
+   stdio_set_driver_enabled(&stdio_rtt, true);
+ }
+-#endif
++#endif*/
+ 
+ //--------------------------------------------------------------------+
+ //
+@@ -152,7 +158,7 @@ void board_init(void)
+   // Button
+ #ifndef BUTTON_BOOTSEL
+ #endif
+-
++/*
+ #ifdef UART_DEV
+   bi_decl(bi_2pins_with_func(UART_TX_PIN, UART_RX_PIN, GPIO_FUNC_UART));
+   uart_inst = uart_get_instance(UART_DEV);
+@@ -162,7 +168,7 @@ void board_init(void)
+ #if defined(LOGGER_RTT)
+   stdio_rtt_init();
+ #endif
+-
++*/
+ #if CFG_TUD_ENABLED
+   // TODO probably set up device mode?
+ #endif
+@@ -212,34 +218,23 @@ size_t board_get_unique_id(uint8_t id[], size_t max_len) {
+ }
+ 
+ int board_uart_read(uint8_t *buf, int len) {
+-#ifdef UART_DEV
+-  int count = 0;
+-  while ( (count < len) && uart_is_readable(uart_inst) ) {
+-    buf[count] = uart_getc(uart_inst);
+-    count++;
+-  }
+-  return count;
+-#else
+   (void) buf; (void) len;
+   return 0;
+-#endif
+ }
+ 
++extern void _putchar(char c);
++
+ int board_uart_write(void const *buf, int len) {
+-#ifdef UART_DEV
+   char const *bufch = (char const *) buf;
+   for ( int i = 0; i < len; i++ ) {
+-    uart_putc(uart_inst, bufch[i]);
++    _putchar(bufch[i]);
+   }
+   return len;
+-#else
+-  (void) buf; (void) len;
+-  return 0;
+-#endif
+ }
+ 
+ int board_getchar(void) {
+-  return getchar_timeout_us(0);
++  return 0;
++  //return getchar_timeout_us(0);
+ }
+ 
+ //--------------------------------------------------------------------+
+diff --git a/src/class/msc/msc_host.c b/src/class/msc/msc_host.c
+index ce6e7fb2d..e73433535 100644
+--- a/src/class/msc/msc_host.c
++++ b/src/class/msc/msc_host.c
+@@ -370,7 +370,12 @@ static bool config_read_capacity_complete(uint8_t dev_addr, tuh_msc_complete_dat
+ 
+ bool msch_open(uint8_t rhport, uint8_t dev_addr, tusb_desc_interface_t const* desc_itf, uint16_t max_len) {
+   (void) rhport;
+-  TU_VERIFY (MSC_SUBCLASS_SCSI == desc_itf->bInterfaceSubClass &&
++
++  printf_("WOW!\n");
++  TU_VERIFY (
++    (
++      MSC_SUBCLASS_SCSI == desc_itf->bInterfaceSubClass ||
++      MSC_SUBCLASS_SFF_MMC == desc_itf->bInterfaceSubClass )  &&
+              MSC_PROTOCOL_BOT == desc_itf->bInterfaceProtocol);
+ 
+   // msc driver length is fixed
+diff --git a/src/common/tusb_debug.h b/src/common/tusb_debug.h
+index 2e9f1d9cd..0b8a33ec6 100644
+--- a/src/common/tusb_debug.h
++++ b/src/common/tusb_debug.h
+@@ -55,7 +55,7 @@ void tu_print_mem(void const *buf, uint32_t count, uint8_t indent);
+   extern int CFG_TUSB_DEBUG_PRINTF(const char *format, ...);
+   #define tu_printf    CFG_TUSB_DEBUG_PRINTF
+ #else
+-  #define tu_printf    printf
++  #define tu_printf    printf_
+ #endif
+ 
+ static inline void tu_print_buf(uint8_t const* buf, uint32_t bufsize) {
