@@ -142,211 +142,275 @@ USB device mode is only used during initial firmware flashing, handled transpare
 
 ### 6.1 Collections and Payloads
 
-- A Collection consists of a Manifest, zero or more Payloads, and optional Assets (artwork, music). Text descriptions are part of the Manifest.
-- The Collection format is source-agnostic: the same format is valid on internal flash, USB stick, optical disc, or downloaded from the network.
-- Only one Collection may be active at a time.
-- A Collection may contain Payloads of mixed types simultaneously (e.g., a ROM + a floppy bundle + a mass storage image all active at once).
-- Each Payload has a Manifest specifying required and optional emulated hardware. Hard requirements in a Manifest cannot be overridden by the user; soft defaults can.
-- The Manifest has an authored (read-only) section and a user data section (mutable, stored in Persistent Storage).
-- Assets included in a Collection are consumed by the Menu but do not affect runtime behavior.
-- A Collection declares its boot behavior in its Manifest:
-  - **Direct boot**: boot directly into the specified Payload. Used for single-game cartridges or software that manages its own UI.
-  - **Menu first**: always boot into the Menu before launching any Payload. Used for game collections where selection is the primary experience.
-- A Collection may declare that it handles its own first-run configuration (e.g., WiFi setup, profile creation) via the JLPiCart API, suppressing automatic Menu intervention.
+- **R_COLL_STRUCTURE**: A Collection consists of a Manifest, zero or more Payloads, and optional Assets.
+- **R_COLL_TEXT_IN_MANIFEST**: Text descriptions of a Collection are part of its Manifest, not Assets.
+- **R_COLL_SOURCE_AGNOSTIC**: The Collection format is source-agnostic: the same format is valid on internal flash, USB stick, optical disc, or downloaded from the network.
+- **R_COLL_SINGLE_ACTIVE**: Only one Collection may be active at a time.
+- **R_COLL_MIXED_PAYLOADS**: A Collection may contain Payloads of mixed types active simultaneously (e.g., a ROM + a floppy bundle + a mass storage image).
+- **R_PAYLOAD_HAS_MANIFEST**: Each Payload has a Manifest specifying required and optional emulated hardware.
+- **R_MANIFEST_HARD_REQUIREMENTS**: Hard requirements declared in a Manifest cannot be overridden by the user.
+- **R_MANIFEST_SOFT_DEFAULTS**: Soft defaults declared in a Manifest may be overridden by the user.
+- **R_MANIFEST_AUTHORED_SECTION**: The Manifest has an authored, read-only section provided by the publisher.
+- **R_MANIFEST_USER_SECTION**: The Manifest has a mutable user data section stored in Persistent Storage.
+- **R_ASSETS_MENU_ONLY**: Assets included in a Collection or Payload are consumed by the Menu and do not affect runtime behavior.
+- **R_COLL_BOOT_DIRECT**: A Collection may declare direct boot behavior in its Manifest, causing the cartridge to boot directly into the specified Payload without showing the Menu.
+- **R_COLL_BOOT_MENU_FIRST**: A Collection may declare menu-first boot behavior in its Manifest, causing the Menu to always appear before any Payload launches.
+- **R_COLL_SELFCONFIG**: A Collection may declare in its Manifest that it handles its own first-run configuration via the JLPiCart API, suppressing automatic Menu intervention.
 
 ### 6.2 Payload Sources
 
-The MSX bus operates in real time — the RP2350 has nanoseconds to respond to memory reads. Direct mapping from USB, CD, or network is not possible in the general case. Instead, the cartridge uses a **64KB RAM sliding window cache** as the default runtime mechanism: Payload content is loaded on demand into the cache, and the MSX WAIT line is asserted on a cache miss while the next region is fetched from the source. This works for all source types and requires no upfront copy before the MSX starts.
+The MSX bus operates in real time — the RP2350 has nanoseconds to respond to memory reads. Direct mapping from USB, CD, or network is not possible in the general case. The cartridge uses a RAM sliding window cache as the default runtime mechanism: Payload content is loaded on demand, and the MSX WAIT line is asserted on a cache miss while the next region is fetched from the source.
 
-**Storage modes** (declared in the Payload's Manifest, cartridge decides based on available resources):
-- **RAM cache (default)**: 64KB sliding window, filled on demand from source. WAIT line asserted on cache miss. Works for all sources. Network sources may have noticeable latency on misses.
-- **RAM (full copy)**: entire Payload copied to RAM upfront if it fits. No cache misses during play. Volatile — lost on power off.
-- **Flash (cache)**: Payload written to flash cache before running. Persistent across power cycles, no WAIT line during play. Managed automatically; evicted when space is needed.
-- **Flash (permanent)**: user-installed Collections stored in flash. Explicit user or publisher action required to install or remove.
-
-**Sources:**
-- **Internal flash**: the default runtime source. Holds permanently installed Collections and the flash cache area.
-- **USB stick**: detected at boot via USB host. Contains exactly one Collection. May also contain a full cartridge initializer (firmware + security settings + Collection) for publisher provisioning of blank cartridges.
-- **Optical drive (CD/DVD)**: identical to USB stick in structure and behavior, read-only. Detected at boot via USB host. Contains exactly one Collection, optionally with a cartridge initializer.
-- **Network**: Collections downloaded and stored in flash cache or RAM before running. A Payload always arrives as part of a Collection — a network-delivered Guest Session or temporary Collection is still a complete Collection with a Manifest, even if minimal.
-
-When multiple sources are present simultaneously, priority order is user-configurable in System Settings. A board or Collection Manifest may lock the priority order.
+- **R_SOURCE_CACHE_DEFAULT**: The default storage mode is a 64KB RAM sliding window cache, filled on demand from the Source.
+- **R_SOURCE_CACHE_WAIT**: The MSX WAIT line is asserted on a cache miss while the cache is refilled from the Source.
+- **R_SOURCE_CACHE_NO_UPFRONT_COPY**: The RAM cache mode requires no upfront copy before the MSX starts.
+- **R_SOURCE_MODE_RAM_FULL**: A Payload Manifest may request full RAM copy mode: the entire Payload is copied to RAM before the MSX starts. No cache misses occur during play. Content is volatile and lost on power off.
+- **R_SOURCE_MODE_FLASH_CACHE**: A Payload Manifest may request flash cache mode: the Payload is written to a flash cache area before the MSX starts. Persistent across power cycles. Managed automatically; evicted when space is needed.
+- **R_SOURCE_MODE_FLASH_PERMANENT**: Permanently installed Collections are stored in flash. Explicit user or publisher action is required to install or remove them.
+- **R_SOURCE_MODE_CARTRIDGE_DECIDES**: The cartridge decides the final storage mode based on available resources, using the Manifest preference as a hint.
+- **R_SOURCE_FLASH_DEFAULT**: Internal flash is the default Source. It holds permanently installed Collections and the flash cache area.
+- **R_SOURCE_USB_ONE_COLLECTION**: A USB stick contains exactly one Collection.
+- **R_SOURCE_USB_INITIALIZER**: A USB stick may contain a full cartridge initializer (firmware + security settings + Collection) for publisher provisioning of blank cartridges.
+- **R_SOURCE_CD_ONE_COLLECTION**: An optical drive (CD/DVD) contains exactly one Collection.
+- **R_SOURCE_CD_READONLY**: An optical drive Source is read-only.
+- **R_SOURCE_CD_INITIALIZER**: An optical drive may contain a cartridge initializer, identical in function to a USB stick initializer.
+- **R_SOURCE_NET_COLLECTION_COMPLETE**: A network-delivered Collection is always a complete Collection with a Manifest, even if minimal.
+- **R_SOURCE_NET_CACHE_BEFORE_RUN**: Network-delivered Collections are stored in flash cache or RAM before the MSX starts.
+- **R_SOURCE_PRIORITY_CONFIGURABLE**: When multiple Sources are present simultaneously, priority order is user-configurable in System Settings.
+- **R_SOURCE_PRIORITY_LOCKABLE**: A board definition or Collection Manifest may lock the Source priority order, preventing user modification.
 
 ### 6.3 ROM Payload Properties
 
-A ROM Payload declares its mapper type in its Manifest. The mapper is not a device — it is a property of how the ROM is addressed on the MSX bus. The following mapper types must be supported:
+A ROM Payload declares its mapper type in its Manifest. The mapper is not a device — it is a property of how the ROM is addressed on the MSX bus.
 
-- Linear (no mapper)
-- Konami (4-bank, 8KB pages)
-- Konami SCC (Konami with SCC audio)
-- ASCII8 (8KB banking)
-- ASCII16 (16KB banking)
-- Additional mapper types must be addable without architectural changes.
-
-Slot configuration (which subslots carry ROM, RAM, devices) must be fully described in the Payload Manifest and configurable.
+- **R_ROM_MAPPER_IN_MANIFEST**: A ROM Payload declares its mapper type in its Manifest.
+- **R_ROM_MAPPER_LINEAR**: The linear mapper (no banking) must be supported.
+- **R_ROM_MAPPER_KONAMI**: The Konami mapper (4-bank, 8KB pages) must be supported.
+- **R_ROM_MAPPER_KONAMI_SCC**: The Konami SCC mapper (Konami with SCC audio) must be supported.
+- **R_ROM_MAPPER_ASCII8**: The ASCII8 mapper (8KB banking) must be supported.
+- **R_ROM_MAPPER_ASCII16**: The ASCII16 mapper (16KB banking) must be supported.
+- **R_ROM_MAPPER_EXTENSIBLE**: Additional mapper types must be addable without architectural changes.
+- **R_ROM_SLOT_CONFIG_IN_MANIFEST**: Slot configuration — which subslots carry ROM, RAM, and devices — must be fully described in the Payload Manifest.
+- **R_ROM_SLOT_CONFIG_FLEXIBLE**: Slot configuration must be configurable per Payload, not hardcoded.
 
 ### 6.4 Peripheral Devices
 
-The cartridge emulates MSX peripheral devices. Each active device consumes RP2350 resources (RAM, CPU time, DMA channels, PIO state machines). Not all devices can be active simultaneously. A Payload's Manifest declares which devices it requires; the cartridge validates at load time that the requested combination fits within available resources. If it does not, the cartridge reports an error rather than silently misbehaving.
-
-Not all board designs need to support all devices. Device support is a function of the board definition and available hardware peripherals.
+- **R_DEV_RESOURCE_CONSUMPTION**: Each active emulated device consumes RP2350 resources (RAM, CPU time, DMA channels, PIO state machines).
+- **R_DEV_NOT_ALL_SIMULTANEOUS**: Not all devices can be active simultaneously.
+- **R_DEV_MANIFEST_DECLARES**: A Payload's Manifest declares which devices it requires.
+- **R_DEV_VALIDATE_AT_LOAD**: The cartridge validates at load time that the requested device combination fits within available resources.
+- **R_DEV_ERROR_ON_OVERCOMMIT**: If the requested device combination exceeds available resources, the cartridge reports a clear error rather than silently misbehaving.
+- **R_DEV_BOARD_DEPENDENT**: Not all board designs need to support all devices. Device support is a function of the board definition and available hardware peripherals.
 
 **RAM Expansion**
-- The cartridge provides additional RAM to the MSX, declared per Payload in its Manifest.
-- RAM is mappable into any subslot.
-- On MSX1 machines with less than 64KB internal RAM, the cartridge must be capable of providing the full 64KB working RAM so that software expecting 64KB operates correctly.
-- The RAM budget is shared with the cartridge's own runtime needs (firmware, caches, device emulation). Resource validation must account for this.
+
+- **R_RAM_DECLARED_PER_PAYLOAD**: The amount of additional RAM the cartridge provides to the MSX is declared per Payload in its Manifest.
+- **R_RAM_ANY_SUBSLOT**: RAM expansion is mappable into any subslot.
+- **R_RAM_MSX1_FULL_64K**: On MSX1 machines with less than 64KB internal RAM, the cartridge must be capable of providing the full 64KB working RAM so that software expecting 64KB operates correctly.
+- **R_RAM_BUDGET_SHARED**: The RAM budget is shared between the Payload's RAM expansion, the firmware, caches, and device emulation state. Resource validation must account for all consumers.
 
 **Audio**
-- PSG (AY-3-8910): internal emulation, selectable per Payload as internal or pass-through to system PSG.
-- SCC / SCC+: internal emulation, selectable per Payload.
-- OPL4: full emulation (FM synthesis + PCM wavetable layer). Feasibility study required — see Open Investigations.
-- Stereo audio output requires appropriate board hardware.
+
+- **R_AUDIO_PSG_EMULATION**: PSG (AY-3-8910) internal emulation must be supported.
+- **R_AUDIO_PSG_SELECTABLE**: PSG may be selected per Payload as internal emulation or pass-through to the system PSG.
+- **R_AUDIO_SCC_EMULATION**: SCC and SCC+ internal emulation must be supported.
+- **R_AUDIO_SCC_SELECTABLE**: SCC may be selected per Payload as internal emulation or pass-through to an external SCC if present.
+- **R_AUDIO_OPL4_EMULATION**: Full OPL4 emulation (FM synthesis + PCM wavetable layer) must be supported. Feasibility study required — see Open Investigations.
+- **R_AUDIO_STEREO_REQUIRES_HARDWARE**: Stereo audio output requires appropriate board hardware (stereo audio output connector).
 
 **Video**
-- Video output mode (CRT vs VGA) is a System Setting. The reference design uses a single shared connector; other board designs may use separate connectors.
-- VDP upgrade emulation: the cartridge may present an enhanced VDP (V9938, V9958) to MSX1 host machines. Declared per Collection. Feasibility and scope require dedicated investigation — see Open Investigations.
+
+- **R_VIDEO_OUTPUT_MODE_SETTING**: Video output mode (CRT vs VGA) is a System Setting.
+- **R_VIDEO_CONNECTOR_BOARD_DEPENDENT**: The video connector layout is board-dependent. The reference design uses a single shared connector; other designs may use separate connectors.
+- **R_VIDEO_VDP_UPGRADE_EMULATION**: The cartridge may present an enhanced VDP (V9938, V9958) to MSX1 host machines. This is declared per Collection in the Manifest. Feasibility and scope require dedicated investigation — see Open Investigations.
 
 **Floppy Controller**
-- Emulates a standard MSX floppy disk controller (WD279x-compatible).
-- Serves floppy images from a Floppy Bundle Payload.
-- Supports read-only and read-write images.
-- Virtual disk swap mechanism required for multi-disk software. Implementation approach TBD — see Open Investigations.
-- Read-write floppy images are persisted to internal flash. If the Source is a USB stick, changes may optionally be written back to it.
+
+- **R_FLOPPY_WD279X_COMPATIBLE**: The cartridge emulates a standard MSX floppy disk controller, WD279x-compatible.
+- **R_FLOPPY_SERVES_BUNDLE**: The floppy controller serves floppy images from a Floppy Bundle Payload.
+- **R_FLOPPY_READONLY**: Read-only floppy images must be supported.
+- **R_FLOPPY_READWRITE**: Read-write floppy images must be supported.
+- **R_FLOPPY_VIRTUAL_SWAP**: A virtual disk swap mechanism is required for multi-disk software. Implementation approach TBD — see Open Investigations.
+- **R_FLOPPY_PERSIST_TO_FLASH**: Read-write floppy image changes are persisted to internal flash.
+- **R_FLOPPY_WRITEBACK_USB**: If the Source is a USB stick, floppy image changes may optionally be written back to the USB stick.
 
 **Mass Storage / Nextor**
-- Presents a Nextor-compatible block device interface.
-- Serves Mass Storage Payload images (read-only or read-write).
-- Internal flash may be partitioned to serve as a Nextor volume.
-- USB sticks connected via USB host may be exposed as additional Nextor volumes.
-- Enables MSX-DOS 2 / Nextor booting from cartridge.
 
-**Network**
-- Exposed as a standard MSX peripheral via IO ports.
-- INL2-compatible IO port layout — see section 6.8.
+- **R_NEXTOR_BLOCK_DEVICE**: The cartridge presents a Nextor-compatible block device interface to the MSX.
+- **R_NEXTOR_SERVES_PAYLOAD**: The Nextor device serves Mass Storage Payload images (read-only or read-write).
+- **R_NEXTOR_FLASH_VOLUME**: Internal flash may be partitioned to serve as a Nextor volume.
+- **R_NEXTOR_USB_VOLUME**: USB sticks connected via USB host may be exposed as additional Nextor volumes.
+- **R_NEXTOR_BOOT**: The Nextor device enables MSX-DOS 2 / Nextor booting from the cartridge.
+
+**Network Device**
+
+- **R_NET_DEV_IO_PERIPHERAL**: The network device is exposed to MSX software as a standard peripheral via IO ports.
+- **R_NET_DEV_INL2_PORTLAYOUT**: The IO port layout of the network device must be INL2-compatible from initial design. Retrofitting is not acceptable.
 
 ### 6.5 Runtime Behavior
 
-- Boot behavior is driven by the active Collection's Manifest (direct boot or menu first).
-- The Menu appears automatically only when something requires user attention (e.g., first boot with no profile, missing required configuration) and no Collection or game has declared it will handle that itself.
-- The user may always enter the Menu via a defined action at boot (TBD: key combination, ESC, hardware button).
-- If the cartridge has no Collection loaded, the Menu appears automatically.
-- CD/optical boot: if an optical drive is connected and a disc is present, a loading screen is shown while the disc is read, then the Collection boots according to its declared boot behavior.
-- If a Collection has only one Payload and declares direct boot, the Payload launches immediately. The Menu remains accessible for configuration via a user action.
-- On reset, the cartridge reinitializes the active Collection's device configuration and relaunches according to its boot behavior.
+- **R_RUNTIME_BOOT_DRIVEN_BY_MANIFEST**: Boot behavior is driven by the active Collection's Manifest (direct boot or menu first).
+- **R_RUNTIME_MENU_ON_ATTENTION**: The Menu appears automatically only when something requires user attention and no Collection or game has declared it will handle that itself.
+- **R_RUNTIME_MENU_ON_NO_COLLECTION**: If the cartridge has no Collection loaded, the Menu appears automatically.
+- **R_RUNTIME_MENU_ALWAYS_ACCESSIBLE**: The user may always enter the Menu via a defined action at boot, regardless of the Collection's declared boot behavior.
+- **R_RUNTIME_CD_LOADING_SCREEN**: If an optical drive is connected and a disc is present at boot, a loading screen is shown while the disc is read before the Collection boots.
+- **R_RUNTIME_SINGLE_PAYLOAD_DIRECT**: If a Collection has only one Payload and declares direct boot, the Payload launches immediately without any intermediate screen.
+- **R_RUNTIME_MENU_AFTER_DIRECT_BOOT**: After a direct boot launch, the Menu remains accessible via the defined user action.
+- **R_RUNTIME_RESET_REINIT**: On MSX reset, the cartridge reinitializes the active Collection's device configuration and relaunches according to its boot behavior.
 
 ### 6.6 Menu
 
-- Runs on the MSX screen using the host machine's VDP and keyboard.
-- Adaptive rendering based on detected MSX generation and VDP:
-  - MSX1 / TMS9918: text mode
-  - MSX2 / V9938: enhanced graphics
-  - MSX2+ / V9958: best quality
-- Functions: Collection selection, Payload selection within a Collection, System Settings, User Profile management, publisher tools (signing, locking).
-- Accessible from a running Collection via a defined key combination or hardware action.
-- The Menu is not part of any Collection. It is always available regardless of what Collection is loaded or whether any Collection is loaded.
+- **R_MENU_RUNS_ON_MSX**: The Menu runs on the MSX screen using the host machine's VDP and keyboard.
+- **R_MENU_ADAPTIVE_MSX1**: On MSX1 / TMS9918, the Menu renders in text mode.
+- **R_MENU_ADAPTIVE_MSX2**: On MSX2 / V9938, the Menu renders with enhanced graphics.
+- **R_MENU_ADAPTIVE_MSX2PLUS**: On MSX2+ / V9958, the Menu renders at best available quality.
+- **R_MENU_COLLECTION_SELECTION**: The Menu provides Collection selection.
+- **R_MENU_PAYLOAD_SELECTION**: The Menu provides Payload selection within a Collection.
+- **R_MENU_SYSTEM_SETTINGS**: The Menu provides access to System Settings.
+- **R_MENU_PROFILE_MANAGEMENT**: The Menu provides User Profile management.
+- **R_MENU_PUBLISHER_TOOLS**: The Menu provides publisher tools (signing, locking).
+- **R_MENU_ACCESSIBLE_FROM_COLLECTION**: The Menu is accessible from a running Collection via a defined key combination or hardware action.
+- **R_MENU_ALWAYS_AVAILABLE**: The Menu is always available regardless of what Collection is loaded or whether any Collection is loaded.
+- **R_MENU_NOT_A_COLLECTION**: The Menu is not part of any Collection and cannot be replaced or modified by a Collection.
 
 ### 6.7 User Profiles and Identity
 
-- Multiple User Profiles may exist on one cartridge.
-- Each profile contains: display name, language preference, save data (per Payload), high scores (per Payload), and extended game-specific data (ghosts, replays, etc.).
-- Profiles are system-level: they persist across Collection changes.
-- Each profile has a local identity and an optional cloud identity (username + password/token) for network sync.
-- **Guest Sessions**: a User Profile holder may invite another JLPiCart user to play a Collection they do not own. The guest receives a temporary Collection via network, subject to publisher-defined limits (session count, time, feature restrictions).
-- The cartridge acts as **identity provider** for games. Via the JLPiCart API, a game queries the cartridge for active player identities and receives opaque tokens. The game never manages usernames, passwords, or sync logic.
-- Multi-player identity: the cartridge supports multiple simultaneous active profiles (for local multiplayer).
-- **Consent model**: users have explicit, granular control over what data leaves the device. Sync of saves, high scores, ghosts, and profile data is individually opt-in per profile and per data type.
-- All profile data is stored locally. Network sync is optional and additive. The cartridge is fully functional offline.
+- **R_PROFILE_MULTIPLE**: Multiple User Profiles may exist on one cartridge.
+- **R_PROFILE_DISPLAY_NAME**: Each profile has a display name.
+- **R_PROFILE_LANGUAGE**: Each profile stores a language preference.
+- **R_PROFILE_SAVE_DATA**: Each profile stores save data per Payload.
+- **R_PROFILE_HIGH_SCORES**: Each profile stores high scores per Payload.
+- **R_PROFILE_EXTENDED_DATA**: Each profile stores extended game-specific data per Payload (ghosts, replays, etc.).
+- **R_PROFILE_SYSTEM_LEVEL**: Profiles are system-level and persist across Collection changes.
+- **R_PROFILE_LOCAL_IDENTITY**: Each profile has a local identity stored on the cartridge.
+- **R_PROFILE_CLOUD_IDENTITY**: Each profile may optionally have a cloud identity (username + password/token) for network sync.
+- **R_PROFILE_GUEST_INVITE**: A User Profile holder may invite another JLPiCart user to play a Collection they do not own.
+- **R_PROFILE_GUEST_TEMP_COLLECTION**: The guest receives a temporary Collection via network for the duration of the Guest Session.
+- **R_PROFILE_GUEST_SESSION_LIMIT**: Guest Sessions are subject to publisher-defined session count limits.
+- **R_PROFILE_GUEST_TIME_LIMIT**: Guest Sessions are subject to publisher-defined time limits.
+- **R_PROFILE_GUEST_FEATURE_LIMIT**: Guest Sessions are subject to publisher-defined feature restrictions.
+- **R_IDENTITY_CARTRIDGE_IS_PROVIDER**: The cartridge acts as identity provider for games and applications.
+- **R_IDENTITY_OPAQUE_TOKENS**: Via the JLPiCart API, a game receives opaque identity tokens for active players.
+- **R_IDENTITY_GAME_NO_CREDENTIALS**: A game never manages usernames, passwords, or sync logic directly.
+- **R_IDENTITY_MULTIPLAYER_PROFILES**: The cartridge supports multiple simultaneously active profiles for local multiplayer.
+- **R_CONSENT_GRANULAR**: Users have explicit, granular control over what data leaves the device.
+- **R_CONSENT_PER_PROFILE**: Sync consent is configurable per profile.
+- **R_CONSENT_PER_DATA_TYPE**: Sync consent is configurable per data type (saves, high scores, ghosts, profile data).
+- **R_PROFILE_LOCAL_PRIMARY**: All profile data is stored locally on the cartridge.
+- **R_PROFILE_SYNC_OPTIONAL**: Network sync is optional and additive. The cartridge is fully functional offline.
 
 ### 6.8 Connectivity
 
 **WiFi**
-- ESP32 co-processor provides WiFi connectivity via AT command interface.
-- WiFi credentials are System Settings (global).
-- Per-Collection network access is declared in the Manifest and may be restricted by the user.
-- The user may disable network access globally or per Collection.
+
+- **R_WIFI_ESP32_PROVIDER**: WiFi connectivity is provided by the ESP32 co-processor via AT command interface.
+- **R_WIFI_CREDENTIALS_SYSTEM_SETTING**: WiFi credentials are stored in System Settings and are cartridge-wide.
+- **R_WIFI_ACCESS_IN_MANIFEST**: Per-Collection network access requirements are declared in the Collection Manifest.
+- **R_WIFI_USER_RESTRICT_PER_COLLECTION**: The user may restrict network access per Collection.
+- **R_WIFI_USER_DISABLE_GLOBAL**: The user may disable network access globally.
 
 **InterNestorLite (INL2)**
-- Full support for the InterNestorLite v2 protocol is a hard requirement.
-- The IO port layout of the network device must be INL2-compatible from initial design. Retrofitting is not acceptable.
-- INL2 compatibility enables existing MSX networked software to work without modification.
+
+- **R_INL2_FULL_SUPPORT**: Full support for the InterNestorLite v2 protocol is a hard requirement.
+- **R_INL2_PORT_LAYOUT_FIXED**: The IO port layout of the network device must be INL2-compatible from initial design.
+- **R_INL2_EXISTING_SOFTWARE**: INL2 compatibility enables existing MSX networked software to work without modification.
 
 **JLPiCart API — Network Features**
-- TCP socket interface exposed to MSX software via the JLPiCart API.
-- High score submission and retrieval (to/from cloud service).
-- User profile sync (opt-in, per data type).
-- Guest Session delivery (temporary Collection download).
-- Online Collection updates (publisher pushes updated Collection to cartridge).
-- Network multiplayer: two or more JLPiCart units may connect for head-to-head play. Each cartridge manages its own user identity; games use the JLPiCart API for session setup rather than implementing networking themselves.
+
+- **R_API_NET_TCP_SOCKET**: The JLPiCart API exposes a TCP socket interface to MSX software.
+- **R_API_NET_HIGHSCORE_SUBMIT**: The JLPiCart API supports high score submission to the cloud service.
+- **R_API_NET_HIGHSCORE_RETRIEVE**: The JLPiCart API supports high score retrieval from the cloud service.
+- **R_API_NET_PROFILE_SYNC**: The JLPiCart API supports user profile sync, opt-in per data type.
+- **R_API_NET_GUEST_DELIVERY**: The JLPiCart API supports Guest Session delivery (temporary Collection download).
+- **R_API_NET_COLLECTION_UPDATE**: The JLPiCart API supports online Collection updates pushed by the publisher.
+- **R_API_NET_MULTIPLAYER_SESSION**: Two or more JLPiCart units may connect for network multiplayer via the JLPiCart API.
+- **R_API_NET_GAME_NO_NETCONFIG**: Games use the JLPiCart API for multiplayer session setup and never manage network configuration themselves.
 
 **Cloud Service**
-- An external web service (operated by a community partner) stores user profiles, high scores, ghosts/replays, and Collection metadata.
-- The cartridge communicates with this service via TCP over WiFi.
-- The service and its API are an external dependency and require coordination with the service operator.
+
+- **R_CLOUD_STORES_PROFILES**: The cloud service stores user profiles.
+- **R_CLOUD_STORES_SCORES**: The cloud service stores high scores and ghost/replay data.
+- **R_CLOUD_STORES_METADATA**: The cloud service stores Collection metadata.
+- **R_CLOUD_COMMS_TCP**: The cartridge communicates with the cloud service via TCP over WiFi.
+- **R_CLOUD_EXTERNAL_DEPENDENCY**: The cloud service and its API are an external dependency requiring coordination with the service operator.
 
 ### 6.9 USB
 
-- The USB port operates in host mode at all times during normal operation.
-- USB HID gamepad/joystick support, mapped to MSX joystick ports (System Setting: controller mapping).
-- USB keyboard support, mapped to MSX keyboard matrix (System Setting).
-- USB stick support: additional Payload Source and Nextor volume.
-- USB optical drive support (CD/DVD as Payload Source).
-- Collections are loaded onto the cartridge via USB stick or network. USB device mode is not a user-facing feature; it is only used during initial firmware flashing via the RP2350B bootrom.
-- TinyUSB is the USB stack. The existing patch enabling optical drive (bulk-only transport) support must be maintained.
+- **R_USB_HOST_ALWAYS**: The USB port operates in host mode at all times during normal operation.
+- **R_USB_HID_GAMEPAD**: USB HID gamepad and joystick devices are supported and mapped to MSX joystick ports.
+- **R_USB_GAMEPAD_MAPPING_SETTING**: Controller mapping (USB HID to MSX joystick) is a System Setting.
+- **R_USB_HID_KEYBOARD**: USB HID keyboard devices are supported and mapped to the MSX keyboard matrix.
+- **R_USB_KEYBOARD_MAPPING_SETTING**: Keyboard mapping is a System Setting.
+- **R_USB_STICK_SOURCE**: USB sticks are a Payload Source, detected at boot via USB host.
+- **R_USB_STICK_NEXTOR**: USB sticks may be exposed as Nextor volumes.
+- **R_USB_OPTICAL_SOURCE**: USB optical drives (CD/DVD) are a Payload Source, detected at boot via USB host.
+- **R_USB_CONTENT_VIA_STICK_OR_NET**: Collections are loaded onto the cartridge via USB stick or network only.
+- **R_USB_DEVICE_MODE_FIRMWARE_ONLY**: USB device mode is used only during initial firmware flashing via the RP2350B bootrom. It is not a user-facing feature.
+- **R_USB_TINYUSB_STACK**: TinyUSB is the USB stack.
+- **R_USB_OPTICAL_PATCH_MAINTAINED**: The existing TinyUSB patch enabling optical drive (bulk-only transport) support must be maintained.
 
 ### 6.10 Security and Licensing
 
 **Publisher Locking**
-- A publisher may lock a Collection so its contents cannot be modified or extracted.
-- Locking is performed by copying a signed folder to the cartridge via USB stick, no custom tooling required.
-- The Menu provides a locking/signing option for publishers and developers.
-- Locking levels (to be investigated and specified):
-  - **UI lock**: content not modifiable via Menu or USB interface. Trivially bypassed physically; suitable for friendly/casual protection.
-  - **Content encryption**: Payloads stored encrypted. Key management via RP2350 OTP. Resistant to physical flash extraction.
-  - **Firmware lock**: signed boot chain via RP2350 secure boot. Prevents firmware replacement without the publisher's private key.
-- The RP2350B OTP and TrustZone features are the intended implementation mechanism. Detailed feasibility investigation required before implementation.
-- **One-way door warning**: OTP operations are irreversible. The architecture must support locking as a later addition without requiring OTP writes during development or normal use.
+
+- **R_SEC_LOCK_COLLECTION**: A publisher may lock a Collection so its contents cannot be modified or extracted.
+- **R_SEC_LOCK_VIA_USB_STICK**: Locking is performed by copying a signed folder to the cartridge via USB stick. No custom tooling is required.
+- **R_SEC_LOCK_MENU_OPTION**: The Menu provides a locking and signing option for publishers and developers.
+- **R_SEC_LOCK_LEVEL_UI**: UI lock prevents content modification via Menu or USB interface. Provides friendly/casual protection only; physically bypassable.
+- **R_SEC_LOCK_LEVEL_ENCRYPTION**: Content encryption stores Payloads encrypted with key management via RP2350 OTP. Resistant to physical flash extraction.
+- **R_SEC_LOCK_LEVEL_FIRMWARE**: Firmware lock uses a signed boot chain via RP2350 secure boot, preventing firmware replacement without the publisher's private key.
+- **R_SEC_OTP_INVESTIGATION_REQUIRED**: Detailed feasibility investigation of RP2350B OTP and TrustZone is required before implementing content encryption or firmware lock — see Open Investigations.
+- **R_SEC_OTP_NO_DEV_WRITES**: OTP operations are irreversible. The architecture must support locking as a later addition without requiring any OTP writes during development or normal use.
+- **R_SEC_ARCH_LOCK_ADDABLE_LATER**: The architecture must be designed so that all locking levels can be added after initial deployment without breaking existing unlocked cartridges.
 
 **Guest Licensing**
-- Publishers define per-Collection guest policies: how many guest sessions are allowed, for how long, with what feature restrictions.
-- Guest Collection delivery is authenticated via the cloud service.
+
+- **R_GUEST_POLICY_SESSION_COUNT**: Publishers define a maximum guest session count per Collection.
+- **R_GUEST_POLICY_TIME_LIMIT**: Publishers define a maximum guest session duration per Collection.
+- **R_GUEST_POLICY_FEATURE_RESTRICT**: Publishers define feature restrictions for guest sessions per Collection.
+- **R_GUEST_DELIVERY_AUTHENTICATED**: Guest Collection delivery is authenticated via the cloud service.
 
 **Firmware Updates**
-- The cartridge firmware is updatable.
-- Updates may be delivered via USB stick or via network (online update, user-initiated).
-- Signed firmware updates are a requirement for locked cartridges.
-- Update integrity must be verified before flashing.
+
+- **R_UPDATE_SUPPORTED**: The cartridge firmware is updatable after deployment.
+- **R_UPDATE_VIA_USB_STICK**: Firmware updates may be delivered via USB stick.
+- **R_UPDATE_VIA_NETWORK**: Firmware updates may be delivered via network (user-initiated).
+- **R_UPDATE_SIGNED_FOR_LOCKED**: Signed firmware updates are required for locked cartridges.
+- **R_UPDATE_INTEGRITY_VERIFIED**: Update integrity must be verified before flashing.
 
 ### 6.11 System Configuration
 
 **System Settings** (cartridge-wide, user-owned):
-- WiFi network credentials
-- Video output mode (CRT / VGA)
-- Language / locale
-- Controller mapping (USB HID to MSX joystick/keyboard)
-- Network sync global enable/disable
-- Payload Source priority order (when multiple sources present)
-- Firmware update preferences
+
+- **R_CFG_SYS_WIFI_CREDENTIALS**: System Settings store WiFi network credentials.
+- **R_CFG_SYS_VIDEO_MODE**: System Settings store the video output mode (CRT / VGA).
+- **R_CFG_SYS_LANGUAGE**: System Settings store language and locale.
+- **R_CFG_SYS_CONTROLLER_MAPPING**: System Settings store controller mapping (USB HID to MSX joystick/keyboard).
+- **R_CFG_SYS_NET_SYNC_ENABLE**: System Settings store the global network sync enable/disable flag.
+- **R_CFG_SYS_SOURCE_PRIORITY**: System Settings store the Payload Source priority order.
+- **R_CFG_SYS_UPDATE_PREFS**: System Settings store firmware update preferences.
 
 **Payload Manifest** (per Payload, authored by publisher):
-- Required mapper type
-- Required RAM amount and mapping
-- Required audio devices (PSG, SCC, OPL4)
-- Required IO devices (floppy controller, Nextor, network)
-- VDP requirements
-- Network access requirements
-- Storage mode preference
+
+- **R_CFG_MANIFEST_MAPPER**: The Manifest declares the required mapper type.
+- **R_CFG_MANIFEST_RAM**: The Manifest declares the required RAM amount and mapping.
+- **R_CFG_MANIFEST_AUDIO**: The Manifest declares the required audio devices (PSG, SCC, OPL4).
+- **R_CFG_MANIFEST_IO_DEVICES**: The Manifest declares the required IO devices (floppy controller, Nextor, network).
+- **R_CFG_MANIFEST_VDP**: The Manifest declares VDP requirements.
+- **R_CFG_MANIFEST_NET_ACCESS**: The Manifest declares network access requirements.
+- **R_CFG_MANIFEST_STORAGE_MODE**: The Manifest declares a preferred storage mode.
 
 **User Overrides** (per Payload, per User Profile):
-- Audio device selection (internal emulation vs. system hardware)
-- Network access enable/disable for this Payload
-- Video output mode override
-- Any soft Manifest defaults
 
-**Configuration Layering** (in order of precedence, later wins):
-1. System Settings (defaults)
-2. Payload Manifest (authored requirements — hard requirements cannot be overridden)
-3. User Overrides (per profile, per payload)
+- **R_CFG_OVERRIDE_AUDIO**: The user may override audio device selection (internal emulation vs. system hardware) for soft Manifest defaults.
+- **R_CFG_OVERRIDE_NET_ACCESS**: The user may override network access enable/disable for a specific Payload.
+- **R_CFG_OVERRIDE_VIDEO_MODE**: The user may override the video output mode for a specific Payload.
+
+**Configuration Layering**:
+
+- **R_CFG_LAYER_SYSTEM_FIRST**: System Settings provide the base defaults.
+- **R_CFG_LAYER_MANIFEST_SECOND**: Payload Manifest requirements are applied on top of System Settings. Hard Manifest requirements cannot be overridden.
+- **R_CFG_LAYER_OVERRIDE_LAST**: User Overrides are applied last, on top of Manifest soft defaults only.
 
 ---
 
