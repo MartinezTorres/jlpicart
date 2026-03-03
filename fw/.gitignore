@@ -2,9 +2,3 @@
 discard
 build
 roms
-
-# Pico extension managed — generated per-machine, not tracked
-.vscode/c_cpp_properties.json
-.vscode/cmake-kits.json
-.vscode/extensions.json
-

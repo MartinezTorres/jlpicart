@@ -13,10 +13,7 @@ include(cmake/add_binaries.cmake)
 add_binaries( bin_data/ generated_binaries/binaries )
 
 
-# Initialise pico_sdk from installed location
-# (note this can come from environment, CMake cache etc)
-
-# Self-contained SDK — expects .pico-sdk/ inside fw/
+# Self-contained SDK — expects .pico-sdk/ inside fw/ (airgapped, no network)
 set(sdkVersion 2.2.0)
 set(toolchainVersion 14_2_Rel1)
 set(picotoolVersion 2.2.0)
@@ -24,10 +21,14 @@ set(PICO_SDK_PATH "${CMAKE_CURRENT_LIST_DIR}/.pico-sdk/sdk/${sdkVersion}")
 message(STATUS "Using Pico SDK at ${PICO_SDK_PATH}")
 set(PICO_BOARD jlpicart_board CACHE STRING "Board type")
 set(PICO_PLATFORM rp2350-arm-s CACHE STRING "Platform type")
-set(PICO_BOARD_HEADER_DIRS ${CMAKE_CURRENT_LIST_DIR}/sdk )
+set(PICO_BOARD_HEADER_DIRS ${CMAKE_CURRENT_LIST_DIR}/sdk)
 
-# Pull in Raspberry Pi Pico SDK (must be before project)
-include(pico_sdk_import.cmake)
+get_filename_component(PICO_SDK_PATH "${PICO_SDK_PATH}" REALPATH BASE_DIR "${CMAKE_BINARY_DIR}")
+if (NOT EXISTS "${PICO_SDK_PATH}/pico_sdk_init.cmake")
+    message(FATAL_ERROR "Pico SDK not found at '${PICO_SDK_PATH}' — populate .pico-sdk/ first")
+endif()
+set(PICO_SDK_PATH "${PICO_SDK_PATH}" CACHE PATH "Path to the Raspberry Pi Pico SDK" FORCE)
+include("${PICO_SDK_PATH}/pico_sdk_init.cmake")
 
 project(jlpicart C CXX ASM)
 
