@@ -2,3 +2,4 @@
 discard
 build
 roms
+fw/bin_data/disabled/esp32-at.bin
