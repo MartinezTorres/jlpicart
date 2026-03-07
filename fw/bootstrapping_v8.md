@@ -1,0 +1,556 @@
+# JLPiCart bootstrapping plan (agent checklist edition)
+
+This document ships alongside `spec.md`. It is written for an implementation agent and for human supervision.
+
+Guiding principles:
+
+- Implement the **spine contracts first**, then hang features off them.
+- Avoid “hidden glue”: every cross-cutting rule must live in one obvious module.
+- The build must ignore legacy code placed under `old_src/`.
+
+This plan assumes Linux amd64.
+
+---
+
+## Document conventions
+
+### Stage rules
+
+- One stage ≈ one PR.
+- Every stage ends in a runnable firmware image.
+- Stages are implemented in order unless a later stage explicitly says it can be done earlier.
+- If something is ambiguous, implement according to `spec.md`, and update this plan in the same PR before continuing.
+
+### File list rules
+
+- “Files added” means these paths must exist after the stage (thin is OK).
+- “Files modified” means these are the only allowed edits unless the checklist explicitly allows more.
+
+### Testing rules
+
+- Host tests live under `fw/tests/host/` and run in CI.
+- Emulator-driven tests live under `fw/tests/openmsx/` and run in CI once openMSX is available.
+- Every stage adds at least one host test unless explicitly marked hardware-only.
+
+### Style rules inside this file
+
+- Paths and symbols are written with inline code (``like_this``).
+- Multi-line commands go in code blocks tagged as `sh`.
+- Checklists use `- [ ]` everywhere (no mixed bullet styles).
+- Each checklist section is numbered as `N.1`, `N.2`, … for the stage `N`.
+
+---
+
+## Stage 1 — Repo hygiene: isolate legacy sources and make the new tree authoritative
+
+**Goal:** The repo builds from the new `fw/src/` only; legacy is reference-only.
+
+### Files added
+
+- `spec.md` — copy the current spec book verbatim (canonical version)
+- `bootstrapping.md` — copy this plan verbatim
+- `old_src/README.md` — “reference only; not compiled”
+
+### Files modified
+
+- Repo structure (move legacy sources)
+- `fw/CMakeLists.txt` (and any nested `CMakeLists.txt`)
+
+### Checklist
+
+**1.1 Move legacy code**
+- [ ] Create `old_src/` at repo root (or `fw/old_src/`) and choose one location permanently
+- [ ] Move *all* legacy firmware sources under `old_src/` without changing their internal relative layout
+- [ ] Add `old_src/README.md` with a single clear statement that it is not compiled
+
+**1.2 Create the new build root**
+- [ ] Create a new `fw/src/` tree with a placeholder `fw/src/main.cc`
+- [ ] Update CMake so only `fw/src/**` is compiled
+
+**1.3 Guardrails**
+- [ ] Add a CI/build guard that fails if any `old_src` path is present in include paths
+- [ ] Verify locally that the new firmware compiles and nothing under `old_src/` is referenced
+
+### Definition of done
+
+- [ ] CI builds firmware from the new tree
+- [ ] Build logs show no `old_src` include paths
+
+---
+
+## Stage 2 — Pinned toolchain and CI (Pico SDK + openMSX 21 + SDCC 4.5)
+
+**Goal:** Anyone (and CI) can build deterministically with pinned tools on Linux amd64, ignoring system `openmsx` and `sdcc`.
+
+### Files added
+
+**Core build and tests**
+- `.github/workflows/fw-build.yml` — builds firmware, runs host tests, builds openMSX, runs openMSX tests (once present)
+- `fw/toolchain/README.md` — pins Pico SDK and build commands
+- `fw/tests/CMakeLists.txt` — host test build + `ctest` integration
+- `fw/tests/host/smoke_test.cc` — trivial test to validate the harness
+
+**Pinned tools**
+- `.gitmodules` — includes the openMSX submodule entry
+- `third_party/openMSX/` — git submodule pinned to openMSX 21.x commit used by this repo
+- `tools/lock.yml` — single source of truth: tool versions, URLs, SHA256, openMSX commit
+- `tools/fetch_sdcc.sh` — download SDCC tarball, verify SHA256, extract to `tools/sdcc/`
+- `tools/build_openmsx.sh` — build openMSX from submodule, install to `tools/openmsx/`
+- `tools/README.md` — explains the pinned tool approach and “ignore system tools” policy
+
+### Files modified
+
+- `fw/CMakeLists.txt`
+
+### Checklist
+
+**2.1 Pico SDK pinning**
+- [ ] Pin Pico SDK (submodule or FetchContent) to a fixed tag/commit
+- [ ] Record the pinned version in `tools/lock.yml` and `fw/toolchain/README.md`
+- [ ] Enable `-Werror` for new code (host builds at minimum)
+
+**2.2 openMSX as submodule**
+- [ ] Add `third_party/openMSX` submodule from `https://github.com/openMSX/openMSX.git`
+- [ ] Pin it to an openMSX 21.x commit and record the commit hash in `tools/lock.yml`
+- [ ] Add `tools/build_openmsx.sh` that:
+  - [ ] updates submodules if needed
+  - [ ] builds openMSX in a dedicated build dir
+  - [ ] installs or copies the resulting binary into `tools/openmsx/bin/openmsx`
+  - [ ] prints `openmsx --version` after build
+- [ ] Ensure CI uses `tools/openmsx/bin/openmsx` explicitly (never `openmsx` from PATH)
+
+**2.3 SDCC pinned tarball**
+- [ ] Choose the SDCC 4.5.x prebuilt tarball URL and record it in `tools/lock.yml`
+- [ ] Record the tarball SHA256 in `tools/lock.yml`
+- [ ] Implement `tools/fetch_sdcc.sh` that:
+  - [ ] downloads to a temp file
+  - [ ] verifies SHA256
+  - [ ] extracts into `tools/sdcc/`
+  - [ ] prints `tools/sdcc/bin/sdcc -v`
+- [ ] Ensure CI uses `tools/sdcc/bin/sdcc` explicitly (never `sdcc` from PATH)
+
+**2.4 CI workflow**
+- [ ] CI checks out submodules
+- [ ] CI runs `tools/fetch_sdcc.sh`
+- [ ] CI runs `tools/build_openmsx.sh`
+- [ ] CI builds host tests and runs `ctest`
+- [ ] CI builds firmware target(s)
+- [ ] CI uploads build artifacts
+
+**2.5 Minimal tests**
+- [ ] `fw/tests/host/smoke_test.cc` runs and passes in CI
+
+### Definition of done
+
+- [ ] CI builds and logs show the pinned openMSX and SDCC versions
+- [ ] CI succeeds even if system openMSX/SDCC are absent
+
+---
+
+## Stage 3 — Spine v0: diag + log + SecurityPosture + PolicyStore + CapabilityRegistry (Declared/Allowed only)
+
+**Goal:** Provide one source of truth for OTP posture, signed policy flags, and declared/allowed capabilities. No activation yet.
+
+### Files added
+
+**Diagnostics and logging**
+- `fw/src/diag/diag.h`, `fw/src/diag/diag.cc` — stable diag codes + formatting
+- `fw/src/log/log.h`, `fw/src/log/log.cc` — bounded logger (ring + UART sink)
+
+**Security posture**
+- `fw/src/security/otp_reader.h`, `fw/src/security/otp_reader.cc` — OTP read helpers (no writes here)
+- `fw/src/spine/security_posture.h`, `fw/src/spine/security_posture.cc` — reads OTP once; exposes posture facts
+
+**Policy**
+- `fw/src/policy/policy_types.h` — `PolicyFlags` bitset + metadata
+- `fw/src/policy/policy_verify.h`, `fw/src/policy/policy_verify.cc` — signature verification
+- `fw/src/spine/policy_store.h`, `fw/src/spine/policy_store.cc` — load + verify policy from flash; expose flags
+
+**Descriptors**
+- `fw/src/boards/board_descriptor.h`, `fw/src/boards/board_descriptor.cc` — HW candidates (declared only)
+- `fw/src/drivers/driver_descriptor.h` — SW descriptor struct
+- `fw/src/drivers/driver_descriptor_table.cc` — the only SW descriptor list
+
+**Capability registry**
+- `fw/src/spine/capability_registry.h`, `fw/src/spine/capability_registry.cc` — Declared/Allowed sets + queries
+
+**Entrypoint**
+- `fw/src/main.cc` — boots spine in order and prints a banner
+
+### Files modified
+
+- `fw/CMakeLists.txt`
+
+### Checklist
+
+**3.1 Diagnostics (`diag`)**
+- [ ] Define `enum class DiagCode : uint16_t` including at least:
+  - [ ] `OK`
+  - [ ] `POLICY_MISSING`
+  - [ ] `POLICY_BAD_SIGNATURE`
+  - [ ] `POLICY_BAD_CANONICALIZATION`
+  - [ ] `OTP_UNREADABLE`
+  - [ ] `INTERNAL_ASSERT`
+- [ ] Implement `const char* diag_code_to_string(DiagCode)` (stable strings)
+- [ ] Implement `struct DiagStatus { DiagCode code; uint32_t detail; }`
+- [ ] Host test: all diag codes map to non-null strings
+
+**3.2 Logging (`log`)**
+- [ ] Implement fixed-size log ring buffer (compile-time size constant)
+- [ ] Implement `log_init()`, `log_write(LogLevel, const char* msg)`
+- [ ] Implement `log_flush_uart()` for non-bus-loop contexts
+- [ ] Host test: N writes wrap safely and preserve last K entries
+
+**3.3 OTP reader**
+- [ ] Implement `OtpReader::read_bytes(offset, dst, len)` with bounds checks
+- [ ] Implement `read_u32(offset)`, `read_u8(offset)`
+- [ ] Comment each OTP offset with the corresponding `spec.md` section reference
+- [ ] Host test: fake OTP buffer reads expected values
+
+**3.4 SecurityPosture**
+- [ ] Define `struct SecurityPosture` with explicit facts, e.g.:
+  - [ ] `bool secure_boot_enforced`
+  - [ ] `uint8_t valid_boot_key_mask` (up to 4 slots)
+  - [ ] `bool debug_disabled`
+  - [ ] `bool otp_secret_pages_locked`
+  - [ ] `uint32_t rollback_counter` (if applicable)
+- [ ] Implement `SecurityPosture SecurityPosture::read(OtpReader&)`
+- [ ] Implement `describe()` helper for logging
+- [ ] Host test: posture fields match values derived from fake OTP
+
+**3.5 Policy types**
+- [ ] Define `PolicyFlags` (use `uint64_t` with named bit constants)
+- [ ] Include at least:
+  - [ ] `POLICY_ALLOW_NETWORK`
+  - [ ] `POLICY_ALLOW_USER_COLLECTIONS`
+  - [ ] `POLICY_REQUIRE_PUBLISHER_SIGNATURES`
+- [ ] Define `PolicyInfo { PolicyFlags flags; uint8_t digest16[16]; uint32_t version; }`
+
+**3.6 Policy verification**
+- [ ] Implement `policy_verify(...)` using the signature algorithm defined in `spec.md`
+- [ ] Implement canonicalization approach consistent with `spec.md`:
+  - [ ] either canonicalize in firmware, or
+  - [ ] require pre-canonicalized bytes and hash raw bytes
+- [ ] Host tests:
+  - [ ] valid policy verifies
+  - [ ] one-bit mutation fails
+  - [ ] wrong key fails
+  - [ ] missing required fields yields correct diag code
+
+**3.7 PolicyStore**
+- [ ] Define policy storage location(s) in flash (temporary layout OK; stable later)
+- [ ] Implement `PolicyStore::load()` returning `DiagStatus`
+- [ ] On policy failure, continue boot with safe defaults (all restricted) and store diag code
+- [ ] Host tests: missing → safe defaults; invalid → safe defaults + expected code
+
+**3.8 Board descriptor (declared HW)**
+- [ ] Define `BoardCapabilityDecl { const char* name; bool safe_verify; }`
+- [ ] Implement `BoardDescriptor::for_current_board()` as a single centralized definition
+- [ ] Document in comments: declared ≠ present; no probing in Stage 3
+
+**3.9 Driver descriptor table (declared SW)**
+- [ ] Define `DriverDescriptor { const char* name; /* origin=sw */ }`
+- [ ] Implement `kDriverDescriptors[]` and `kDriverDescriptorCount`
+- [ ] Add at least one placeholder capability: `api.core`
+
+**3.10 CapabilityRegistry (Declared → Allowed)**
+- [ ] Store declared HW and SW candidates
+- [ ] Compute allowed candidates by applying policy masking rules
+- [ ] Provide queries:
+  - [ ] `is_declared(name)`
+  - [ ] `is_allowed(name)`
+  - [ ] `list_declared(out, max)`
+  - [ ] `list_allowed(out, max)`
+- [ ] Define masking rules in code comments with `spec.md` references
+- [ ] Host tests:
+  - [ ] list ordering deterministic
+  - [ ] policy masking removes only expected names
+
+**3.11 Entrypoint wiring**
+- [ ] Print a single boot banner with `FW_BUILD_ID`
+- [ ] Log posture summary, policy digest/flags, declared count, allowed count
+- [ ] Do not start any probing or allocation in this stage
+
+### Definition of done
+
+- [ ] Firmware prints posture + policy + declared/allowed counts on boot
+- [ ] CI host tests pass
+- [ ] Only `SecurityPosture` reads OTP; only `PolicyStore` reads policy blobs
+
+---
+
+## Stage 4 — JLPiCart API v1: minimal MSX-facing contract
+
+**Goal:** Implement the API window framing and a minimal `core` service that exposes posture/policy/registry summaries.
+
+### Files added
+
+- `fw/src/msx/api/api_window.h`, `fw/src/msx/api/api_window.cc` — API window registers + rings
+- `fw/src/msx/api/services/core_service.h`, `fw/src/msx/api/services/core_service.cc` — `core` methods
+- `fw/z80/api_client/` — Z80 reference client (SDCC or assembly), minimal and test-oriented
+
+### Files modified
+
+- `fw/src/main.cc` — maps API window into MSX-visible space
+- `fw/CMakeLists.txt`
+
+### Checklist
+
+**4.1 API window framing**
+- [ ] Define constants for window size, offsets, ring sizes (single source)
+- [ ] Implement ring push/pop with wrap marker exactly per `spec.md`
+- [ ] Implement `service_once()`:
+  - [ ] read one request frame
+  - [ ] dispatch by service id
+  - [ ] write one response frame
+- [ ] Host tests:
+  - [ ] request → service_once → response roundtrip
+  - [ ] wrap-around behavior
+  - [ ] malformed frames rejected with correct error
+
+**4.2 Core service**
+- [ ] Define packed request/response structs with explicit endianness rules
+- [ ] Implement:
+  - [ ] `core.ping`
+  - [ ] `core.get_info`
+  - [ ] `core.get_security_info` (from `SecurityPosture`)
+  - [ ] `core.get_policy_info` (from `PolicyStore`)
+  - [ ] `core.list_capabilities` (declared/allowed only in this stage)
+- [ ] Host tests: at least one method returns expected values from injected spine objects
+
+**4.3 Z80 reference client**
+- [ ] Build the client with pinned SDCC from `tools/sdcc/bin/sdcc`
+- [ ] Provide a minimal program that issues `core.get_info` and prints a hex dump
+- [ ] Ensure no assumptions about interrupts or specific MSX model features
+
+### Definition of done
+
+- [ ] A Z80 program can call `core.get_info` and receive a valid response
+- [ ] Host tests cover framing + at least one core method
+
+---
+
+## Stage 5 — Menu Host ABI v1: mailbox + Z80 stub ROM
+
+**Goal:** Define and implement the mailbox ABI so the RP menu app can render/read input without ad-hoc coupling.
+
+### Files added
+
+- `fw/src/msx/menu/menu_host_abi.h`, `fw/src/msx/menu/menu_host_abi.cc` — mailbox page helpers
+- `fw/z80/menu_stub/` — Z80 stub ROM built with pinned SDCC
+
+### Files modified
+
+- `fw/src/main.cc`
+- `fw/CMakeLists.txt`
+
+### Checklist
+
+**5.1 Mailbox definition**
+- [ ] Define mailbox page size and offsets as named constants
+- [ ] Define packed structs:
+  - [ ] `HostInfo`
+  - [ ] `InputSnapshot`
+  - [ ] `CommandHeader`
+- [ ] Add compile-time size/layout asserts for each struct
+
+**5.2 Host-side mailbox**
+- [ ] Implement `MenuMailbox::init(ptr)`
+- [ ] Implement `MenuMailbox::tick()` that processes one command at a time
+
+**5.3 Command set (minimal v1)**
+- [ ] Implement:
+  - [ ] `CMD_CLEAR`
+  - [ ] `CMD_DRAW_TEXT`
+  - [ ] `CMD_READ_INPUT`
+  - [ ] `CMD_ACK`
+- [ ] Define stable error codes for unknown command ids
+
+**5.4 Z80 stub**
+- [ ] Render using BIOS-safe routines for baseline MSX
+- [ ] Read input via BIOS where possible
+- [ ] Poll the mailbox and execute commands without long blocking loops
+- [ ] Include a small “self-test” mode (compile flag) that writes a known signature in mailbox
+
+**5.5 Tests**
+- [ ] Host tests for struct packing and mailbox encode/decode invariants
+
+### Definition of done
+
+- [ ] Stub ROM boots in emulator and can render a minimal UI page
+- [ ] Host receives input snapshots through the mailbox
+
+---
+
+## Stage 6 — Storage substrate v1: flash layout + atomic KV + append log
+
+**Goal:** Implement durable storage primitives before collections/manifests.
+
+### Files added
+
+- `fw/src/storage/flash_layout.h`, `fw/src/storage/flash_layout.cc` — partitions + versions
+- `fw/src/storage/flash_device.h`, `fw/src/storage/flash_device.cc` — bounded read/write/erase
+- `fw/src/storage/kv_store.h`, `fw/src/storage/kv_store.cc` — power-loss-safe KV
+- `fw/src/storage/append_log.h`, `fw/src/storage/append_log.cc` — append-only log
+- `fw/src/storage/storage_health.h`, `fw/src/storage/storage_health.cc` — corruption detection + reporting
+- `fw/tests/host/flash_sim.cc` — host flash simulator for power-loss tests
+
+### Files modified
+
+- `fw/src/main.cc` — initialize storage early; append boot record
+- `fw/src/spine/policy_store.*` — load policy via KV (if chosen here)
+
+### Checklist
+
+**6.1 Layout**
+- [ ] Define `FLASH_LAYOUT_VERSION`
+- [ ] Define partitions: `SYSTEM_KV`, `EVENT_LOG`, `CONTENT_INDEX` (reserved), `CONTENT_DATA` (reserved)
+- [ ] Add compile-time asserts for partition alignment and no overlap
+
+**6.2 Flash wrapper**
+- [ ] Implement `read(addr, buf, len)`
+- [ ] Implement `write(addr, buf, len)` with documented constraints
+- [ ] Implement `erase(sector_addr, sector_count)`
+- [ ] Host tests for bounds checking
+
+**6.3 KV store**
+- [ ] Choose and document an atomic strategy (log-structured KV recommended)
+- [ ] Implement `kv_init`, `kv_get`, `kv_put`, `kv_delete`
+- [ ] Host tests:
+  - [ ] roundtrip put/get
+  - [ ] overwrite key
+  - [ ] simulated power loss mid-write: old value survives; store remains consistent
+
+**6.4 Append log**
+- [ ] Define record header: `type`, `len`, `seq`, `crc`
+- [ ] Implement `append`, `iterate`
+- [ ] Host tests:
+  - [ ] tail corruption detected and ignored safely
+  - [ ] iteration yields records in order
+
+**6.5 Boot integration**
+- [ ] Append a `BOOT` record on startup with build id hash and monotonic counter (if used)
+- [ ] Storage init completes before bus start
+
+### Definition of done
+
+- [ ] KV and append log pass host power-loss tests
+- [ ] Firmware writes and reads a boot record across reboots
+
+---
+
+## Stage 7 — Collections v1 (local-only): format, manifests, install, receipts
+
+**Goal:** Implement local install from USB into flash using the storage substrate.
+
+### Files added
+
+- `fw/src/content/collection_format.h`, `fw/src/content/collection_format.cc` — bundle layout + hashing
+- `fw/src/content/manifest.h`, `fw/src/content/manifest.cc` — manifest model
+- `fw/src/content/manifest_parser.h`, `fw/src/content/manifest_parser.cc` — parsing + merge rules
+- `fw/src/content/installer_usb.h`, `fw/src/content/installer_usb.cc` — scan, verify, atomic install
+- `fw/src/content/receipts.h`, `fw/src/content/receipts.cc` — install receipts to append log
+
+### Files modified
+
+- `fw/src/main.cc`
+- `fw/src/policy/policy_verify.*` — reused for bundle signature verification
+
+### Checklist
+
+**7.1 Bundle format**
+- [ ] Parse signature envelope per `spec.md`
+- [ ] Hash files with SHA-256
+- [ ] Verify signatures when policy requires them
+
+**7.2 Manifest parsing**
+- [ ] Implement canonical JSON parsing (strict)
+- [ ] Implement merge algorithm per `spec.md`
+- [ ] Host tests for merge and override behavior
+
+**7.3 USB install**
+- [ ] Scan `/JLPICART/INSTALL/*/`
+- [ ] Verify hashes then signature
+- [ ] Install atomically with staging + commit marker
+- [ ] Host power-loss test: interruption never yields partial visible install
+
+**7.4 Receipts**
+- [ ] Append receipts for success and failure with stable diag codes
+
+### Definition of done
+
+- [ ] USB install yields a persistent installed collection entry
+- [ ] Interrupted install never leaves half-installed visible content
+
+---
+
+## Stage 8 — Activation v1: Requested → Activated (verify HW only when requested; allocate SW deterministically)
+
+**Goal:** Turn declared/allowed into per-payload activated capabilities via safe verification (HW) and deterministic allocation (SW).
+
+### Files added
+
+- `fw/src/allocator/resource_model.h`, `fw/src/allocator/resource_model.cc` — budgets + accounting
+- `fw/src/allocator/allocator.h`, `fw/src/allocator/allocator.cc` — deterministic planner
+- `fw/src/peripherals/peripheral_manager.h`, `fw/src/peripherals/peripheral_manager.cc` — orchestrates activation and mapping plan
+- `fw/src/spine/activation.h`, `fw/src/spine/activation.cc` — shared activation helpers
+
+### Files modified
+
+- `fw/src/spine/capability_registry.*` — add activated view + activation report
+- `fw/src/main.cc` — build requested set and call allocator before launch
+
+### Checklist
+
+**8.1 Requested set**
+- [ ] Define `RequestedCapabilities` derived from payload manifest
+- [ ] Implement `requested_from_manifest(...)`
+
+**8.2 Activation rules**
+- [ ] HW activation:
+  - [ ] only if declared + allowed + requested
+  - [ ] only if `safe_verify=true`
+  - [ ] verify touches only dedicated pins/buses
+- [ ] SW activation:
+  - [ ] only if declared + allowed + requested
+  - [ ] only if resources allow
+  - [ ] allocation is deterministic (stable order)
+
+**8.3 Resource model**
+- [ ] Define budgets (RAM, flash/cache, placeholder cycle class)
+- [ ] Implement `can_allocate` and `apply_allocation`
+
+**8.4 Allocator**
+- [ ] Evaluate requested capabilities in stable order
+- [ ] Produce `ActivatedCapabilities` and `MappingPlan`
+- [ ] Host tests: same input yields same plan; overcommit yields stable “not activated” reasons
+
+### Definition of done
+
+- [ ] Nothing is probed unless requested
+- [ ] Activation results are deterministic across runs
+
+---
+
+## Stage 9+ — Feature peripherals and services
+
+**Goal:** Implement concrete peripherals and services by following the same pattern.
+
+### Checklist template (must be expanded before coding)
+
+- [ ] Declare the capability (board descriptor for HW or driver descriptor for SW)
+- [ ] Define the policy mask rules and document them in `spec.md`
+- [ ] Define activation rules (verify/allocate) and add host tests
+- [ ] Implement MSX mapping (if classic interface) via `MappingPlan`
+- [ ] Implement API service surface (if API interface) with framing tests
+- [ ] Add openMSX-driven tests when MSX-visible behavior exists
+
+---
+
+## Appendix — Things the agent must not do
+
+- [ ] Do not introduce a second source of truth for posture/policy/capabilities
+- [ ] Do not probe anything unless declared + allowed + requested and marked safe-to-verify
+- [ ] Do not read OTP outside `SecurityPosture`
+- [ ] Do not parse policy blobs outside `PolicyStore`
+- [ ] Do not add scattered compile-time flags for peripherals; add descriptors instead
