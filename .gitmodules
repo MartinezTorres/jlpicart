@@ -4,3 +4,6 @@
 [submodule "fw/ext/esp32/esp-at"]
 	path = fw/ext/esp32/esp-at
 	url = https://github.com/espressif/esp-at.git
+[submodule "third_party/openMSX"]
+	path = third_party/openMSX
+	url = https://github.com/openMSX/openMSX.git

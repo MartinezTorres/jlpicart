@@ -1,0 +1,99 @@
+# fw-build.yml — JLPiCart firmware CI
+#
+# NOT ENABLED FOR AUTOMATIC RUNS.
+# Trigger: manual only (workflow_dispatch) until Stage 2 is verified end-to-end.
+# To enable automatic runs, add `push:` and/or `pull_request:` triggers.
+
+name: Firmware build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # build — firmware + host tests (fast, runs on every trigger)
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build firmware and host tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Fetch Pico SDK + toolchain
+        run: bash tools/fetch_pico_sdk.sh
+
+      - name: Configure firmware
+        run: |
+          mkdir -p fw/build
+          PICO_TOOLCHAIN_PATH="${GITHUB_WORKSPACE}/fw/.pico-sdk/toolchain/14_2_Rel1/bin" \
+            cmake -S fw -B fw/build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build firmware
+        run: make -j$(nproc) -C fw/build
+
+      - name: Verify no old_src references
+        run: |
+          COUNT=$(grep -c "old_src" fw/build/compile_commands.json || true)
+          if [ "$COUNT" -ne 0 ]; then
+            echo "ERROR: old_src found in compile_commands.json"
+            exit 1
+          fi
+          echo "OK: no old_src references"
+
+      - name: Build host tests
+        run: |
+          mkdir -p fw/tests/build
+          cmake -S fw/tests -B fw/tests/build
+          make -j$(nproc) -C fw/tests/build
+
+      - name: Run host tests
+        run: ctest --test-dir fw/tests/build --output-on-failure
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: |
+            fw/build/jlpicart.elf
+            fw/build/jlpicart.uf2
+
+  # ---------------------------------------------------------------------------
+  # openmsx — build the MSX emulator (slow, separate job)
+  # Not needed until Stage 5 (menu stub ROM testing).
+  # ---------------------------------------------------------------------------
+  openmsx:
+    name: Build openMSX
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (openMSX submodule only)
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Checkout openMSX submodule
+        run: git submodule update --init third_party/openMSX
+
+      - name: Install openMSX build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev \
+            tcl-dev libpng-dev libogg-dev libvorbis-dev \
+            libtheora-dev zlib1g-dev
+
+      - name: Build openMSX
+        run: bash tools/build_openmsx.sh
+
+      - name: Verify openMSX binary
+        run: tools/openmsx/bin/openmsx --version
+
+      - name: Upload openMSX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openmsx
+          path: tools/openmsx/bin/openmsx
