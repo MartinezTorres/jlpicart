@@ -25,8 +25,37 @@ project(jlpicart C CXX ASM)
 
 pico_sdk_init()
 
+# Build ID from git — injected as a compile definition.
+execute_process(
+    COMMAND git -C "${CMAKE_CURRENT_LIST_DIR}" describe --always --dirty --tags
+    OUTPUT_VARIABLE GIT_DESCRIBE
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+if(NOT GIT_DESCRIBE)
+    set(GIT_DESCRIBE "unknown")
+endif()
+message(STATUS "Build ID: ${GIT_DESCRIBE}")
+
 add_executable(jlpicart
     src/main.cc
+
+    # Diagnostics and logging
+    src/diag/diag.cc
+    src/log/log.cc
+
+    # Security
+    src/security/otp_reader_hw.cc
+    src/spine/security_posture.cc
+
+    # Policy
+    src/crypto/sha256.cc
+    src/policy/policy_verify.cc
+    src/spine/policy_store.cc
+
+    # Capability descriptors and registry
+    src/boards/board_descriptor_jlpicart.cc
+    src/drivers/driver_descriptor_table.cc
+    src/spine/capability_registry.cc
 )
 
 pico_set_program_name(jlpicart "jlpicart")
@@ -39,8 +68,13 @@ target_include_directories(jlpicart PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/src
 )
 
+target_compile_definitions(jlpicart PRIVATE
+    FW_BUILD_ID="${GIT_DESCRIBE}"
+)
+
 target_link_libraries(jlpicart
     pico_stdlib
+    hardware_flash
 )
 
 set_target_properties(jlpicart PROPERTIES
@@ -57,9 +91,7 @@ target_compile_options(jlpicart PRIVATE
     -Wundef -Wunreachable-code -Wwrite-strings
 )
 
-# Guard: old_src must never appear as a source file or include path.
-# This is enforced here and must also be checked in CI (Stage 2) via
-# compile_commands.json: grep -r old_src build/compile_commands.json must be empty.
+# Guard: old_src must never appear as a source file.
 get_target_property(_srcs jlpicart SOURCES)
 foreach(_src ${_srcs})
     if(_src MATCHES "old_src")
