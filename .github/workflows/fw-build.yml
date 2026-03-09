@@ -26,6 +26,9 @@ jobs:
       - name: Fetch Pico SDK + toolchain
         run: bash tools/fetch_pico_sdk.sh
 
+      - name: Fetch SDCC (Z80 compiler)
+        run: bash tools/fetch_sdcc.sh
+
       - name: Configure firmware
         run: |
           mkdir -p fw/build
