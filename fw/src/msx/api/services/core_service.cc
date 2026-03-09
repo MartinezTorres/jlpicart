@@ -74,10 +74,8 @@ static void handle_get_api_info(const MsgHeader& req, ApiWindow& win,
 static void handle_get_caps(const MsgHeader& req, ApiWindow& win,
                              const CapabilityRegistry& registry)
 {
-    // Collect up to 32 allowed capability names.
     static constexpr size_t kMaxCaps = 32;
-    const char* names[kMaxCaps] = {};
-    size_t count = registry.list_allowed(names, kMaxCaps);
+    const size_t count = registry.allowed_count();
 
     // Build payload: u16 count + count × CapEntry.
     const uint16_t payload_len = static_cast<uint16_t>(2u + count * sizeof(CapEntry));
@@ -92,7 +90,7 @@ static void handle_get_caps(const MsgHeader& req, ApiWindow& win,
 
     for (size_t i = 0; i < count; i++) {
         CapEntry entry = {};
-        entry.cap_id    = static_cast<uint16_t>(i); // placeholder index
+        entry.cap_id    = static_cast<uint16_t>(i); // placeholder index (IDs not yet finalized)
         entry.cap_flags = 0;
         entry.cap_param = 0;
         memcpy(payload + 2 + i * sizeof(CapEntry), &entry, sizeof(CapEntry));

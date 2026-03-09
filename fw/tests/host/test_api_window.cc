@@ -218,6 +218,35 @@ static void test_ring_wrap_around() {
     CHECK(f.win.ring_empty(API_REQ_RING_OFS));
 }
 
+// Regression test for the wrap+full bug:
+// When frame_len > to_end (wrapping needed), the bytes at [head, size) are
+// permanently wasted by the wrap marker.  The effective space consumed is
+// to_end + frame_len, not just frame_len.  A frame that fits in total free
+// space but NOT in the post-wrap window MUST be rejected.
+static void test_ring_wrap_then_full_is_rejected() {
+    TestFixture f;
+
+    // Fill request ring so head ends up close to the end and tail is small.
+    // Each frame with 1 byte: frame_len=3.  Fill 169 frames (507 bytes used).
+    const uint8_t tiny[] = { 0x01 };
+    for (int i = 0; i < 169; i++) {
+        f.win.ring_push_msg(API_REQ_RING_OFS, tiny, sizeof(tiny));
+    }
+    // head=507, tail=0.  Drain 2 frames so tail=6.
+    for (int i = 0; i < 2; i++) {
+        uint8_t out[8]; uint16_t len = 0;
+        f.win.ring_pop_msg(API_REQ_RING_OFS, out, sizeof(out), &len);
+    }
+    // State: head=507, tail=6, size=512.
+    // free_bytes = (512-507) + 6 - 1 = 5 + 5 = 10 bytes.
+    // to_end = 5.  A frame_len=6 (4-byte msg) would need wrap:
+    //   needed = to_end(5) + frame_len(6) = 11 > free_bytes(10) → FULL.
+    // But old code checked only frame_len(6) <= free_bytes(10) → wrongly ALLOWED.
+    const uint8_t msg4[] = { 0xAA, 0xBB, 0xCC, 0xDD };
+    uint16_t st = f.win.ring_push_msg(API_REQ_RING_OFS, msg4, sizeof(msg4));
+    CHECK(st == API_E_RING_FULL);
+}
+
 static void test_ring_full_returns_error() {
     TestFixture f;
     // Fill the ring with max-size messages until it's full.
@@ -485,6 +514,7 @@ int main() {
     test_ring_pop_empty_returns_false();
     test_ring_multiple_frames();
     test_ring_wrap_around();
+    test_ring_wrap_then_full_is_rejected();
     test_ring_full_returns_error();
     test_service_once_returns_false_on_empty_ring();
     test_service_once_get_api_info();

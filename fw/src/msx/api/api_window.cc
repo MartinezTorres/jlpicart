@@ -98,26 +98,29 @@ uint16_t ApiWindow::ring_push_msg(uint16_t ring_ofs,
 
     const uint16_t frame_len = static_cast<uint16_t>(msg_len + 2u);
 
-    // Compute free bytes (producer and consumer share the ring; leave 1 slot
-    // so we can distinguish full from empty via head == tail for empty).
-    // free = (tail - head - 1 + size) % size
+    // Total free bytes in the ring (leave 1 slot so head==tail means empty).
     const uint16_t used = (head >= tail)
         ? (uint16_t)(head - tail)
         : (uint16_t)(size - (tail - head));
     const uint16_t free_bytes = (uint16_t)(size - used - 1u);
 
-    // Count bytes available contiguously from head to end-of-ring.
+    // Bytes from head to end-of-ring (contiguous space at the current head).
     const uint16_t to_end = (uint16_t)(size - head);
 
-    // Total free must accommodate frame_len bytes.
-    if (free_bytes < frame_len) {
+    // When frame_len > to_end the frame does not fit contiguously; we must
+    // wrap.  Wrapping wastes the [head, size) bytes (the consumer advances
+    // past them via the wrap marker).  Space consumed = to_end + frame_len.
+    const uint16_t needed = (frame_len > to_end)
+        ? static_cast<uint16_t>(to_end + frame_len)
+        : frame_len;
+
+    if (needed > free_bytes) {
         return API_E_RING_FULL;
     }
 
     if (frame_len > to_end) {
-        // Frame won't fit contiguously — write wrap marker if room, then wrap.
+        // Write frame_len=0 (wrap marker) if there is room, then wrap head.
         if (to_end >= 2u) {
-            // Write frame_len=0 (wrap marker) little-endian.
             data[head]     = 0x00;
             data[head + 1] = 0x00;
         }
@@ -127,9 +130,7 @@ uint16_t ApiWindow::ring_push_msg(uint16_t ring_ofs,
     // Write frame_len (little-endian) then msg_bytes.
     data[head]     = static_cast<uint8_t>(frame_len & 0xFFu);
     data[head + 1] = static_cast<uint8_t>(frame_len >> 8u);
-    if (msg_len > 0) {
-        memcpy(data + head + 2, msg, msg_len);
-    }
+    memcpy(data + head + 2, msg, msg_len);
 
     // Advance head past the frame.
     head = (uint16_t)((head + frame_len) % size);
@@ -155,21 +156,19 @@ bool ApiWindow::ring_pop_msg(uint16_t ring_ofs, uint8_t* dst, uint16_t dst_max,
 
     *out_msg_len = 0;
 
-retry:
-    uint16_t head = rh.head;
-    uint16_t tail = rh.tail;
+    // Skip at most one wrap marker (frame_len == 0), then read the real frame.
+    // A well-formed ring has at most one wrap marker before a data frame.
+    uint16_t frame_len = 0;
+    uint16_t tail      = 0;
+    for (;;) {
+        const uint16_t head = rh.head;
+        tail = rh.tail;
+        if (head == tail) return false; // empty
 
-    if (head == tail) {
-        return false; // empty
-    }
+        frame_len = (uint16_t)(data[tail] | ((uint16_t)data[tail + 1] << 8u));
+        if (frame_len != 0) break;
 
-    // Read frame_len (little-endian u16) at tail.
-    uint16_t frame_len = (uint16_t)(data[tail] | ((uint16_t)data[tail + 1] << 8u));
-
-    if (frame_len == 0) {
-        // Wrap marker: consumer wraps to 0.
-        rh.tail = 0;
-        goto retry;
+        rh.tail = 0; // wrap marker: jump consumer to start
     }
 
     if (frame_len < 2u) {
@@ -186,10 +185,7 @@ retry:
         return true; // *out_msg_len stays 0 (caller sees truncated)
     }
 
-    // Copy msg_bytes into dst.
-    if (msg_len > 0) {
-        memcpy(dst, data + tail + 2, msg_len);
-    }
+    memcpy(dst, data + tail + 2, msg_len);
     rh.tail = (uint16_t)((tail + frame_len) % size);
 
     *out_msg_len = msg_len;
