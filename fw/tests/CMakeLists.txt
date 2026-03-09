@@ -109,3 +109,21 @@ add_host_test(test_menu_mailbox
     host/test_menu_mailbox.cc
     ${SRC_MENU_HOST_ABI}
 )
+
+# ---------------------------------------------------------------------------
+# Stage 6 tests
+# ---------------------------------------------------------------------------
+
+set(SRC_FLASH_DEVICE   "${FW_SRC}/storage/flash_device.cc")
+set(SRC_KV_STORE       "${FW_SRC}/storage/kv_store.cc")
+set(SRC_APPEND_LOG     "${FW_SRC}/storage/append_log.cc")
+set(SRC_STORAGE_HEALTH "${FW_SRC}/storage/storage_health.cc")
+
+add_host_test(test_storage
+    host/test_storage.cc
+    ${SRC_FLASH_DEVICE}
+    ${SRC_KV_STORE}
+    ${SRC_APPEND_LOG}
+    ${SRC_STORAGE_HEALTH}
+    ${SRC_DIAG}
+)

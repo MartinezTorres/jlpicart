@@ -1,14 +1,16 @@
-// JLPiCart firmware — Stage 5: Menu Host ABI + API window boot sequence.
+// JLPiCart firmware — Stage 6: Storage substrate + Menu Host ABI + API window.
 //
-// Boot order (spec.md §4.4, bootstrapping.md Stage 5):
+// Boot order (spec.md §4.4, bootstrapping.md Stage 6):
 //   1. diag/log init
 //   2. SecurityPosture (OTP read — once, never again)
-//   3. PolicyStore (flash read + HMAC verify)
-//   4. CapabilityRegistry (declared → allowed)
-//   5. ApiWindow init (header + rings)
-//   6. MenuMailbox init (menu page header + mailbox registers)
-//   7. Print boot banner
-//   8. Service loop (poll request ring, dispatch, post response; tick mailbox)
+//   3. Storage init: KvStore (SYSTEM_KV) + AppendLog (EVENT_LOG)
+//   4. PolicyStore (flash read + HMAC verify)
+//   5. CapabilityRegistry (declared → allowed)
+//   6. ApiWindow init (header + rings)
+//   7. MenuMailbox init (menu page header + mailbox registers)
+//   8. Append BOOT record to EVENT_LOG
+//   9. Print boot banner
+//  10. Service loop (poll request ring, dispatch, post response; tick mailbox)
 //
 // Neither the API window nor the menu page is yet wired into the MSX bus —
 // that integration belongs to Stage 6 (bus layer mapping).  Both objects are
@@ -29,6 +31,10 @@
 #include "drivers/driver_descriptor.h"
 #include "msx/api/api_window.h"
 #include "msx/menu/menu_host_abi.h"
+#include "storage/flash_device.h"
+#include "storage/flash_layout.h"
+#include "storage/kv_store.h"
+#include "storage/append_log.h"
 #include "pico/stdlib.h"
 #include <cstdio>
 
@@ -43,6 +49,29 @@ int main() {
     log_info("JLPiCart boot start build=" FW_BUILD_ID);
 
     // 2. Read security posture from OTP (exactly once).
+    // (Storage init comes first so the flash device is ready before policy read.)
+    FlashDevice& flash = FlashDevice::hardware();
+
+    // 3. Init storage substrate (must complete before bus start per spec §6.5).
+    KvStore kv_store;
+    {
+        DiagStatus s = kv_store.init(flash, FLASH_SYSTEM_KV_OFS, FLASH_SYSTEM_KV_SIZE);
+        if (!s.ok()) {
+            log_warn("SYSTEM_KV init failed — storage may be empty");
+        } else {
+            log_info("SYSTEM_KV ready");
+        }
+    }
+    AppendLog event_log;
+    {
+        DiagStatus s = event_log.init(flash, FLASH_EVENT_LOG_OFS, FLASH_EVENT_LOG_SIZE);
+        if (!s.ok()) {
+            log_warn("EVENT_LOG init failed");
+        } else {
+            log_info("EVENT_LOG ready");
+        }
+    }
+
     const OtpReader& otp = get_hardware_otp_reader();
     SecurityPosture posture = SecurityPosture::read(otp);
     {
@@ -51,7 +80,7 @@ int main() {
         log_info(buf);
     }
 
-    // 3. Load and verify policy.
+    // 4. Load and verify policy.
     PolicyStore policy_store;
     DiagStatus ps = policy_store.load(posture);
     if (!ps.ok()) {
@@ -61,24 +90,37 @@ int main() {
         log_warn(buf);
     }
 
-    // 4. Build capability registry (declared → allowed).
+    // 5. Build capability registry (declared → allowed).
     CapabilityRegistry registry;
     registry.init(BoardDescriptor::for_current_board(),
                   kDriverDescriptors, kDriverDescriptorCount,
                   policy_store.info());
 
-    // 5. Init API window (16KB buffer; bus mapping added in Stage 6).
+    // 6. Init API window (16KB buffer; bus mapping deferred to bus-layer stage).
     ApiWindow api_win;
     api_win.init(posture, policy_store, registry);
     log_info("API window initialised");
 
-    // 6. Init Menu mailbox (16KB page buffer; bus mapping and stub ROM load in Stage 6).
+    // 7. Init Menu mailbox (16KB page buffer; bus mapping deferred to bus-layer stage).
     static uint8_t menu_page[MENU_PAGE_SIZE];
     MenuMailbox menu_mbx;
     menu_mbx.init(menu_page, MENU_DATA_OFS); // stub_entry = 0x0100 (page-relative)
     log_info("Menu mailbox initialised");
 
-    // 7. Print boot banner to log (flushed to UART/OLED in later stages).
+    // 8. Append BOOT record to EVENT_LOG (spec §6.5 boot integration).
+    {
+        BootRecord boot_rec = {};
+        const char* build_id = FW_BUILD_ID;
+        size_t id_len = strlen(build_id);
+        if (id_len > sizeof(boot_rec.build_id)) id_len = sizeof(boot_rec.build_id);
+        memcpy(boot_rec.build_id, build_id, id_len);
+        boot_rec.boot_seq = event_log.next_seq();
+        event_log.append(ALOG_TYPE_BOOT,
+                         reinterpret_cast<const uint8_t*>(&boot_rec),
+                         sizeof(boot_rec));
+    }
+
+    // 9. Print boot banner to log (flushed to UART/OLED in later stages).
     {
         char buf[128];
         snprintf(buf, sizeof(buf),
@@ -90,8 +132,8 @@ int main() {
         log_info(buf);
     }
 
-    // 8. Service loop — poll the API request ring and tick the menu mailbox.
-    // TODO(stage6): replace with interrupt-driven or Core1 handler once bus is wired.
+    // 10. Service loop — poll the API request ring and tick the menu mailbox.
+    // TODO(bus-layer): replace with interrupt-driven or Core1 handler once bus is wired.
     while (true) {
         api_win.service_once();
         menu_mbx.tick();

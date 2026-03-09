@@ -63,6 +63,12 @@ add_executable(jlpicart
 
     # Menu Host ABI (Stage 5)
     src/msx/menu/menu_host_abi.cc
+
+    # Storage substrate (Stage 6)
+    src/storage/flash_device.cc
+    src/storage/kv_store.cc
+    src/storage/append_log.cc
+    src/storage/storage_health.cc
 )
 
 pico_set_program_name(jlpicart "jlpicart")
