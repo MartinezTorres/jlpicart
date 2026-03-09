@@ -96,22 +96,35 @@ DiagStatus FlashDevice::read(uint32_t offset, uint8_t* dst, size_t len) const
 
 DiagStatus FlashDevice::write(uint32_t offset, const uint8_t* src, size_t len)
 {
+    if (len == 0) return DiagStatus::success();
     if (!in_bounds(offset, len)) {
         return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
     }
-    // flash_range_program requires: offset and len must be multiples of
-    // FLASH_PAGE_SIZE (256 bytes).  Pad len up to the next page boundary.
-    size_t aligned_len = (len + FLASH_PAGE_SIZE - 1u) & ~(FLASH_PAGE_SIZE - 1u);
-    // Stage buffer on the stack. 4 pages (1024 B) covers the largest record
-    // produced by KV (max 568 B → 768 B aligned) or AppendLog (max 268 B →
-    // 512 B aligned). Returns IO_ERROR if a caller exceeds this cap — add a
-    // heap-backed path if larger single writes are ever needed.
-    uint8_t staging[FLASH_PAGE_SIZE * 4] = {};
-    if (aligned_len > sizeof(staging)) {
-        return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
+    // flash_range_program requires a page-aligned offset and a length that is
+    // a multiple of FLASH_PAGE_SIZE.  Log-structured appends are variable-size
+    // so writes commonly start mid-page.  For each page the write touches:
+    //   1. Read current page content from XIP into a staging buffer.
+    //   2. Overlay the new bytes within that page.
+    //   3. Program the merged page.
+    // NOR flash only allows 1→0 transitions per program cycle, so re-reading
+    // already-programmed bits and writing them back unchanged is safe.
+    uint32_t end  = offset + static_cast<uint32_t>(len);
+    uint32_t page = (offset / FLASH_PAGE_SIZE) * FLASH_PAGE_SIZE;
+    while (page < end) {
+        uint8_t staging[FLASH_PAGE_SIZE];
+        const uint8_t* xip = reinterpret_cast<const uint8_t*>(XIP_BASE + page);
+        memcpy(staging, xip, FLASH_PAGE_SIZE);
+
+        uint32_t copy_start = (offset > page) ? offset : page;
+        uint32_t copy_end   = (end < page + FLASH_PAGE_SIZE) ? end
+                                                              : page + FLASH_PAGE_SIZE;
+        memcpy(staging + (copy_start - page),
+               src    + (copy_start - offset),
+               copy_end - copy_start);
+
+        flash_range_program(page, staging, FLASH_PAGE_SIZE);
+        page += FLASH_PAGE_SIZE;
     }
-    memcpy(staging, src, len);
-    flash_range_program(offset, staging, aligned_len);
     return DiagStatus::success();
 }
 
