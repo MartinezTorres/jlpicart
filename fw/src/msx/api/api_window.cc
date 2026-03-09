@@ -264,8 +264,10 @@ bool ApiWindow::service_once()
     MsgHeader req;
     memcpy(&req, frame, sizeof(MsgHeader));
 
-    // Validate request invariants.
-    if (req.status != 0 || req.reserved != 0) {
+    // Validate request invariants (spec.md §5.1 "Sequence number rules" and
+    // "Message header (MsgHeader)").
+    // seq MUST be nonzero.
+    if (req.seq == 0 || req.status != 0 || req.reserved != 0) {
         write_response(req.seq, req.service, req.method, API_E_BAD_REQ, nullptr, 0);
         return true;
     }
@@ -275,6 +277,18 @@ bool ApiWindow::service_once()
     if (expected_total > msg_len) {
         write_response(req.seq, req.service, req.method, API_E_BAD_REQ, nullptr, 0);
         return true;
+    }
+
+    // Scratch bounds check (spec.md §5.1):
+    // "If scratch_ofs != 0xFFFF, then scratch_ofs + scratch_len MUST fit
+    //  within the corresponding scratch buffer."
+    // Requests use host→cart scratch (h2c), so bounds are API_H2C_SCRATCH_LEN.
+    if (req.scratch_ofs != 0xFFFFu) {
+        const uint32_t scratch_end = (uint32_t)req.scratch_ofs + req.scratch_len;
+        if (scratch_end > API_H2C_SCRATCH_LEN) {
+            write_response(req.seq, req.service, req.method, API_E_BAD_ARG, nullptr, 0);
+            return true;
+        }
     }
 
     const uint8_t* payload     = frame + sizeof(MsgHeader);

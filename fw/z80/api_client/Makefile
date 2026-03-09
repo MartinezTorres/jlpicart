@@ -5,7 +5,7 @@
 #
 # Output: api_client.rom — flat binary, loadable as a 16KB MSX page-1 ROM.
 
-TOOLS_DIR := ../../tools/sdcc
+TOOLS_DIR := ../../../tools/sdcc
 SDCC      := $(TOOLS_DIR)/bin/sdcc
 SDASZ80   := $(TOOLS_DIR)/bin/sdasz80
 

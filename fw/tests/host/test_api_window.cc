@@ -377,6 +377,74 @@ static void test_service_once_bad_req_nonzero_status() {
     CHECK(rsp_hdr.status == API_E_BAD_REQ);
 }
 
+static void test_service_once_bad_req_seq_zero() {
+    // spec.md §5.1: seq MUST be nonzero.
+    TestFixture f;
+
+    uint8_t msg[sizeof(MsgHeader)] = {};
+    MsgHeader hdr = {};
+    hdr.seq         = 0;    // invalid
+    hdr.service     = SVC_SYSTEM;
+    hdr.method      = SYS_GET_API_INFO;
+    hdr.scratch_ofs = 0xFFFF;
+    memcpy(msg, &hdr, sizeof(MsgHeader));
+    f.win.ring_push_msg(API_REQ_RING_OFS, msg, sizeof(MsgHeader));
+    f.win.service_once();
+
+    MsgHeader rsp_hdr = {};
+    uint16_t  payload_len = 0;
+    bool got = pop_response(f.win, &rsp_hdr, nullptr, &payload_len);
+    CHECK(got);
+    CHECK(rsp_hdr.status == API_E_BAD_REQ);
+}
+
+static void test_service_once_bad_arg_scratch_out_of_bounds() {
+    // spec.md §5.1: if scratch_ofs != 0xFFFF, scratch_ofs + scratch_len MUST
+    // fit within the h2c scratch buffer (API_H2C_SCRATCH_LEN).
+    TestFixture f;
+
+    uint8_t msg[sizeof(MsgHeader)] = {};
+    MsgHeader hdr = {};
+    hdr.seq         = 10;
+    hdr.service     = SVC_SYSTEM;
+    hdr.method      = SYS_GET_API_INFO;
+    hdr.scratch_ofs = static_cast<uint16_t>(API_H2C_SCRATCH_LEN - 1); // 1 byte from end
+    hdr.scratch_len = 10;  // overflows by 9 bytes
+    memcpy(msg, &hdr, sizeof(MsgHeader));
+    f.win.ring_push_msg(API_REQ_RING_OFS, msg, sizeof(MsgHeader));
+    f.win.service_once();
+
+    MsgHeader rsp_hdr = {};
+    uint16_t  payload_len = 0;
+    bool got = pop_response(f.win, &rsp_hdr, nullptr, &payload_len);
+    CHECK(got);
+    CHECK(rsp_hdr.status == API_E_BAD_ARG);
+    CHECK(rsp_hdr.seq    == 10);
+}
+
+static void test_service_once_scratch_at_exact_limit_is_ok() {
+    // scratch_ofs + scratch_len == API_H2C_SCRATCH_LEN is exactly at the limit,
+    // so it should be accepted (not OOB).
+    TestFixture f;
+
+    uint8_t msg[sizeof(MsgHeader)] = {};
+    MsgHeader hdr = {};
+    hdr.seq         = 11;
+    hdr.service     = SVC_SYSTEM;
+    hdr.method      = SYS_GET_API_INFO;
+    hdr.scratch_ofs = 0;
+    hdr.scratch_len = API_H2C_SCRATCH_LEN;  // exactly fills scratch
+    memcpy(msg, &hdr, sizeof(MsgHeader));
+    f.win.ring_push_msg(API_REQ_RING_OFS, msg, sizeof(MsgHeader));
+    f.win.service_once();
+
+    MsgHeader rsp_hdr = {};
+    uint16_t  payload_len = 0;
+    bool got = pop_response(f.win, &rsp_hdr, nullptr, &payload_len);
+    CHECK(got);
+    CHECK(rsp_hdr.status == API_OK);  // valid range: accepted
+}
+
 static void test_service_once_seq_echoed() {
     TestFixture f;
     push_request(f.win, 0xABCD, SVC_SYSTEM, SYS_GET_API_INFO);
@@ -429,5 +497,8 @@ int main() {
     test_service_once_seq_echoed();
     test_posture_to_props_all_off();
     test_posture_to_props_secure_boot();
+    test_service_once_bad_req_seq_zero();
+    test_service_once_bad_arg_scratch_out_of_bounds();
+    test_service_once_scratch_at_exact_limit_is_ok();
     return test_summary();
 }

@@ -319,22 +319,41 @@ This plan assumes Linux amd64.
 **4.2 Core service**
 - [ ] Define packed request/response structs with explicit endianness rules
 - [ ] Implement:
-  - [ ] `core.ping`
-  - [ ] `core.get_info`
-  - [ ] `core.get_security_info` (from `SecurityPosture`)
-  - [ ] `core.get_policy_info` (from `PolicyStore`)
-  - [ ] `core.list_capabilities` (declared/allowed only in this stage)
+  - [ ] `core.ping` — there is no dedicated ping method in the spec; `GET_API_INFO`
+        (0x00) serves the same purpose: any successful roundtrip proves the transport.
+        Consider GET_API_INFO as the de-facto ping for Stage 4.
+  - [ ] `core.get_info` → `SYS_GET_API_INFO` (0x00): api_major, api_minor,
+        layout_ver, feature_bits, max_frame, posture_props, boot_key_valid_mask
+  - [ ] `core.get_security_info` → `SYS_GET_SECURITY_INFO` (0x05): from `SecurityPosture`
+  - [ ] `core.get_policy_info` → `SYS_GET_POLICY_FLAGS` (0x06): from `PolicyStore`
+  - [ ] `core.list_capabilities` → `SYS_GET_CAPS` (0x02): allowed capabilities only
+- [ ] Validate all mandatory request invariants per `spec.md §5.1`:
+  - [ ] `seq` MUST be nonzero; return `E_BAD_REQ` otherwise
+  - [ ] `status` MUST be 0 in requests; return `E_BAD_REQ` otherwise
+  - [ ] if `scratch_ofs != 0xFFFF`, validate `scratch_ofs + scratch_len` fits within
+        the h2c scratch buffer; return `E_BAD_ARG` otherwise
 - [ ] Host tests: at least one method returns expected values from injected spine objects
 
 **4.3 Z80 reference client**
 - [ ] Build the client with pinned SDCC from `tools/sdcc/bin/sdcc`
+  (path relative to `fw/z80/api_client/` = `../../../tools/sdcc/bin/sdcc`)
 - [ ] Provide a minimal program that issues `core.get_info` and prints a hex dump
 - [ ] Ensure no assumptions about interrupts or specific MSX model features
+
+**4.4 Bus mapping note**
+- The bootstrapping plan originally listed "maps API window into MSX-visible space"
+  as a Stage 4 task in `src/main.cc`. This requires the bus loop (Core 0 tight loop,
+  subslot register, PIO memory mapping) which is a Stage 5 deliverable.
+- In Stage 4, the ApiWindow buffer is initialised and polled from the firmware's
+  main loop only. A TODO comment in `src/main.cc` marks where bus mapping hooks in.
+- This is not a gap: the framing and service logic are fully testable without bus
+  hardware, which is the stated purpose of host tests in this stage.
 
 ### Definition of done
 
 - [ ] A Z80 program can call `core.get_info` and receive a valid response
 - [ ] Host tests cover framing + at least one core method
+- [ ] All mandatory request invariants (seq, status, scratch bounds) validated
 
 ---
 
