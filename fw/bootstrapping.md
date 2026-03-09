@@ -203,17 +203,22 @@ This plan assumes Linux amd64.
 
 **3.3 OTP reader**
 - [ ] Implement `OtpReader::read_bytes(offset, dst, len)` with bounds checks
-- [ ] Implement `read_u32(offset)`, `read_u8(offset)`
+- [ ] Implement `read_u24(offset)`, `read_u8(offset)` — RP2350 OTP rows are 24-bit (3 data bytes); `read_u32` would be wrong
 - [ ] Comment each OTP offset with the corresponding `spec.md` section reference
 - [ ] Host test: fake OTP buffer reads expected values
 
 **3.4 SecurityPosture**
-- [ ] Define `struct SecurityPosture` with explicit facts, e.g.:
-  - [ ] `bool secure_boot_enforced`
-  - [ ] `uint8_t valid_boot_key_mask` (up to 4 slots)
+- [ ] Define `struct SecurityPosture` with all normative facts from `spec.md §10`:
+  - [ ] `bool secure_boot_enabled`
+  - [ ] `bool otp_device_secret_present`
+  - [ ] `uint8_t boot_key_valid_mask` (bits 0–3 map to OTP key slots 0–3)
   - [ ] `bool debug_disabled`
-  - [ ] `bool otp_secret_pages_locked`
-  - [ ] `uint32_t rollback_counter` (if applicable)
+  - [ ] `bool usb_boot_disabled`
+  - [ ] `bool uart_boot_disabled`
+  - [ ] `bool anti_rollback_enabled`
+  - [ ] `bool encrypted_boot_enabled` — **NOTE**: RP2350 has no single OTP bit for
+        this; it requires reading partition table imagedef headers. Set to `false`
+        until Stage 6 adds storage-layer support. Stub the field with a TODO comment.
 - [ ] Implement `SecurityPosture SecurityPosture::read(OtpReader&)`
 - [ ] Implement `describe()` helper for logging
 - [ ] Host test: posture fields match values derived from fake OTP
@@ -247,6 +252,9 @@ This plan assumes Linux amd64.
 - [ ] Define `BoardCapabilityDecl { const char* name; bool safe_verify; }`
 - [ ] Implement `BoardDescriptor::for_current_board()` as a single centralized definition
 - [ ] Document in comments: declared ≠ present; no probing in Stage 3
+- [ ] **Capability ID naming**: use functional domain prefixes (`bus.*`, `net.*`, `storage.*`,
+      `io.*`, `ui.*`, `video.*`, `audio.*`) per `spec.md §5.1`. The `hw`/`sw` origin is
+      metadata in the descriptor, NOT part of the capability ID.
 
 **3.9 Driver descriptor table (declared SW)**
 - [ ] Define `DriverDescriptor { const char* name; /* origin=sw */ }`

@@ -34,6 +34,13 @@ struct SecurityPosture {
     // Monotonic firmware rollback protection is enabled.
     bool anti_rollback_enabled;
 
+    // Encrypted boot flow is active for firmware images.
+    // NOTE: the RP2350 has no single OTP bit for this; it requires reading the
+    // partition table imagedef headers, which is not available until the storage
+    // layer is initialised (Stage 6). Until then this field is always false.
+    // TODO(stage6): derive from partition table; see spec.md §10 and §14.
+    bool encrypted_boot_enabled;
+
     // Read all posture fields from the given OtpReader.
     // This is the only function that calls otp.read_bytes().
     static SecurityPosture read(const OtpReader& otp);

@@ -21,6 +21,11 @@ SecurityPosture SecurityPosture::read(const OtpReader& otp) {
     uint32_t bf1 = otp.read_u24(otp_offsets::BOOT_FLAGS1);
     p.boot_key_valid_mask = static_cast<uint8_t>(bf1 & otp_offsets::BOOT_FLAGS1_KEY_VALID_MASK);
 
+    // --- encrypted_boot_enabled: requires partition table inspection (Stage 6) ---
+    // The RP2350 does not expose encrypted-boot state as a single OTP bit.
+    // Defer to Stage 6 once the storage layer can parse partition table imagedefs.
+    p.encrypted_boot_enabled = false;
+
     // --- OTP device secret: slot 0 key is the proxy for a provisioned device ---
     // A device secret in OTP is implied by any enrolled boot key slot.
     // Full determination requires reading the secret OTP pages, which requires
@@ -34,12 +39,13 @@ SecurityPosture SecurityPosture::read(const OtpReader& otp) {
 void SecurityPosture::describe(char* buf, size_t len) const {
     snprintf(buf, len,
         "secure_boot=%d otp_secret=%d keys=0x%02x debug_off=%d "
-        "anti_rollback=%d usb_boot_off=%d uart_boot_off=%d",
+        "anti_rollback=%d usb_boot_off=%d uart_boot_off=%d enc_boot=%d",
         secure_boot_enabled,
         otp_device_secret_present,
         boot_key_valid_mask,
         debug_disabled,
         anti_rollback_enabled,
         usb_boot_disabled,
-        uart_boot_disabled);
+        uart_boot_disabled,
+        encrypted_boot_enabled);
 }

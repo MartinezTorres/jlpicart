@@ -148,7 +148,7 @@ static void test_real_board_descriptor() {
     PolicyInfo policy = make_policy(0);
     reg.init(board, nullptr, 0, policy);
     CHECK(reg.declared_count() == board.capability_count);
-    CHECK(reg.is_declared("hw.msx_bus"));
+    CHECK(reg.is_declared("bus.msx"));
 }
 
 int main() {

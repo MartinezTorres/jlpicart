@@ -113,6 +113,15 @@ static void test_no_key_means_no_secret() {
     CHECK(!p.otp_device_secret_present);
 }
 
+static void test_encrypted_boot_enabled_defaults_false() {
+    // RP2350 has no single OTP bit for encrypted boot; field is always false
+    // until Stage 6 adds partition table inspection. See security_posture.h.
+    uint8_t buf[BUF_SIZE] = {};
+    FakeOtpReader otp(buf, BUF_SIZE);
+    SecurityPosture p = SecurityPosture::read(otp);
+    CHECK(!p.encrypted_boot_enabled);
+}
+
 static void test_describe_does_not_overflow() {
     uint8_t buf[BUF_SIZE] = {};
     FakeOtpReader otp(buf, BUF_SIZE);
@@ -133,6 +142,7 @@ int main() {
     test_boot_disable_bits();
     test_boot_key_valid_mask();
     test_no_key_means_no_secret();
+    test_encrypted_boot_enabled_defaults_false();
     test_describe_does_not_overflow();
     return test_summary();
 }

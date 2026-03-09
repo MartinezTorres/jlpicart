@@ -16,30 +16,33 @@
 // safe_verify=false means no probing is ever permitted (e.g. writing to
 // an absent chip could cause bus conflicts on this board).
 // ---------------------------------------------------------------------------
+// Capability IDs use functional domain prefixes per spec.md §5.1.
+// The hw/sw origin is metadata recorded in the BoardDescriptor/DriverDescriptor,
+// NOT part of the capability ID itself — IDs must be stable across board variants.
 static const BoardCapabilityDecl kJlpicartCapabilities[] = {
     // MSX bus interface — always present on any JLPiCart board.
-    { "hw.msx_bus",        false },  // core; no probing needed
+    { "bus.msx",           false },  // core; no probing needed
 
     // External SPI flash (16MB, for payload storage and config).
-    { "hw.ext_flash",      false },  // verified by SDK at boot
+    { "storage.ext_flash", false },  // verified by SDK at boot
 
     // ESP32 Wi-Fi co-processor (UART AT interface).
-    { "hw.wifi",           true  },  // safe to ping via AT command
+    { "net.wifi",          true  },  // safe to ping via AT command
 
     // USB host port (controllers, USB sticks, optical drives).
-    { "hw.usb_host",       true  },  // safe to enumerate
+    { "io.usb_host",       true  },  // safe to enumerate
 
     // OLED display (SSD1306, 128×32, I2C).
-    { "hw.oled",           true  },  // safe to probe I2C address
+    { "ui.oled",           true  },  // safe to probe I2C address
 
     // CRT/VGA analog video output (via PIO+DMA).
-    { "hw.video_crt",      false },  // PIO-driven; avoid unless configured
+    { "video.crt",         false },  // PIO-driven; avoid unless configured
 
     // Stereo audio output.
-    { "hw.audio_out",      false },  // DAC-driven; avoid unless configured
+    { "audio.out",         false },  // DAC-driven; avoid unless configured
 
     // ADC (temperature, battery voltage, general GPIO).
-    { "hw.adc",            true  },  // safe to read ADC channels
+    { "io.adc",            true  },  // safe to read ADC channels
 };
 
 static const BoardDescriptor kJlpicartDescriptor = {
