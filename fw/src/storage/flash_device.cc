@@ -102,9 +102,10 @@ DiagStatus FlashDevice::write(uint32_t offset, const uint8_t* src, size_t len)
     // flash_range_program requires: offset and len must be multiples of
     // FLASH_PAGE_SIZE (256 bytes).  Pad len up to the next page boundary.
     size_t aligned_len = (len + FLASH_PAGE_SIZE - 1u) & ~(FLASH_PAGE_SIZE - 1u);
-    // Build a page-aligned staging buffer on the stack (max ~568 bytes for KV).
-    // For larger writes (append log), the caller is responsible for alignment.
-    // TODO(stage7+): use a heap-allocated staging buffer for large writes.
+    // Stage buffer on the stack. 4 pages (1024 B) covers the largest record
+    // produced by KV (max 568 B → 768 B aligned) or AppendLog (max 268 B →
+    // 512 B aligned). Returns IO_ERROR if a caller exceeds this cap — add a
+    // heap-backed path if larger single writes are ever needed.
     uint8_t staging[FLASH_PAGE_SIZE * 4] = {};
     if (aligned_len > sizeof(staging)) {
         return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);

@@ -9,7 +9,6 @@
 #include "storage/append_log.h"
 #include "storage/storage_health.h"
 
-#include <cassert>
 #include <cstdio>
 #include <cstring>
 
@@ -201,7 +200,9 @@ static void test_kv_missing_key_returns_error()
     KvStore kv;
     kv.init(dev, 0, TEST_KV_SIZE);
     uint8_t out[8]; uint16_t len = 0;
-    CHECK_FAIL(kv.get("nosuchkey", out, &len, sizeof(out)));
+    DiagStatus s = kv.get("nosuchkey", out, &len, sizeof(out));
+    CHECK_FAIL(s);
+    CHECK(s.code == DiagCode::STORAGE_NOT_FOUND);
 }
 
 static void test_kv_multiple_keys()
@@ -425,26 +426,16 @@ static void test_log_zero_len_payload()
 
 static void test_health_fresh_partitions()
 {
-    // Use a combined sim covering both KV and LOG partitions at their real offsets.
-    // For simplicity, use a small sim with KV at offset 0 and LOG after it.
+    // Small sim: KV at offset 0, LOG immediately after.
     FlashDevice dev(TEST_KV_SIZE + TEST_LOG_SIZE);
-
-    // Init KV and LOG to establish valid (empty) partition headers.
-    {
-        KvStore kv; kv.init(dev, 0, TEST_KV_SIZE);
-        AppendLog log; log.init(dev, TEST_KV_SIZE, TEST_LOG_SIZE);
-    }
-
-    // Now check health using the same offsets.
-    // We override the real flash layout offsets by calling storage_check_health
-    // indirectly via fresh init calls (health check uses real partition constants).
-    // For the host test, just verify that KvStore and AppendLog report OK.
-    KvStore kv2; kv2.init(dev, 0, TEST_KV_SIZE);
-    AppendLog log2; log2.init(dev, TEST_KV_SIZE, TEST_LOG_SIZE);
-    CHECK(kv2.initialized());
-    CHECK(log2.initialized());
-    CHECK_EQ(kv2.live_count(), 0u);
-    CHECK_EQ(log2.record_count(), 0u);
+    StorageHealth health = {};
+    CHECK_OK(storage_check_health(dev, health,
+                                   0,            TEST_KV_SIZE,
+                                   TEST_KV_SIZE, TEST_LOG_SIZE));
+    CHECK(health.system_kv_ok);
+    CHECK(health.event_log_ok);
+    CHECK_EQ(health.kv_record_count,  0u);
+    CHECK_EQ(health.log_record_count, 0u);
 }
 
 // ---------------------------------------------------------------------------

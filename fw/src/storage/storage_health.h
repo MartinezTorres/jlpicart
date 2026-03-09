@@ -14,4 +14,10 @@ struct StorageHealth {
 
 // Scan both partitions and populate `out`.  Always returns success unless
 // the flash device itself is unreadable.
-DiagStatus storage_check_health(FlashDevice& dev, StorageHealth& out);
+//
+// kv_ofs/kv_size and log_ofs/log_size are the partition bounds within `dev`.
+// Pass FLASH_SYSTEM_KV_OFS/SIZE and FLASH_EVENT_LOG_OFS/SIZE for firmware;
+// pass small test offsets for host tests.
+DiagStatus storage_check_health(FlashDevice& dev, StorageHealth& out,
+                                 uint32_t kv_ofs,  uint32_t kv_size,
+                                 uint32_t log_ofs, uint32_t log_size);

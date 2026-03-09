@@ -13,12 +13,12 @@
 //  10. Service loop (poll request ring, dispatch, post response; tick mailbox)
 //
 // Neither the API window nor the menu page is yet wired into the MSX bus —
-// that integration belongs to Stage 6 (bus layer mapping).  Both objects are
+// that integration belongs to the bus-layer stage.  Both objects are
 // initialised here so host tests and emulator tests can exercise the protocol
 // logic independently.
 //
-// TODO(stage6): map api_win.buf() into MSX page 2 subslot 2 via bus layer.
-// TODO(stage6): map menu_page into MSX page 1 subslot 1 and load menu_stub.rom.
+// TODO(bus-layer): map api_win.buf() into MSX page 2 subslot 2 via bus layer.
+// TODO(bus-layer): map menu_page into MSX page 1 subslot 1 and load menu_stub.rom.
 //
 // See fw/spec.md and fw/bootstrapping.md for context.
 

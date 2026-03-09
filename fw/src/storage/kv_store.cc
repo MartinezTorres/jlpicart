@@ -78,25 +78,24 @@ DiagStatus KvStore::init(FlashDevice& dev, uint32_t part_ofs, uint32_t part_size
 
         // Valid record — update the in-memory index.
         IndexEntry* entry = find_entry(key, hdr.key_len);
-        if (!entry) {
-            // New key: allocate a slot.
-            for (size_t i = 0; i < KV_MAX_ENTRIES; ++i) {
-                if (!index_[i].used) { entry = &index_[i]; break; }
-            }
-        }
-        if (!entry) {
-            // More distinct keys than KV_MAX_ENTRIES — index overflow.
-            // Continue scanning to advance write_ptr, but skip this record.
+        if (hdr.type == KV_TYPE_TOMB) {
+            // Tombstone: remove the key if it exists, otherwise nothing to do.
+            if (entry) entry->used = false;
         } else {
-            memcpy(entry->key, key, hdr.key_len);
-            entry->key_len    = hdr.key_len;
-            entry->val_len    = hdr.val_len;
-            entry->record_ofs = ptr;
-            entry->used       = true;
-        }
-
-        if (hdr.type == KV_TYPE_TOMB && entry) {
-            entry->used = false;  // tombstone removes the key
+            // Live record: update existing slot or allocate a new one.
+            if (!entry) {
+                for (size_t i = 0; i < KV_MAX_ENTRIES; ++i) {
+                    if (!index_[i].used) { entry = &index_[i]; break; }
+                }
+            }
+            if (entry) {
+                memcpy(entry->key, key, hdr.key_len);
+                entry->key_len    = hdr.key_len;
+                entry->val_len    = hdr.val_len;
+                entry->record_ofs = ptr;
+                entry->used       = true;
+            }
+            // else: more distinct keys than KV_MAX_ENTRIES — skip this record.
         }
 
         ptr += static_cast<uint32_t>(sizeof(KvRecordHdr)) + payload_len;
@@ -157,7 +156,7 @@ DiagStatus KvStore::get(const char* key, uint8_t* val_out,
     }
 
     const IndexEntry* entry = find_entry(key, static_cast<uint8_t>(key_len));
-    if (!entry) return DiagStatus::error(DiagCode::STORAGE_CORRUPT);
+    if (!entry) return DiagStatus::error(DiagCode::STORAGE_NOT_FOUND);
 
     uint16_t copy_len = std::min(entry->val_len, max_val);
     if (copy_len > 0) {

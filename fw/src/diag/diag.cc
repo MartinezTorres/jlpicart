@@ -13,6 +13,7 @@ const char* diag_code_to_string(DiagCode code) {
         case DiagCode::STORAGE_CORRUPT:             return "STORAGE_CORRUPT";
         case DiagCode::STORAGE_FULL:                return "STORAGE_FULL";
         case DiagCode::STORAGE_IO_ERROR:            return "STORAGE_IO_ERROR";
+        case DiagCode::STORAGE_NOT_FOUND:           return "STORAGE_NOT_FOUND";
         case DiagCode::COLLECTION_HASH_MISMATCH:    return "COLLECTION_HASH_MISMATCH";
         case DiagCode::COLLECTION_BAD_MANIFEST:     return "COLLECTION_BAD_MANIFEST";
         case DiagCode::COLLECTION_UNSATISFIED_REQ:  return "COLLECTION_UNSATISFIED_REQ";

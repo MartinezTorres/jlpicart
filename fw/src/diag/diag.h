@@ -29,6 +29,7 @@ enum class DiagCode : uint16_t {
     STORAGE_CORRUPT             = 0x0300,
     STORAGE_FULL                = 0x0301,
     STORAGE_IO_ERROR            = 0x0302,
+    STORAGE_NOT_FOUND           = 0x0303,
 
     // --- Content / Collections ---
     COLLECTION_HASH_MISMATCH    = 0x0400,
