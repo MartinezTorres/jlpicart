@@ -56,6 +56,10 @@ add_executable(jlpicart
     src/boards/board_descriptor_jlpicart.cc
     src/drivers/driver_descriptor_table.cc
     src/spine/capability_registry.cc
+
+    # API window (Stage 4)
+    src/msx/api/api_window.cc
+    src/msx/api/services/core_service.cc
 )
 
 pico_set_program_name(jlpicart "jlpicart")

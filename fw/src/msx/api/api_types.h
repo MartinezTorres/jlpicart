@@ -1,0 +1,226 @@
+#pragma once
+// api_types.h — packed structs and constants for the JLPiCart API window.
+//
+// All structs are #pragma pack(1), little-endian, shared between RP2350 firmware
+// and Z80 client code.  No SDK types; this file is included in host tests too.
+//
+// Spec references: spec.md §5 (JLPiCart API), §5.1 (Fixed MSX-visible allocations).
+
+#include <cstdint>
+
+// ---------------------------------------------------------------------------
+// Window layout constants (spec.md §5.1 "Fixed layout within the 16KB API Window")
+// ---------------------------------------------------------------------------
+
+static constexpr uint16_t API_WINDOW_SIZE      = 0x4000u; // 16 KB total
+static constexpr uint16_t API_HEADER_OFS       = 0x0000u; // ApiWindowHeader
+static constexpr uint16_t API_REGS_OFS         = 0x0040u; // ApiRegs (32 bytes)
+static constexpr uint16_t API_RING_DATA_SIZE   = 512u;    // ring data bytes (power of two)
+static constexpr uint16_t API_RING_HDR_SIZE    = 8u;      // sizeof(RingHeader)
+static constexpr uint16_t API_RING_TOTAL       = API_RING_HDR_SIZE + API_RING_DATA_SIZE; // 520
+
+static constexpr uint16_t API_REQ_RING_OFS     = 0x0060u;
+static constexpr uint16_t API_REQ_RING_LEN     = API_RING_TOTAL;
+static constexpr uint16_t API_RSP_RING_OFS     = API_REQ_RING_OFS + API_REQ_RING_LEN;   // 0x0268
+static constexpr uint16_t API_RSP_RING_LEN     = API_RING_TOTAL;
+static constexpr uint16_t API_H2C_SCRATCH_OFS  = API_RSP_RING_OFS + API_RSP_RING_LEN;   // 0x0470
+static constexpr uint16_t API_H2C_SCRATCH_LEN  = 1024u;
+static constexpr uint16_t API_C2H_SCRATCH_OFS  = API_H2C_SCRATCH_OFS + API_H2C_SCRATCH_LEN; // 0x0870
+static constexpr uint16_t API_C2H_SCRATCH_LEN  = 1024u;
+
+// Maximum frame size in bytes, including the 2-byte length prefix.
+// Must fit contiguously in the ring without wrap (API_RING_DATA_SIZE / 2 is safe).
+static constexpr uint16_t API_MAX_FRAME        = 256u;
+static constexpr uint16_t API_MAX_MSG          = API_MAX_FRAME - 2u; // max msg_bytes
+
+// ---------------------------------------------------------------------------
+// API version and flags
+// ---------------------------------------------------------------------------
+
+static constexpr uint8_t API_MAJOR      = 1u;
+static constexpr uint8_t API_MINOR      = 0u;
+static constexpr uint8_t API_LAYOUT_VER = 1u;
+
+// ApiWindowHeader.flags
+static constexpr uint8_t API_HDR_FLAG_RINGS = (1u << 0); // rings enabled (MUST be 1)
+static constexpr uint8_t API_HDR_FLAG_REGS  = (1u << 1); // ApiRegs doorbells enabled
+static constexpr uint8_t API_HDR_FLAGS_V1   = API_HDR_FLAG_RINGS | API_HDR_FLAG_REGS;
+
+// feature_bits (ApiWindowHeader and ApiInfo): which services are implemented.
+// spec.md "Feature bits (in feature_bits)".
+static constexpr uint32_t API_FEATURE_SYSTEM    = (1u << 0); // System service 0x00
+static constexpr uint32_t API_FEATURE_STORAGE   = (1u << 1); // Storage service 0x01 (Stage 6)
+static constexpr uint32_t API_FEATURE_NETWORK   = (1u << 2); // Network service 0x02 (future)
+static constexpr uint32_t API_FEATURE_IDENTITY  = (1u << 3); // Identity service 0x03 (future)
+static constexpr uint32_t API_FEATURE_USERSTATS = (1u << 4); // UserStats 0x04 (future)
+
+// Stage 4: only System service implemented.
+static constexpr uint32_t API_FEATURES_STAGE4 = API_FEATURE_SYSTEM;
+
+// ---------------------------------------------------------------------------
+// Packed structs — layout identical on RP2350 and Z80
+// ---------------------------------------------------------------------------
+
+#pragma pack(push, 1)
+
+// spec.md §5.1 "ApiWindowHeader (64 bytes)"
+struct ApiWindowHeader {
+    char     sig[4];           // "JLP1"
+    uint8_t  api_major;        // API_MAJOR
+    uint8_t  api_minor;        // API_MINOR
+    uint8_t  layout_ver;       // API_LAYOUT_VER
+    uint8_t  flags;            // API_HDR_FLAG_*
+    uint16_t win_size;         // API_WINDOW_SIZE (0x4000)
+    uint16_t regs_ofs;         // API_REGS_OFS   (0x0040)
+    uint16_t req_ring_ofs;
+    uint16_t req_ring_len;
+    uint16_t rsp_ring_ofs;
+    uint16_t rsp_ring_len;
+    uint16_t h2c_scratch_ofs;
+    uint16_t h2c_scratch_len;
+    uint16_t c2h_scratch_ofs;
+    uint16_t c2h_scratch_len;
+    uint32_t feature_bits;     // API_FEATURE_* bitmap
+    uint16_t max_frame;        // API_MAX_FRAME
+    uint16_t reserved0;        // MUST be 0
+    uint32_t reserved1;        // MUST be 0
+    uint8_t  reserved2[24];    // pads struct to exactly 64 bytes
+};
+static_assert(sizeof(ApiWindowHeader) == 64, "ApiWindowHeader must be 64 bytes");
+
+// spec.md §5.1 "ApiRegs (32 bytes)"
+struct ApiRegs {
+    volatile uint8_t  host_kick;    // host increments to notify "requests posted"
+    volatile uint8_t  cart_event;   // cart increments to notify "responses posted"
+    volatile uint8_t  host_flags;   // reserved (MUST write 0)
+    volatile uint8_t  cart_flags;   // bit0=error_latched, bit1=busy (best-effort)
+    volatile uint16_t last_err;     // last error code (best-effort)
+    volatile uint16_t last_seq;     // seq associated with last_err (best-effort)
+    volatile uint8_t  reserved[24]; // MUST be 0 in v1
+};
+static_assert(sizeof(ApiRegs) == 32, "ApiRegs must be 32 bytes");
+
+// spec.md §5.1 "RingHeader"
+struct RingHeader {
+    volatile uint16_t head;  // producer writes (byte offset into ring_data)
+    volatile uint16_t tail;  // consumer writes (byte offset into ring_data)
+    uint16_t          size;  // ring_data size in bytes (power of two; set at init)
+    uint16_t          flags; // reserved, MUST be 0 in v1
+    // uint8_t ring_data[size] follows in memory
+};
+static_assert(sizeof(RingHeader) == 8, "RingHeader must be 8 bytes");
+
+// spec.md §5.1 "Message header (MsgHeader, 16 bytes)"
+struct MsgHeader {
+    uint16_t seq;          // host-chosen request id; echoed in response
+    uint8_t  service;      // service id (SVC_*)
+    uint8_t  method;       // method id within service
+    uint16_t flags;        // request/response flags (0 in requests)
+    uint16_t status;       // response status code; MUST be 0 in requests
+    uint16_t payload_len;  // bytes after this header
+    uint16_t scratch_ofs;  // offset within direction scratch; 0xFFFF = none
+    uint16_t scratch_len;  // valid bytes in scratch
+    uint16_t reserved;     // MUST be 0
+};
+static_assert(sizeof(MsgHeader) == 16, "MsgHeader must be 16 bytes");
+
+// ---------------------------------------------------------------------------
+// Status codes (spec.md "Status codes")
+// ---------------------------------------------------------------------------
+
+static constexpr uint16_t API_OK            = 0x0000u;
+static constexpr uint16_t API_E_BAD_REQ     = 0x1001u; // malformed frame or header
+static constexpr uint16_t API_E_BAD_ARG     = 0x1002u; // invalid argument values
+static constexpr uint16_t API_E_UNSUPPORTED = 0x1003u; // unknown service or method
+static constexpr uint16_t API_E_DENIED      = 0x1004u; // policy denied or not authenticated
+static constexpr uint16_t API_E_NOT_FOUND   = 0x1005u; // unknown id or handle
+static constexpr uint16_t API_E_BUSY        = 0x1006u; // resource busy
+static constexpr uint16_t API_E_TIMEOUT     = 0x1007u; // operation exceeded limit
+static constexpr uint16_t API_E_RING_FULL   = 0x1008u; // cannot enqueue frame
+static constexpr uint16_t API_E_TOO_BIG     = 0x1009u; // payload or scratch too large
+static constexpr uint16_t API_E_INTERNAL    = 0x2001u; // cart-side runtime error
+
+// ---------------------------------------------------------------------------
+// Service IDs (spec.md "Services")
+// ---------------------------------------------------------------------------
+
+static constexpr uint8_t SVC_SYSTEM   = 0x00u;
+static constexpr uint8_t SVC_STORAGE  = 0x01u;
+static constexpr uint8_t SVC_NETWORK  = 0x02u;
+static constexpr uint8_t SVC_IDENTITY = 0x03u;
+
+// ---------------------------------------------------------------------------
+// System service (0x00) method IDs (spec.md "System service")
+// ---------------------------------------------------------------------------
+
+static constexpr uint8_t SYS_GET_API_INFO      = 0x00u;
+static constexpr uint8_t SYS_GET_DEVICE_ID     = 0x01u;
+static constexpr uint8_t SYS_GET_CAPS          = 0x02u;
+static constexpr uint8_t SYS_GET_RANDOM        = 0x03u;
+static constexpr uint8_t SYS_RESET_TO_MENU     = 0x04u;
+static constexpr uint8_t SYS_GET_SECURITY_INFO = 0x05u;
+static constexpr uint8_t SYS_GET_POLICY_FLAGS  = 0x06u;
+
+// ---------------------------------------------------------------------------
+// posture_props bitfield  (spec.md §2486 "Posture properties (OTP-derived)")
+//
+// Bit assignments are authoritative here; the spec says "see spec table" but
+// does not yet define one.  These bits are normative from Stage 4 onward.
+// ---------------------------------------------------------------------------
+
+static constexpr uint32_t API_POSTURE_SECURE_BOOT_ENABLED    = (1u << 0);
+static constexpr uint32_t API_POSTURE_OTP_SECRET_PRESENT     = (1u << 1);
+static constexpr uint32_t API_POSTURE_DEBUG_DISABLED         = (1u << 2);
+static constexpr uint32_t API_POSTURE_USB_BOOT_DISABLED      = (1u << 3);
+static constexpr uint32_t API_POSTURE_UART_BOOT_DISABLED     = (1u << 4);
+static constexpr uint32_t API_POSTURE_ANTI_ROLLBACK_ENABLED  = (1u << 5);
+static constexpr uint32_t API_POSTURE_ENCRYPTED_BOOT_ENABLED = (1u << 6);
+// bits 7..31: reserved, MUST be 0 in v1.
+
+// ---------------------------------------------------------------------------
+// Response payload structs (all packed, little-endian)
+// ---------------------------------------------------------------------------
+
+// System.GET_API_INFO (0x00) response  (spec.md)
+struct ApiInfo {
+    uint8_t  api_major;
+    uint8_t  api_minor;
+    uint8_t  layout_ver;
+    uint8_t  flags;            // ApiWindowHeader.flags value
+    uint32_t feature_bits;     // API_FEATURE_* bitmap
+    uint16_t max_frame;
+    uint16_t reserved0;
+    uint32_t posture_props;        // API_POSTURE_* bitfield
+    uint8_t  boot_key_valid_mask;  // bits 0..3 map to OTP boot key slots 0..3
+    uint8_t  reserved1[3];
+};
+static_assert(sizeof(ApiInfo) == 20, "ApiInfo must be 20 bytes");
+
+// System.GET_CAPS (0x02) — one entry per capability
+// cap_id: stable numeric mapping (Stage 4: uses index as placeholder; IDs not yet finalized)
+// cap_flags: reserved (0)
+// cap_param: capability-specific parameter (0)
+struct CapEntry {
+    uint16_t cap_id;
+    uint16_t cap_flags;
+    uint32_t cap_param;
+};
+static_assert(sizeof(CapEntry) == 8, "CapEntry must be 8 bytes");
+
+// System.GET_SECURITY_INFO (0x05) response  (spec.md)
+struct SecurityInfoResp {
+    uint32_t posture_props;        // API_POSTURE_* bitfield
+    uint8_t  boot_key_valid_mask;
+    uint8_t  reserved0[3];
+};
+static_assert(sizeof(SecurityInfoResp) == 8, "SecurityInfoResp must be 8 bytes");
+
+// System.GET_POLICY_FLAGS (0x06) response  (spec.md)
+struct PolicyFlagsResp {
+    uint32_t policy_flags;       // PolicyFlags bitfield (spec.md "Policy flags bit assignments v1")
+    uint32_t policy_gen;         // generation counter (0 until KV store in Stage 6)
+    uint8_t  policy_hash16[16];  // first 16 bytes of SHA-256(canonical policy bytes)
+};
+static_assert(sizeof(PolicyFlagsResp) == 24, "PolicyFlagsResp must be 24 bytes");
+
+#pragma pack(pop)

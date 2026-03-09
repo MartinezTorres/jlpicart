@@ -78,3 +78,24 @@ add_host_test(test_capability_registry
     ${SRC_BOARD_DESC}
     ${SRC_DRV_TABLE}
 )
+
+# ---------------------------------------------------------------------------
+# Stage 4 tests
+# ---------------------------------------------------------------------------
+
+set(SRC_API_WINDOW   "${FW_SRC}/msx/api/api_window.cc")
+set(SRC_CORE_SERVICE "${FW_SRC}/msx/api/services/core_service.cc")
+
+add_host_test(test_api_window
+    host/test_api_window.cc
+    ${SRC_API_WINDOW}
+    ${SRC_CORE_SERVICE}
+    ${SRC_CAP_REG}
+    ${SRC_BOARD_DESC}
+    ${SRC_DRV_TABLE}
+    ${SRC_DIAG}
+    ${SRC_SHA256}
+    ${SRC_POL_VERIFY}
+    ${SRC_POL_STORE}
+    ${SRC_POSTURE}
+)

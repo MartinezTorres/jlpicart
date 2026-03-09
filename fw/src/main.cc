@@ -1,12 +1,20 @@
-// JLPiCart firmware — Stage 3: spine v0 boot sequence.
+// JLPiCart firmware — Stage 4: API window v1 boot sequence.
 //
-// Boot order (spec.md §4.4, bootstrapping.md Stage 3):
+// Boot order (spec.md §4.4, bootstrapping.md Stage 4):
 //   1. diag/log init
 //   2. SecurityPosture (OTP read — once, never again)
 //   3. PolicyStore (flash read + HMAC verify)
 //   4. CapabilityRegistry (declared → allowed)
-//   5. Print boot banner
-//   6. Spin (bus loop added in Stage 4)
+//   5. ApiWindow init (header + rings)
+//   6. Print boot banner
+//   7. Service loop (poll request ring, dispatch, post response)
+//
+// The API window is not yet mapped into the MSX bus — that integration
+// requires the bus loop (Stage 5).  Until then the window is initialised
+// and serviced from a software loop so host tests and emulator tests can
+// exercise the framing and service logic.
+//
+// TODO(stage5): map buf_ into MSX page 2 subslot 2 via bus layer.
 //
 // See fw/spec.md and fw/bootstrapping.md for context.
 
@@ -17,6 +25,7 @@
 #include "spine/capability_registry.h"
 #include "boards/board_descriptor.h"
 #include "drivers/driver_descriptor.h"
+#include "msx/api/api_window.h"
 #include "pico/stdlib.h"
 #include <cstdio>
 
@@ -55,7 +64,12 @@ int main() {
                   kDriverDescriptors, kDriverDescriptorCount,
                   policy_store.info());
 
-    // 5. Print boot banner to log (flushed to UART/OLED in later stages).
+    // 5. Init API window (16KB buffer; bus mapping added in Stage 5).
+    ApiWindow api_win;
+    api_win.init(posture, policy_store, registry);
+    log_info("API window initialised");
+
+    // 6. Print boot banner to log (flushed to UART/OLED in later stages).
     {
         char buf[128];
         snprintf(buf, sizeof(buf),
@@ -67,8 +81,10 @@ int main() {
         log_info(buf);
     }
 
-    // 6. Spin — bus loop, API window, and menu are added in Stages 4–5.
+    // 7. Service loop — poll the request ring and process one frame per iteration.
+    // TODO(stage5): replace with interrupt-driven or Core1 handler once bus is wired.
     while (true) {
+        api_win.service_once();
         tight_loop_contents();
     }
 }
