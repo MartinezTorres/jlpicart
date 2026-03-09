@@ -184,14 +184,14 @@ uint8_t bios_gttrig(uint8_t trigger) __naked
  * MSX generation detection (best-effort)
  * ---------------------------------------------------------------------------*/
 
-/* Read byte at absolute Z80 address via indirect. */
+/* Read byte at absolute Z80 address via indirect.
+ * SDCC passes the single uint16_t arg in HL for __naked functions, so addr
+ * arrives in HL; dereference directly and return result in L. */
 static uint8_t peek(uint16_t addr) __naked
 {
     addr;
     __asm
-        ld   l, 4(ix)
-        ld   h, 5(ix)
-        ld   l, (hl)
+        ld   l, (hl)     ; addr is in HL; dereference → return byte in L
         ret
     __endasm;
 }
