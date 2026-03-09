@@ -119,15 +119,17 @@ void bios_chput(uint8_t c) __naked
     __endasm;
 }
 
-/* POSIT (0x00C6): H = row (1-based), L = col (1-based). */
-void bios_posit(uint8_t row, uint8_t col) __naked
+/* POSIT (0x00C6): H = row (1-based), L = col (1-based).
+ * Not __naked: SDCC sets up the IX frame so 4(ix)/6(ix) are accessible.
+ * Each uint8_t arg is pushed as 16-bit (zero-extended), so second arg is at
+ * IX+6, not IX+5. */
+void bios_posit(uint8_t row, uint8_t col)
 {
     row; col;
     __asm
-        ld   h, 4(ix)    ; row
-        ld   l, 5(ix)    ; col
+        ld   h, 4(ix)    ; row (first arg, IX+4)
+        ld   l, 6(ix)    ; col (second arg, IX+6)
         call 0x00C6
-        ret
     __endasm;
 }
 
@@ -287,16 +289,23 @@ static void cmd_clear(void)
     wr16(MAILBOX_BASE + MBX_STATUS, MENU_OK);
 }
 
-static void cmd_put_text(uint32_t arg0, uint16_t in_len,
+static void cmd_put_text(uint32_t arg0, uint32_t arg2, uint16_t in_len,
                          volatile const uint8_t *data)
 {
-    uint8_t  x = (uint8_t)(arg0 & 0xFFu);
-    uint8_t  y = (uint8_t)((arg0 >> 8) & 0xFFu);
-    uint16_t i;
+    uint8_t  x    = (uint8_t)(arg0 & 0xFFu);
+    uint8_t  y    = (uint8_t)((arg0 >> 8) & 0xFFu);
+    uint8_t  wrap = (uint8_t)(arg2 & 0x01u); /* arg2 bit 0 = wrap enable */
+    uint16_t max_out, i;
 
     if (g_mode != MODE_TEXT_40) {
         wr16(MAILBOX_BASE + MBX_STATUS, MENU_E_BAD_STATE);
         return;
+    }
+
+    /* Clip to right edge unless wrap bit is set (spec §8 MUST NOT wrap). */
+    if (!wrap) {
+        max_out = (x < 40u) ? (uint16_t)(40u - x) : 0u;
+        if (in_len > max_out) in_len = (uint16_t)max_out;
     }
 
     /* POSIT uses 1-based row/col. */
@@ -329,28 +338,32 @@ static void cmd_read_input(volatile uint8_t *data, uint16_t data_cap)
         data[i] = bios_snsmat(i);
     }
 
-    /* Joystick 1 — GTSTCK(1) gives direction 0-8; GTTRIG for buttons. */
+    /* Joystick 1 — GTSTCK(1) gives direction 0-8; GTTRIG for buttons.
+     * Spec §8: 0=pressed, 1=released (active-low) for each bit.
+     * Start all bits high (all released); clear each bit when active. */
     joy1_dir = bios_gtstck(1u);
-    trig_a1  = bios_gttrig(0u); /* joy1 trigger A (0xFF=pressed) */
-    trig_b1  = bios_gttrig(1u); /* joy1 trigger B */
-    /* Encode: bit0=Up bit1=Down bit2=Left bit3=Right bit4=TrigA bit5=TrigB, active-low */
-    if (joy1_dir == 1u || joy1_dir == 2u || joy1_dir == 8u) joy1 |= (1u << 0); /* Up */
-    if (joy1_dir == 4u || joy1_dir == 5u || joy1_dir == 6u) joy1 |= (1u << 1); /* Down */
-    if (joy1_dir == 6u || joy1_dir == 7u || joy1_dir == 8u) joy1 |= (1u << 2); /* Left */
-    if (joy1_dir == 2u || joy1_dir == 3u || joy1_dir == 4u) joy1 |= (1u << 3); /* Right */
-    if (trig_a1 == 0u) joy1 |= (1u << 4); /* 0xFF=pressed → active-low: 0=pressed */
-    if (trig_b1 == 0u) joy1 |= (1u << 5);
+    trig_a1  = bios_gttrig(0u); /* 0xFF=pressed, 0x00=released */
+    trig_b1  = bios_gttrig(1u);
+    joy1 = 0xFFu;
+    /* GTSTCK direction: 1=N 2=NE 3=E 4=SE 5=S 6=SW 7=W 8=NW */
+    if (joy1_dir == 1u || joy1_dir == 2u || joy1_dir == 8u) joy1 &= ~(1u << 0); /* Up */
+    if (joy1_dir == 4u || joy1_dir == 5u || joy1_dir == 6u) joy1 &= ~(1u << 1); /* Down */
+    if (joy1_dir == 6u || joy1_dir == 7u || joy1_dir == 8u) joy1 &= ~(1u << 2); /* Left */
+    if (joy1_dir == 2u || joy1_dir == 3u || joy1_dir == 4u) joy1 &= ~(1u << 3); /* Right */
+    if (trig_a1 != 0u) joy1 &= ~(1u << 4); /* 0xFF=pressed → clear bit */
+    if (trig_b1 != 0u) joy1 &= ~(1u << 5);
 
     /* Joystick 2 */
     joy2_dir = bios_gtstck(2u);
     trig_a2  = bios_gttrig(2u);
     trig_b2  = bios_gttrig(3u);
-    if (joy2_dir == 1u || joy2_dir == 2u || joy2_dir == 8u) joy2 |= (1u << 0);
-    if (joy2_dir == 4u || joy2_dir == 5u || joy2_dir == 6u) joy2 |= (1u << 1);
-    if (joy2_dir == 6u || joy2_dir == 7u || joy2_dir == 8u) joy2 |= (1u << 2);
-    if (joy2_dir == 2u || joy2_dir == 3u || joy2_dir == 4u) joy2 |= (1u << 3);
-    if (trig_a2 == 0u) joy2 |= (1u << 4);
-    if (trig_b2 == 0u) joy2 |= (1u << 5);
+    joy2 = 0xFFu;
+    if (joy2_dir == 1u || joy2_dir == 2u || joy2_dir == 8u) joy2 &= ~(1u << 0);
+    if (joy2_dir == 4u || joy2_dir == 5u || joy2_dir == 6u) joy2 &= ~(1u << 1);
+    if (joy2_dir == 6u || joy2_dir == 7u || joy2_dir == 8u) joy2 &= ~(1u << 2);
+    if (joy2_dir == 2u || joy2_dir == 3u || joy2_dir == 4u) joy2 &= ~(1u << 3);
+    if (trig_a2 != 0u) joy2 &= ~(1u << 4);
+    if (trig_b2 != 0u) joy2 &= ~(1u << 5);
 
     data[11] = joy1;
     data[12] = joy2;
@@ -444,9 +457,11 @@ void stub_main(void)
                 cmd_clear();
                 break;
 
-            case CMD_PUT_TEXT:
-                cmd_put_text(arg0, in_len, DATA_BASE);
+            case CMD_PUT_TEXT: {
+                uint32_t arg2 = rd32(MAILBOX_BASE + MBX_ARG2);
+                cmd_put_text(arg0, arg2, in_len, DATA_BASE);
                 break;
+            }
 
             case CMD_READ_INPUT:
                 cmd_read_input(DATA_BASE, DATA_LEN);
