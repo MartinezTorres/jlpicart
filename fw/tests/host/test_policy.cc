@@ -195,6 +195,41 @@ static void test_policy_verify_sealed_valid_hmac_passes() {
     CHECK(st.ok());
 }
 
+static void test_policy_verify_sealed_one_bit_mutation_fails() {
+    SecurityPosture posture = make_sealed_posture();
+
+    PolicyDocument doc = make_valid_sealed_doc(POLICY_DEV_DEFAULTS);
+    CHECK(policy_verify(doc, posture).ok());  // baseline: valid
+
+    // Flip one bit in the flags field. HMAC must now fail.
+    doc.flags ^= 1ULL;
+    DiagStatus st = policy_verify(doc, posture);
+    CHECK(!st.ok());
+    CHECK(st.code == DiagCode::POLICY_BAD_SIGNATURE);
+}
+
+static void test_policy_verify_sealed_wrong_key_fails() {
+    SecurityPosture posture = make_sealed_posture();
+
+    // Build a doc whose HMAC was computed with a different (wrong) key.
+    static const uint8_t kWrongKey[32] = {
+        0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,
+        0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,
+        0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,
+        0x18,0x19,0x1a,0x1b,0x1c,0x1d,0x1e,0x1f,
+    };
+    PolicyDocument doc = {};
+    doc.version = POLICY_VERSION_V1;
+    doc.flags   = POLICY_DEV_DEFAULTS;
+    uint8_t canonical[16];
+    policy_canonical_bytes(doc, canonical);
+    hmac_sha256(kWrongKey, sizeof(kWrongKey), canonical, sizeof(canonical), doc.hmac_tag);
+
+    DiagStatus st = policy_verify(doc, posture);
+    CHECK(!st.ok());
+    CHECK(st.code == DiagCode::POLICY_BAD_SIGNATURE);
+}
+
 // ---------------------------------------------------------------------------
 // PolicyStore host tests (via load_from_buffer)
 // ---------------------------------------------------------------------------
@@ -293,6 +328,8 @@ int main() {
     test_policy_verify_sealed_bad_hmac_fails();
     test_policy_verify_sealed_wrong_version_fails();
     test_policy_verify_sealed_valid_hmac_passes();
+    test_policy_verify_sealed_one_bit_mutation_fails();
+    test_policy_verify_sealed_wrong_key_fails();
     test_policy_store_dev_missing_policy_uses_dev_defaults();
     test_policy_store_dev_valid_doc_loads();
     test_policy_store_sealed_valid_hmac_loads();

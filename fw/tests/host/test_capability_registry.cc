@@ -127,6 +127,29 @@ static void test_list_allowed_matches_declared_in_stage3() {
     CHECK(nd == na);
 }
 
+static void test_list_declared_order_is_deterministic() {
+    // Board caps then driver caps, in declaration order.
+    // Must be stable across multiple calls.
+    CapabilityRegistry reg;
+    reg.init(kTestBoard, kTestDrivers, kTestDriverCount, make_policy(0));
+
+    const char* first[8] = {};
+    const char* second[8] = {};
+    size_t n1 = reg.list_declared(first,  8);
+    size_t n2 = reg.list_declared(second, 8);
+    CHECK(n1 == n2);
+    for (size_t i = 0; i < n1; i++) {
+        CHECK(strcmp(first[i], second[i]) == 0);
+    }
+
+    // Board caps appear before driver caps (insertion order).
+    CHECK(strcmp(first[0], "hw.alpha") == 0);
+    CHECK(strcmp(first[1], "hw.beta")  == 0);
+    CHECK(strcmp(first[2], "hw.gamma") == 0);
+    CHECK(strcmp(first[3], "drv.one")  == 0);
+    CHECK(strcmp(first[4], "drv.two")  == 0);
+}
+
 static void test_empty_board_and_no_drivers() {
     static const BoardDescriptor kEmpty = { "empty", nullptr, 0 };
     CapabilityRegistry reg;
@@ -162,6 +185,7 @@ int main() {
     test_list_declared_fills_array();
     test_list_declared_respects_max();
     test_list_allowed_matches_declared_in_stage3();
+    test_list_declared_order_is_deterministic();
     test_empty_board_and_no_drivers();
     test_real_board_descriptor();
     return test_summary();
