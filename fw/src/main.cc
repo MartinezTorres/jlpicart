@@ -1,20 +1,22 @@
-// JLPiCart firmware — Stage 4: API window v1 boot sequence.
+// JLPiCart firmware — Stage 5: Menu Host ABI + API window boot sequence.
 //
-// Boot order (spec.md §4.4, bootstrapping.md Stage 4):
+// Boot order (spec.md §4.4, bootstrapping.md Stage 5):
 //   1. diag/log init
 //   2. SecurityPosture (OTP read — once, never again)
 //   3. PolicyStore (flash read + HMAC verify)
 //   4. CapabilityRegistry (declared → allowed)
 //   5. ApiWindow init (header + rings)
-//   6. Print boot banner
-//   7. Service loop (poll request ring, dispatch, post response)
+//   6. MenuMailbox init (menu page header + mailbox registers)
+//   7. Print boot banner
+//   8. Service loop (poll request ring, dispatch, post response; tick mailbox)
 //
-// The API window is not yet mapped into the MSX bus — that integration
-// requires the bus loop (Stage 5).  Until then the window is initialised
-// and serviced from a software loop so host tests and emulator tests can
-// exercise the framing and service logic.
+// Neither the API window nor the menu page is yet wired into the MSX bus —
+// that integration belongs to Stage 6 (bus layer mapping).  Both objects are
+// initialised here so host tests and emulator tests can exercise the protocol
+// logic independently.
 //
-// TODO(stage5): map buf_ into MSX page 2 subslot 2 via bus layer.
+// TODO(stage6): map api_win.buf() into MSX page 2 subslot 2 via bus layer.
+// TODO(stage6): map menu_page into MSX page 1 subslot 1 and load menu_stub.rom.
 //
 // See fw/spec.md and fw/bootstrapping.md for context.
 
@@ -26,6 +28,7 @@
 #include "boards/board_descriptor.h"
 #include "drivers/driver_descriptor.h"
 #include "msx/api/api_window.h"
+#include "msx/menu/menu_host_abi.h"
 #include "pico/stdlib.h"
 #include <cstdio>
 
@@ -64,12 +67,18 @@ int main() {
                   kDriverDescriptors, kDriverDescriptorCount,
                   policy_store.info());
 
-    // 5. Init API window (16KB buffer; bus mapping added in Stage 5).
+    // 5. Init API window (16KB buffer; bus mapping added in Stage 6).
     ApiWindow api_win;
     api_win.init(posture, policy_store, registry);
     log_info("API window initialised");
 
-    // 6. Print boot banner to log (flushed to UART/OLED in later stages).
+    // 6. Init Menu mailbox (16KB page buffer; bus mapping and stub ROM load in Stage 6).
+    static uint8_t menu_page[MENU_PAGE_SIZE];
+    MenuMailbox menu_mbx;
+    menu_mbx.init(menu_page, MENU_DATA_OFS); // stub_entry = 0x0100 (page-relative)
+    log_info("Menu mailbox initialised");
+
+    // 7. Print boot banner to log (flushed to UART/OLED in later stages).
     {
         char buf[128];
         snprintf(buf, sizeof(buf),
@@ -81,10 +90,11 @@ int main() {
         log_info(buf);
     }
 
-    // 7. Service loop — poll the request ring and process one frame per iteration.
-    // TODO(stage5): replace with interrupt-driven or Core1 handler once bus is wired.
+    // 8. Service loop — poll the API request ring and tick the menu mailbox.
+    // TODO(stage6): replace with interrupt-driven or Core1 handler once bus is wired.
     while (true) {
         api_win.service_once();
+        menu_mbx.tick();
         tight_loop_contents();
     }
 }

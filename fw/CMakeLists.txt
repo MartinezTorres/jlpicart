@@ -60,6 +60,9 @@ add_executable(jlpicart
     # API window (Stage 4)
     src/msx/api/api_window.cc
     src/msx/api/services/core_service.cc
+
+    # Menu Host ABI (Stage 5)
+    src/msx/menu/menu_host_abi.cc
 )
 
 pico_set_program_name(jlpicart "jlpicart")

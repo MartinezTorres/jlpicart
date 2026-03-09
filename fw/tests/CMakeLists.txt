@@ -83,8 +83,9 @@ add_host_test(test_capability_registry
 # Stage 4 tests
 # ---------------------------------------------------------------------------
 
-set(SRC_API_WINDOW   "${FW_SRC}/msx/api/api_window.cc")
-set(SRC_CORE_SERVICE "${FW_SRC}/msx/api/services/core_service.cc")
+set(SRC_API_WINDOW    "${FW_SRC}/msx/api/api_window.cc")
+set(SRC_CORE_SERVICE  "${FW_SRC}/msx/api/services/core_service.cc")
+set(SRC_MENU_HOST_ABI "${FW_SRC}/msx/menu/menu_host_abi.cc")
 
 add_host_test(test_api_window
     host/test_api_window.cc
@@ -98,4 +99,13 @@ add_host_test(test_api_window
     ${SRC_POL_VERIFY}
     ${SRC_POL_STORE}
     ${SRC_POSTURE}
+)
+
+# ---------------------------------------------------------------------------
+# Stage 5 tests
+# ---------------------------------------------------------------------------
+
+add_host_test(test_menu_mailbox
+    host/test_menu_mailbox.cc
+    ${SRC_MENU_HOST_ABI}
 )
