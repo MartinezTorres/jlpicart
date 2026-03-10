@@ -29,6 +29,59 @@ uint32_t AppendLog::compute_crc(uint8_t type, uint16_t len, uint32_t seq,
 }
 
 // ---------------------------------------------------------------------------
+// scan_records — shared partition-walking helper
+// ---------------------------------------------------------------------------
+
+DiagStatus AppendLog::scan_records(IterCb cb, void* ctx,
+                                    uint32_t* write_ptr_out,
+                                    uint32_t* record_count_out,
+                                    uint32_t* next_seq_out) const
+{
+    uint32_t ptr          = 0;
+    uint32_t record_count = 0;
+    uint32_t next_seq     = 1;
+
+    while (ptr + sizeof(AppendLogHdr) <= part_size_) {
+        AppendLogHdr hdr;
+        DiagStatus s = dev_->read(part_ofs_ + ptr,
+                                   reinterpret_cast<uint8_t*>(&hdr),
+                                   sizeof(hdr));
+        if (!s.ok()) return s;
+
+        if (hdr.type == ALOG_TYPE_ERASED) break;  // end of written log
+        if (hdr.reserved != 0 || hdr.len > ALOG_MAX_PAYLOAD) break;  // corrupted tail
+        if (ptr + sizeof(AppendLogHdr) + hdr.len > part_size_) break;
+
+        uint8_t payload[ALOG_MAX_PAYLOAD];
+        if (hdr.len > 0) {
+            s = dev_->read(part_ofs_ + ptr + sizeof(AppendLogHdr),
+                           payload, hdr.len);
+            if (!s.ok()) return s;
+        }
+
+        uint32_t expected = compute_crc(hdr.type, hdr.len, hdr.seq,
+                                         hdr.len > 0 ? payload : nullptr);
+        if (expected != hdr.crc32) break;  // torn write at tail
+
+        ++record_count;
+        if (hdr.seq >= next_seq) next_seq = hdr.seq + 1u;
+
+        if (cb) {
+            bool cont = cb(hdr.type, hdr.seq,
+                           hdr.len > 0 ? payload : nullptr, hdr.len, ctx);
+            if (!cont) break;
+        }
+
+        ptr += static_cast<uint32_t>(sizeof(AppendLogHdr)) + hdr.len;
+    }
+
+    if (write_ptr_out)    *write_ptr_out    = ptr;
+    if (record_count_out) *record_count_out = record_count;
+    if (next_seq_out)     *next_seq_out     = next_seq;
+    return DiagStatus::success();
+}
+
+// ---------------------------------------------------------------------------
 // init — scan partition and establish write_ptr + next_seq
 // ---------------------------------------------------------------------------
 
@@ -42,43 +95,10 @@ DiagStatus AppendLog::init(FlashDevice& dev, uint32_t part_ofs, uint32_t part_si
     record_count_ = 0;
     initialized_  = false;
 
-    uint32_t ptr = 0;
-    while (ptr + sizeof(AppendLogHdr) <= part_size_) {
-        AppendLogHdr hdr;
-        DiagStatus s = dev_->read(part_ofs_ + ptr,
-                                   reinterpret_cast<uint8_t*>(&hdr),
-                                   sizeof(hdr));
-        if (!s.ok()) return s;
+    DiagStatus s = scan_records(nullptr, nullptr,
+                                 &write_ptr_, &record_count_, &next_seq_);
+    if (!s.ok()) return s;
 
-        if (hdr.type == ALOG_TYPE_ERASED) break;  // end of written log
-
-        if (hdr.reserved != 0 || hdr.len > ALOG_MAX_PAYLOAD) {
-            // Corrupted tail — stop.
-            break;
-        }
-        if (ptr + sizeof(AppendLogHdr) + hdr.len > part_size_) break;
-
-        // Read payload for CRC check.
-        uint8_t payload[ALOG_MAX_PAYLOAD];
-        if (hdr.len > 0) {
-            s = dev_->read(part_ofs_ + ptr + sizeof(AppendLogHdr),
-                           payload, hdr.len);
-            if (!s.ok()) return s;
-        }
-
-        uint32_t expected = compute_crc(hdr.type, hdr.len, hdr.seq,
-                                         hdr.len > 0 ? payload : nullptr);
-        if (expected != hdr.crc32) {
-            // CRC mismatch — torn write at tail: stop.
-            break;
-        }
-
-        ++record_count_;
-        if (hdr.seq >= next_seq_) next_seq_ = hdr.seq + 1u;
-        ptr += static_cast<uint32_t>(sizeof(AppendLogHdr)) + hdr.len;
-    }
-
-    write_ptr_   = ptr;
     initialized_ = true;
     return DiagStatus::success();
 }
@@ -90,7 +110,8 @@ DiagStatus AppendLog::init(FlashDevice& dev, uint32_t part_ofs, uint32_t part_si
 DiagStatus AppendLog::append(uint8_t type, const uint8_t* data, uint16_t len)
 {
     if (!initialized_) return DiagStatus::error(DiagCode::STORAGE_CORRUPT);
-    if (len > ALOG_MAX_PAYLOAD)  return DiagStatus::error(DiagCode::STORAGE_FULL);
+    if (type == ALOG_TYPE_ERASED) return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
+    if (len > ALOG_MAX_PAYLOAD)   return DiagStatus::error(DiagCode::STORAGE_FULL);
 
     uint32_t total = sizeof(AppendLogHdr) + len;
     if (write_ptr_ + total > part_size_) {
@@ -128,38 +149,5 @@ DiagStatus AppendLog::append(uint8_t type, const uint8_t* data, uint16_t len)
 DiagStatus AppendLog::iterate(IterCb cb, void* ctx) const
 {
     if (!initialized_) return DiagStatus::error(DiagCode::STORAGE_CORRUPT);
-
-    uint32_t ptr = 0;
-    while (ptr + sizeof(AppendLogHdr) <= part_size_) {
-        AppendLogHdr hdr;
-        DiagStatus s = dev_->read(part_ofs_ + ptr,
-                                   reinterpret_cast<uint8_t*>(&hdr),
-                                   sizeof(hdr));
-        if (!s.ok()) return s;
-
-        if (hdr.type == ALOG_TYPE_ERASED) break;
-        if (hdr.reserved != 0 || hdr.len > ALOG_MAX_PAYLOAD) break;
-        if (ptr + sizeof(AppendLogHdr) + hdr.len > part_size_) break;
-
-        uint8_t payload[ALOG_MAX_PAYLOAD];
-        if (hdr.len > 0) {
-            s = dev_->read(part_ofs_ + ptr + sizeof(AppendLogHdr),
-                           payload, hdr.len);
-            if (!s.ok()) return s;
-        }
-
-        uint32_t expected = compute_crc(hdr.type, hdr.len, hdr.seq,
-                                         hdr.len > 0 ? payload : nullptr);
-        if (expected != hdr.crc32) break;  // corrupted tail
-
-        if (cb) {
-            bool cont = cb(hdr.type, hdr.seq,
-                           hdr.len > 0 ? payload : nullptr, hdr.len, ctx);
-            if (!cont) break;
-        }
-
-        ptr += static_cast<uint32_t>(sizeof(AppendLogHdr)) + hdr.len;
-    }
-
-    return DiagStatus::success();
+    return scan_records(cb, ctx, nullptr, nullptr, nullptr);
 }

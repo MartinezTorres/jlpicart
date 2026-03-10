@@ -49,8 +49,9 @@ public:
     bool initialized() const { return initialized_; }
 
     // Look up `key` and copy its value into `val_out[0..max_val-1]`.
-    // Sets *val_len_out to the actual value length.
-    // Returns STORAGE_CORRUPT if the key is missing or the record is invalid.
+    // Sets *val_len_out to the actual value length (even on buffer-too-small error).
+    // Returns STORAGE_NOT_FOUND if key is absent, STORAGE_IO_ERROR if key is
+    // invalid or val_out is too small (needed size reported via *val_len_out).
     DiagStatus get(const char* key, uint8_t* val_out,
                    uint16_t* val_len_out, uint16_t max_val) const;
 

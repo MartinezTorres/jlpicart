@@ -6,7 +6,7 @@
 // policy_store.h — load, verify, and expose the signed policy document.
 //
 // Only this module parses policy blobs from flash. See bootstrapping.md Appendix.
-// Flash layout is temporary for Stage 3; stable partitioning is Stage 6.
+// Policy document lives at POLICY_FLASH_OFFSET in external flash (fixed XIP offset).
 
 class PolicyStore {
 public:
@@ -24,8 +24,7 @@ public:
 
 #ifndef JLPICART_HOST_TEST
     // Flash byte offset where the policy document is stored.
-    // Temporary for Stage 3 — will move to SYSTEM_KV partition in Stage 6.
-    // The offset is from the start of external flash (XIP base).
+    // Offset is from the start of external flash (XIP base).
     static constexpr uint32_t POLICY_FLASH_OFFSET = 0x1FF000u;  // last 4KB of 2MB
 #endif
 

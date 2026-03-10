@@ -46,6 +46,8 @@ public:
     bool initialized() const { return initialized_; }
 
     // Append one record.  Returns STORAGE_FULL if partition is exhausted.
+    // type must not be ALOG_TYPE_ERASED (0xFF) — that value is the end-of-log
+    // sentinel; writing it would silently truncate the log on the next init.
     DiagStatus append(uint8_t type, const uint8_t* data, uint16_t len);
 
     // Iterate all valid records in sequence order.
@@ -69,4 +71,13 @@ private:
 
     static uint32_t compute_crc(uint8_t type, uint16_t len, uint32_t seq,
                                  const uint8_t* data);
+
+    // Shared scan loop used by both init() and iterate().
+    // Walks valid records from the start of the partition.
+    // If cb is non-null, calls it for each record (early exit if it returns false).
+    // Output pointers (all nullable) receive the scan results.
+    DiagStatus scan_records(IterCb cb, void* ctx,
+                            uint32_t* write_ptr_out,
+                            uint32_t* record_count_out,
+                            uint32_t* next_seq_out) const;
 };
