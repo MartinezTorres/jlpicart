@@ -4,7 +4,7 @@
 #include "content/collection_format.h"
 #include "content/manifest.h"
 #include "content/manifest_parser.h"
-#include "content/installer_usb.h"
+#include "content/installer.h"
 #include "content/receipts.h"
 #include "storage/flash_device.h"
 #include "storage/flash_layout.h"
@@ -14,6 +14,7 @@
 #include "spine/security_posture.h"
 #include "crypto/sha256.h"
 
+#include <cassert>
 #include <cstdio>
 #include <cstring>
 
@@ -129,7 +130,8 @@ struct MemFile {
 class MemoryInstallReader : public InstallReader {
 public:
     void add_file(const char* path, const uint8_t* data, size_t len) {
-        if (count_ < 16) files_[count_++] = {path, data, len};
+        assert(count_ < 16 && "MemoryInstallReader: too many files");
+        files_[count_++] = {path, data, len};
     }
     void add_text(const char* path, const char* text) {
         add_file(path, reinterpret_cast<const uint8_t*>(text), strlen(text));
@@ -473,20 +475,11 @@ static void test_install_power_loss_before_commit() {
     // We allow 24 + 375 = 399 bytes, cutting off just before the commit.
     FlashDevice flash(TEST_KV_SIZE + TEST_LOG_SIZE);
 
-    // Phase 1: normal install sets up the store.
+    // Allow all bytes for "col.state"="pending" (24 B) + "col.record" (375 B),
+    // then cut before the "active" commit write (third put, another 24 B).
+    //   "col.state"="pending": hdr(8) + key(9) + val(7) = 24 bytes
+    //   "col.record"=record:   hdr(8) + key(10) + val(357) = 375 bytes
     {
-        KvStore kv;  kv.init(flash, 0, TEST_KV_SIZE);
-        AppendLog log; log.init(flash, TEST_KV_SIZE, TEST_LOG_SIZE);
-        // (No install yet — just initialise the partitions.)
-    }
-
-    // Phase 2: install with power loss injected before the commit write.
-    {
-        // First two kv.put() calls: "col.state"="pending" + "col.record"=record.
-        // Each KvStore write() call writes sizeof(KvRecordHdr)+key+val bytes.
-        // "col.state"="pending": hdr(8) + 9 + 7 = 24 bytes
-        // "col.record"=record:   hdr(8) + 10 + 357 = 375 bytes
-        // Allow all of those (399 bytes), then cut the third write.
         flash.inject_power_loss_after(399);
 
         MemoryInstallReader reader;
@@ -499,7 +492,7 @@ static void test_install_power_loss_before_commit() {
         installer.run(reader, kv, log, policy, result); // may fail — that's expected
     }
 
-    // Phase 3: reinit — must see NO active collection.
+    // Reinit — must see NO active collection.
     KvStore kv3;
     CHECK_OK(kv3.init(flash, 0, TEST_KV_SIZE));
 

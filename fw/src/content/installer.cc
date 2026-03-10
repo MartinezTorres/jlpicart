@@ -1,4 +1,4 @@
-// installer_usb.cc — Collection install engine.
+// installer.cc — Collection install engine.
 //
 // USB-specific scanning (/JLPICART/INSTALL/*/) is deferred to the bus-layer
 // stage when the USB host stack (tinyusb) is integrated.  This file contains
@@ -18,7 +18,7 @@
 //   Installing a new collection discards the old record.  Two-slot
 //   preservation of the previous collection is a TODO for Stage 7+.
 
-#include "content/installer_usb.h"
+#include "content/installer.h"
 #include "content/manifest_parser.h"
 #include "content/receipts.h"
 #include "crypto/sha256.h"
@@ -46,57 +46,31 @@ static DiagStatus verify_bundle_hashes(InstallReader& reader,
 }
 
 // Build a CollectionRecord from a parsed manifest.
+// Field sizes are identical in CollectionManifest and CollectionRecord (same constants).
+// The parser already guarantees every string fits within its field's bounds.
 static void manifest_to_record(const CollectionManifest& m, CollectionRecord& rec)
 {
     memset(&rec, 0, sizeof(rec));
-    // strncpy with explicit NUL termination is safe here because all dst
-    // buffers are one byte larger than the corresponding source max lengths.
-    // (COL_ID_MAX=64 == sizeof(rec.collection_id); they match, so we use
-    //  memcpy and ensure NUL via the memset above.)
-    size_t id_len = strlen(m.collection_id);
-    if (id_len >= sizeof(rec.collection_id)) id_len = sizeof(rec.collection_id) - 1u;
-    memcpy(rec.collection_id, m.collection_id, id_len);
-
-    size_t ver_len = strlen(m.version);
-    if (ver_len >= sizeof(rec.version)) ver_len = sizeof(rec.version) - 1u;
-    memcpy(rec.version, m.version, ver_len);
-
-    size_t pub_len = strlen(m.publisher_id);
-    if (pub_len >= sizeof(rec.publisher_id)) pub_len = sizeof(rec.publisher_id) - 1u;
-    memcpy(rec.publisher_id, m.publisher_id, pub_len);
-
-    size_t title_len = strlen(m.title);
-    if (title_len >= sizeof(rec.title)) title_len = sizeof(rec.title) - 1u;
-    memcpy(rec.title, m.title, title_len);
-
+    memcpy(rec.collection_id,      m.collection_id,      sizeof(rec.collection_id));
+    memcpy(rec.version,            m.version,            sizeof(rec.version));
+    memcpy(rec.publisher_id,       m.publisher_id,       sizeof(rec.publisher_id));
+    memcpy(rec.title,              m.title,              sizeof(rec.title));
     rec.boot_mode     = m.boot_mode;
     rec.payload_count = m.payload_count;
-
-    size_t dpid_len = strlen(m.default_payload_id);
-    if (dpid_len >= sizeof(rec.default_payload_id)) dpid_len = sizeof(rec.default_payload_id) - 1u;
-    memcpy(rec.default_payload_id, m.default_payload_id, dpid_len);
+    memcpy(rec.default_payload_id, m.default_payload_id, sizeof(rec.default_payload_id));
 }
 
 // Build a failure receipt and append it to the log.
+// manifest_sha256 may be null if the manifest was never successfully hashed.
 static void write_failure_receipt(AppendLog& log, const char* collection_id,
                                    const char* version, const char* publisher_id,
-                                   const uint8_t manifest_sha256[SHA256_DIGEST_SIZE],
+                                   const uint8_t* manifest_sha256,
                                    DiagCode reason)
 {
     InstallReceiptData rec = {};
-    size_t len;
-    len = strlen(collection_id);
-    if (len >= sizeof(rec.collection_id)) len = sizeof(rec.collection_id) - 1u;
-    memcpy(rec.collection_id, collection_id, len);
-
-    len = strlen(version);
-    if (len >= sizeof(rec.version)) len = sizeof(rec.version) - 1u;
-    memcpy(rec.version, version, len);
-
-    len = strlen(publisher_id);
-    if (len >= sizeof(rec.publisher_id)) len = sizeof(rec.publisher_id) - 1u;
-    memcpy(rec.publisher_id, publisher_id, len);
-
+    strncpy(rec.collection_id, collection_id, sizeof(rec.collection_id) - 1u);
+    strncpy(rec.version,       version,       sizeof(rec.version)       - 1u);
+    strncpy(rec.publisher_id,  publisher_id,  sizeof(rec.publisher_id)  - 1u);
     rec.diag_code = static_cast<uint16_t>(reason);
     rec.installed  = 0u;
     if (manifest_sha256) memcpy(rec.manifest_sha256, manifest_sha256, SHA256_DIGEST_SIZE);
@@ -145,16 +119,8 @@ DiagStatus Installer::run(InstallReader& reader,
     }
 
     // Record identity in result for the caller and receipts.
-    {
-        size_t n = strlen(manifest.collection_id);
-        if (n >= sizeof(result_out.collection_id)) n = sizeof(result_out.collection_id) - 1u;
-        memcpy(result_out.collection_id, manifest.collection_id, n);
-    }
-    {
-        size_t n = strlen(manifest.version);
-        if (n >= sizeof(result_out.version)) n = sizeof(result_out.version) - 1u;
-        memcpy(result_out.version, manifest.version, n);
-    }
+    memcpy(result_out.collection_id, manifest.collection_id, sizeof(result_out.collection_id));
+    memcpy(result_out.version,       manifest.version,       sizeof(result_out.version));
 
     // Compute SHA-256 of the manifest bytes (used in the receipt).
     sha256(manifest_buf, manifest_len, result_out.manifest_sha256);
@@ -288,19 +254,9 @@ DiagStatus Installer::run(InstallReader& reader,
     // ------------------------------------------------------------------
     {
         InstallReceiptData receipt = {};
-        size_t n;
-        n = strlen(manifest.collection_id);
-        if (n >= sizeof(receipt.collection_id)) n = sizeof(receipt.collection_id) - 1u;
-        memcpy(receipt.collection_id, manifest.collection_id, n);
-
-        n = strlen(manifest.version);
-        if (n >= sizeof(receipt.version)) n = sizeof(receipt.version) - 1u;
-        memcpy(receipt.version, manifest.version, n);
-
-        n = strlen(manifest.publisher_id);
-        if (n >= sizeof(receipt.publisher_id)) n = sizeof(receipt.publisher_id) - 1u;
-        memcpy(receipt.publisher_id, manifest.publisher_id, n);
-
+        memcpy(receipt.collection_id, manifest.collection_id, sizeof(receipt.collection_id));
+        memcpy(receipt.version,       manifest.version,       sizeof(receipt.version));
+        memcpy(receipt.publisher_id,  manifest.publisher_id,  sizeof(receipt.publisher_id));
         receipt.diag_code = 0u;
         receipt.installed  = 1u;
         memcpy(receipt.manifest_sha256, result_out.manifest_sha256, SHA256_DIGEST_SIZE);

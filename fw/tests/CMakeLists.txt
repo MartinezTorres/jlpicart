@@ -133,7 +133,7 @@ add_host_test(test_storage
 # ---------------------------------------------------------------------------
 
 set(SRC_MANIFEST_PARSER "${FW_SRC}/content/manifest_parser.cc")
-set(SRC_INSTALLER       "${FW_SRC}/content/installer_usb.cc")
+set(SRC_INSTALLER       "${FW_SRC}/content/installer.cc")
 set(SRC_RECEIPTS        "${FW_SRC}/content/receipts.cc")
 
 add_host_test(test_collections

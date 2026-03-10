@@ -10,7 +10,6 @@
 
 #include "diag/diag.h"
 #include "content/manifest.h"
-#include "content/collection_format.h"
 
 // Parse a manifest.json document into `out`.
 // `json` must be a valid UTF-8 string of `len` bytes.

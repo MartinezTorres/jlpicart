@@ -2,7 +2,6 @@
 // collection_format.h — Collection bundle layout constants and types.
 // See spec.md §6.1 (Collection format contract v1) and §6.2 (Manifest contract).
 
-#include "diag/diag.h"
 #include <cstdint>
 #include <cstddef>
 

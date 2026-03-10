@@ -1,5 +1,5 @@
 #pragma once
-// installer_usb.h — Collection installer: abstract file reader + install engine.
+// installer.h — Collection installer: abstract file reader + install engine.
 //
 // The Installer is source-agnostic: it reads bundle files through the
 // InstallReader interface so the same logic can be tested with in-memory

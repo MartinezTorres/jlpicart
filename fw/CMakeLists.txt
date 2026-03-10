@@ -72,7 +72,7 @@ add_executable(jlpicart
 
     # Collections (Stage 7)
     src/content/manifest_parser.cc
-    src/content/installer_usb.cc
+    src/content/installer.cc
     src/content/receipts.cc
 )
 

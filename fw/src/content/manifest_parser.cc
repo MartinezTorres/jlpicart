@@ -62,6 +62,8 @@ struct Scanner {
                         char esc = src[pos++];
                         switch (esc) {
                             case '"': case '\\': case '/': ch = esc; break;
+                            case 'b': ch = '\b'; break;
+                            case 'f': ch = '\f'; break;
                             case 'n': ch = '\n'; break;
                             case 'r': ch = '\r'; break;
                             case 't': ch = '\t'; break;
@@ -265,6 +267,8 @@ static DiagStatus parse_boot_body(Scanner& s, CollectionManifest& m) {
         if (t == Tok::COMMA) t = s.next();
         else if (t != Tok::RBRACE) return kBadManifest;
     }
+    // direct boot requires a target payload (spec §6.3.1).
+    if (m.boot_mode == 1u && m.default_payload_id[0] == '\0') return kBadManifest;
     return DiagStatus::success();
 }
 
