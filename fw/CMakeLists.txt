@@ -69,6 +69,11 @@ add_executable(jlpicart
     src/storage/kv_store.cc
     src/storage/append_log.cc
     src/storage/storage_health.cc
+
+    # Collections (Stage 7)
+    src/content/manifest_parser.cc
+    src/content/installer_usb.cc
+    src/content/receipts.cc
 )
 
 pico_set_program_name(jlpicart "jlpicart")

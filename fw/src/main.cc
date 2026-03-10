@@ -1,4 +1,4 @@
-// JLPiCart firmware — Stage 6: Storage substrate + Menu Host ABI + API window.
+// JLPiCart firmware — Stage 7: Collections v1 (format, manifest, install, receipts).
 //
 // Boot order (spec.md §4.4, bootstrapping.md Stage 6):
 //   1. diag/log init
@@ -132,7 +132,12 @@ int main() {
         log_info(buf);
     }
 
-    // 10. Service loop — poll the API request ring and tick the menu mailbox.
+    // 10. Collection install from USB (Stage 7 — USB host not yet integrated).
+    // TODO(usb-host): wire UsbInstallScanner here once tinyusb is integrated.
+    // Until then, the installer is exercised via host tests only.
+    log_info("collection install: USB host not integrated (TODO(usb-host))");
+
+    // 11. Service loop — poll the API request ring and tick the menu mailbox.
     // TODO(bus-layer): replace with interrupt-driven or Core1 handler once bus is wired.
     while (true) {
         api_win.service_once();

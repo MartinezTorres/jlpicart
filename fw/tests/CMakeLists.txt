@@ -127,3 +127,26 @@ add_host_test(test_storage
     ${SRC_STORAGE_HEALTH}
     ${SRC_DIAG}
 )
+
+# ---------------------------------------------------------------------------
+# Stage 7 tests
+# ---------------------------------------------------------------------------
+
+set(SRC_MANIFEST_PARSER "${FW_SRC}/content/manifest_parser.cc")
+set(SRC_INSTALLER       "${FW_SRC}/content/installer_usb.cc")
+set(SRC_RECEIPTS        "${FW_SRC}/content/receipts.cc")
+
+add_host_test(test_collections
+    host/test_collections.cc
+    ${SRC_MANIFEST_PARSER}
+    ${SRC_INSTALLER}
+    ${SRC_RECEIPTS}
+    ${SRC_KV_STORE}
+    ${SRC_APPEND_LOG}
+    ${SRC_FLASH_DEVICE}
+    ${SRC_DIAG}
+    ${SRC_SHA256}
+    ${SRC_POL_VERIFY}
+    ${SRC_POL_STORE}
+    ${SRC_POSTURE}
+)
