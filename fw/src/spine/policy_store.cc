@@ -54,7 +54,9 @@ DiagStatus PolicyStore::load_from_buffer(const uint8_t* buf, size_t len,
 }
 
 DiagStatus PolicyStore::load(const SecurityPosture& /*posture*/) {
-    // Host tests must use load_from_buffer(); calling load() on host is an error.
+    // Host build: no flash available.  Callers that want to test policy
+    // verification should use load_from_buffer().  Callers that deliberately
+    // call load() (e.g. test_collections) get safe defaults, which is correct.
     initialized_ = true;
     apply_safe_defaults();
     return DiagStatus::error(DiagCode::POLICY_FLASH_READ_ERROR);

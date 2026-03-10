@@ -8,7 +8,8 @@
 // HardwareOtpReader reads from the RP2350 OTP data guarded window.
 // The OTP data window at OTP_DATA_GUARDED_BASE maps each 24-bit row to a
 // 32-bit word (lower 24 bits = ECC-corrected data, upper 8 = ECC redundancy).
-// Reads that fail ECC return 0xFFFFFFFF; guarded reads raise a bus fault.
+// OTP_DATA_BASE (unguarded): ECC failures return 0xFFFFFFFF silently.
+// OTP_DATA_GUARDED_BASE (used here): ECC failures raise a bus fault (HardFault).
 
 class HardwareOtpReader : public OtpReader {
 public:

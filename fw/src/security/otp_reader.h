@@ -13,8 +13,8 @@
 // agent rules in bootstrapping.md (Appendix).
 //
 // Two backends exist:
-//   - HardwareOtpReader (fw/src/security/otp_reader_hw.cc)  — firmware only
-//   - FakeOtpReader     (fw/src/security/otp_reader_fake.h) — host tests only
+//   - HardwareOtpReader (fw/src/security/otp_reader_hw.cc) — firmware only
+//   - FakeOtpReader     (defined below in this header)      — host tests only
 
 class OtpReader {
 public:
@@ -80,16 +80,18 @@ private:
     size_t         len_;
 };
 
-// Inline helpers
+// Inline helpers.
+// read_bytes() failures return 0 — callers in SecurityPosture treat 0 bits
+// as "feature not set", which is the safe/dev (non-enforced) behaviour.
 inline uint8_t OtpReader::read_u8(uint32_t byte_offset) const {
     uint8_t v = 0;
-    read_bytes(byte_offset, &v, 1);
+    (void)read_bytes(byte_offset, &v, 1);
     return v;
 }
 
 inline uint32_t OtpReader::read_u24(uint32_t byte_offset) const {
     uint8_t buf[3] = {};
-    read_bytes(byte_offset, buf, 3);
+    (void)read_bytes(byte_offset, buf, 3);
     return static_cast<uint32_t>(buf[0])
          | (static_cast<uint32_t>(buf[1]) << 8)
          | (static_cast<uint32_t>(buf[2]) << 16);

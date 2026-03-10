@@ -156,23 +156,36 @@ bool ApiWindow::ring_pop_msg(uint16_t ring_ofs, uint8_t* dst, uint16_t dst_max,
 
     *out_msg_len = 0;
 
-    // Skip at most one wrap marker (frame_len == 0), then read the real frame.
+    const uint16_t head = rh.head;
+    uint16_t tail = rh.tail;
+
+    if (head == tail) return false; // empty
+
+    // If fewer than 2 bytes remain to end-of-ring, the producer wrapped head
+    // without writing a marker (to_end < 2 in ring_push_msg). Mirror that wrap.
+    if ((uint16_t)(size - tail) < 2u) {
+        tail = 0;
+        rh.tail = 0;
+        if (head == tail) return false;
+    }
+
+    // Read frame_len (little-endian u16). frame_len == 0 is a wrap marker.
+    // Bounds are guaranteed: size - tail >= 2 from the check above.
+    uint16_t frame_len = (uint16_t)(data[tail] | ((uint16_t)data[tail + 1] << 8u));
+
+    // Skip at most one wrap marker (frame_len == 0).
     // A well-formed ring has at most one wrap marker before a data frame.
-    uint16_t frame_len = 0;
-    uint16_t tail      = 0;
-    for (;;) {
-        const uint16_t head = rh.head;
-        tail = rh.tail;
-        if (head == tail) return false; // empty
-
+    if (frame_len == 0) {
+        tail = 0;
+        rh.tail = 0;
+        if (head == tail) return false;
+        if ((uint16_t)(size - tail) < 2u) return false; // malformed
         frame_len = (uint16_t)(data[tail] | ((uint16_t)data[tail + 1] << 8u));
-        if (frame_len != 0) break;
-
-        rh.tail = 0; // wrap marker: jump consumer to start
+        if (frame_len == 0) return false; // two consecutive markers: malformed
     }
 
     if (frame_len < 2u) {
-        // Malformed: consume 2 bytes and return.
+        // frame_len == 1 is malformed: consume 2 bytes and return.
         rh.tail = (uint16_t)((tail + 2u) % size);
         return true; // *out_msg_len stays 0
     }

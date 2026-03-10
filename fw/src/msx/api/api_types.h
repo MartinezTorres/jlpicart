@@ -162,7 +162,7 @@ static constexpr uint8_t SYS_GET_SECURITY_INFO = 0x05u;
 static constexpr uint8_t SYS_GET_POLICY_FLAGS  = 0x06u;
 
 // ---------------------------------------------------------------------------
-// posture_props bitfield  (spec.md §2486 "Posture properties (OTP-derived)")
+// posture_props bitfield  (spec.md "Posture properties (OTP-derived)")
 //
 // Bit assignments are authoritative here; the spec says "see spec table" but
 // does not yet define one.  These bits are normative from Stage 4 onward.

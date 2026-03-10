@@ -15,7 +15,7 @@ static LogEntry s_ring[LOG_RING_ENTRIES];
 static size_t   s_head  = 0;   // index of next slot to write
 static size_t   s_count = 0;   // number of valid entries
 static uint32_t s_seq   = 0;   // monotonic counter
-static size_t   s_flush_cursor = 0; // next entry index to flush
+static uint32_t s_flush_cursor = 0; // next seq to flush (compared against e.seq)
 
 void log_init() {
     s_head         = 0;
@@ -30,9 +30,9 @@ void log_write(LogLevel level, const char* msg) {
     e.seq   = s_seq++;
     size_t len = 0;
     if (msg) {
-        len = __builtin_strlen(msg);
+        len = strlen(msg);
         if (len > LOG_MSG_MAX) len = LOG_MSG_MAX;
-        __builtin_memcpy(e.msg, msg, len);
+        memcpy(e.msg, msg, len);
     }
     e.msg[len] = '\0';
 
@@ -65,13 +65,7 @@ void log_flush_uart() {
     for (size_t i = 0; i < s_count; i++) {
         const LogEntry& e = s_ring[(start + i) % LOG_RING_ENTRIES];
         if (e.seq < s_flush_cursor) continue;
-
-#ifdef JLPICART_HOST_TEST
         printf("[%s] %s\n", level_str(e.level), e.msg);
-#else
-        // On firmware, stdio_uart must be enabled for output to appear.
-        printf("[%s] %s\n", level_str(e.level), e.msg);
-#endif
     }
     s_flush_cursor = s_seq;
 }

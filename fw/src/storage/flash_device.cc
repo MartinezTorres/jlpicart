@@ -125,6 +125,9 @@ DiagStatus FlashDevice::write(uint32_t offset, const uint8_t* src, size_t len)
         flash_range_program(page, staging, FLASH_PAGE_SIZE);
         page += FLASH_PAGE_SIZE;
     }
+    // Invalidate the XIP cache so subsequent reads through the XIP window
+    // return the newly programmed data rather than stale cached contents.
+    flash_flush_cache();
     return DiagStatus::success();
 }
 

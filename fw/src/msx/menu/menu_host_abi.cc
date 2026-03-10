@@ -73,7 +73,13 @@ bool MenuMailbox::send_command(uint16_t cmd_id,
     }
 
     // Signal the stub: write cmd_seq last.
-    // On real hardware a DMB (data memory barrier) should precede this write.
+    // DMB ensures all preceding field writes are visible before the sequence
+    // number update.  On host tests a compiler barrier suffices.
+#ifndef JLPICART_HOST_TEST
+    __asm__ volatile ("dmb" ::: "memory");
+#else
+    __asm__ volatile ("" ::: "memory");
+#endif
     mbx_->cmd_seq = static_cast<uint16_t>(mbx_->cmd_seq + 1u);
 
     pending_ = true;
@@ -95,6 +101,12 @@ bool MenuMailbox::tick()
         return false; // still waiting
     }
 
+    // DMB: ensure resp_seq observation is ordered before reading status/out_len.
+#ifndef JLPICART_HOST_TEST
+    __asm__ volatile ("dmb" ::: "memory");
+#else
+    __asm__ volatile ("" ::: "memory");
+#endif
     last_status_  = mbx_->status;
     last_out_len_ = mbx_->out_len;
     pending_      = false;

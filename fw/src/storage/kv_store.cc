@@ -3,7 +3,6 @@
 #include "storage/kv_store.h"
 #include "crypto/crc32.h"
 #include <cstring>
-#include <algorithm>
 
 // ---------------------------------------------------------------------------
 // CRC helper: compute over {type, key_len, val_len (LE), key[], val[]}
@@ -152,18 +151,21 @@ DiagStatus KvStore::get(const char* key, uint8_t* val_out,
 
     size_t key_len = strlen(key);
     if (key_len == 0 || key_len > KV_MAX_KEY_LEN) {
-        return DiagStatus::error(DiagCode::STORAGE_CORRUPT);
+        return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
     }
 
     const IndexEntry* entry = find_entry(key, static_cast<uint8_t>(key_len));
     if (!entry) return DiagStatus::error(DiagCode::STORAGE_NOT_FOUND);
 
-    uint16_t copy_len = std::min(entry->val_len, max_val);
-    if (copy_len > 0) {
+    if (entry->val_len > max_val) {
+        if (val_len_out) *val_len_out = entry->val_len; // report needed size
+        return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
+    }
+    if (entry->val_len > 0) {
         uint32_t val_ofs = part_ofs_ + entry->record_ofs
                          + sizeof(KvRecordHdr)
                          + entry->key_len;
-        DiagStatus s = dev_->read(val_ofs, val_out, copy_len);
+        DiagStatus s = dev_->read(val_ofs, val_out, entry->val_len);
         if (!s.ok()) return s;
     }
     if (val_len_out) *val_len_out = entry->val_len;
@@ -216,7 +218,7 @@ DiagStatus KvStore::put(const char* key, const uint8_t* val, uint16_t val_len)
 
     size_t key_len = strlen(key);
     if (key_len == 0 || key_len > KV_MAX_KEY_LEN) {
-        return DiagStatus::error(DiagCode::STORAGE_CORRUPT);
+        return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
     }
     if (val_len > KV_MAX_VAL_LEN) return DiagStatus::error(DiagCode::STORAGE_FULL);
 
@@ -251,7 +253,7 @@ DiagStatus KvStore::del(const char* key)
 
     size_t key_len = strlen(key);
     if (key_len == 0 || key_len > KV_MAX_KEY_LEN) {
-        return DiagStatus::error(DiagCode::STORAGE_CORRUPT);
+        return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
     }
 
     IndexEntry* entry = find_entry(key, static_cast<uint8_t>(key_len));

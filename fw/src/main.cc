@@ -10,7 +10,8 @@
 //   7. MenuMailbox init (menu page header + mailbox registers)
 //   8. Append BOOT record to EVENT_LOG
 //   9. Print boot banner
-//  10. Service loop (poll request ring, dispatch, post response; tick mailbox)
+//  10. Collection install from USB (TODO: deferred to usb-host stage)
+//  11. Service loop (poll request ring, dispatch, post response; tick mailbox)
 //
 // Neither the API window nor the menu page is yet wired into the MSX bus —
 // that integration belongs to the bus-layer stage.  Both objects are

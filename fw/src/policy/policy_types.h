@@ -1,6 +1,5 @@
 #pragma once
 #include <cstdint>
-#include <cstring>
 
 // policy_types.h — policy flags and metadata for JLPiCart.
 //

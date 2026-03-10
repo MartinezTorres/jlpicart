@@ -74,7 +74,6 @@ static void handle_get_api_info(const MsgHeader& req, ApiWindow& win,
 static void handle_get_caps(const MsgHeader& req, ApiWindow& win,
                              const CapabilityRegistry& registry)
 {
-    static constexpr size_t kMaxCaps = 32;
     const size_t count = registry.allowed_count();
 
     // Build payload: u16 count + count × CapEntry.
@@ -84,7 +83,7 @@ static void handle_get_caps(const MsgHeader& req, ApiWindow& win,
         return;
     }
 
-    uint8_t payload[2 + kMaxCaps * sizeof(CapEntry)];
+    uint8_t payload[2 + CAPABILITY_REGISTRY_MAX * sizeof(CapEntry)];
     payload[0] = static_cast<uint8_t>(count & 0xFFu);
     payload[1] = static_cast<uint8_t>(count >> 8u);
 
