@@ -11,6 +11,12 @@
 #include "allocator/allocator.h"
 #include "content/manifest.h"
 
+// Compile-time guard: CAP_ID_MAX and PAYLOAD_CAP_ID_MAX must stay in sync.
+// If either changes, this fires immediately rather than silently corrupting
+// capability id strings in requested_from_manifest().
+static_assert(CAP_ID_MAX == PAYLOAD_CAP_ID_MAX,
+              "CAP_ID_MAX and PAYLOAD_CAP_ID_MAX must be equal");
+
 // Build a RequestedCapabilities struct from one payload entry in a manifest.
 //
 // If payload_index is out of range, or the payload has no capability

@@ -1,5 +1,6 @@
 #pragma once
 #include <cstddef>
+#include "allocator/resource_model.h"
 #include "boards/board_descriptor.h"
 #include "drivers/driver_descriptor.h"
 #include "policy/policy_types.h"
@@ -18,8 +19,6 @@
 // This is the single query surface for "what exists and is permitted".
 // No other module queries board descriptors or driver tables directly.
 // See spec.md §5.1 and bootstrapping.md Appendix.
-
-#include "allocator/resource_model.h"
 
 static constexpr size_t CAPABILITY_REGISTRY_MAX = 32;
 

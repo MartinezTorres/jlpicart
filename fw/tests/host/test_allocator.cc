@@ -160,30 +160,14 @@ static void test_optional_requirement_missing() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 6: hard requirement policy-disabled → POLICY_DISABLED, plan.ok=false
+// Test 6: hard requirement SW capability with exhausted budget → ALLOC_FAILED,
+//         plan.ok=false.
+//
+// Note: the POLICY_DISABLED branch in the allocator requires a policy that
+// actually masks a capability.  is_masked_by_policy() is currently a no-op
+// (Stage 8); a dedicated POLICY_DISABLED test belongs in Stage 9+ when the
+// first capability gets policy-gated.
 // ---------------------------------------------------------------------------
-
-// A policy that blocks hw.gamma.
-struct BlockGammaPolicy {};
-
-// We need a custom board/driver setup and a CapabilityRegistry that treats
-// hw.gamma as masked.  Simplest: build a registry and then directly test
-// a capability that is declared-but-not-allowed.  We achieve "not allowed"
-// by calling mark_activated/is_allowed.  But CapabilityRegistry doesn't
-// expose a direct way to set allowed=false without a policy hook.
-//
-// Instead: use a board with only hw.gamma, and a driver table with sw.zero.
-// We'll confirm POLICY_DISABLED works via the existing policy masking hook
-// (which is currently a no-op).  For Stage 8, we test the branch by using
-// a fresh registry where we can observe the logic.
-//
-// The policy masking is tested at the CapabilityRegistry level in
-// test_capability_registry.cc.  Here we focus on the allocator's response
-// to a not-allowed capability.
-//
-// Approach: request a SW capability that has huge resource requirements
-// so it fails via ALLOC_FAILED (same branch, different error kind).
-// This tests the allocator's non-activation path for a hard requirement.
 static void test_hard_requirement_alloc_failed() {
     // Build a registry with only sw.heavy (300 KB).
     static const DriverDescriptor kHeavyOnly[] = {
