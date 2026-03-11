@@ -10,6 +10,10 @@
 static constexpr size_t PAYLOAD_CAPS_MAX    = 4;
 static constexpr size_t PAYLOAD_CAP_ID_MAX  = 64;
 
+// Max length of the "mapper_type" string in a payload entry (Stage 9).
+// Must accommodate all MapperType canonical strings (longest: "rom_32k_mirrored" = 16).
+static constexpr size_t PAYLOAD_MAPPER_TYPE_MAX = 24;
+
 struct PayloadEntry {
     char payload_id[PAYLOAD_ID_MAX];
     char path[PAYLOAD_PATH_MAX];
@@ -22,6 +26,13 @@ struct PayloadEntry {
     uint8_t required_cap_count;
     char    optional_capabilities[PAYLOAD_CAPS_MAX][PAYLOAD_CAP_ID_MAX];
     uint8_t optional_cap_count;
+
+    // Mapper configuration (Stage 9).  Parsed from payload JSON fields
+    // "mapper_type" (string) and "subslot" (integer 0–3).
+    // mapper_type="" and subslot=0 are the defaults (no mapper configured).
+    // See bus/mapping_plan.h for MapperType and mapper_plan_from_manifest().
+    char    mapper_type[PAYLOAD_MAPPER_TYPE_MAX];  // "" = not specified (NONE)
+    uint8_t subslot;                               // 0–3 (default 0)
 };
 
 struct CollectionManifest {

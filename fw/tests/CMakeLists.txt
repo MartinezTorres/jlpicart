@@ -139,6 +139,8 @@ set(SRC_RESOURCE_MODEL  "${FW_SRC}/allocator/resource_model.cc")
 set(SRC_ALLOCATOR       "${FW_SRC}/allocator/allocator.cc")
 set(SRC_ACTIVATION      "${FW_SRC}/spine/activation.cc")
 set(SRC_PERIPH_MGR      "${FW_SRC}/peripherals/peripheral_manager.cc")
+set(SRC_MAPPERS         "${FW_SRC}/mappers/mappers.cc")
+set(SRC_MAPPING_PLAN    "${FW_SRC}/bus/mapping_plan.cc")
 
 # ---------------------------------------------------------------------------
 # Stage 8 tests
@@ -150,12 +152,28 @@ add_host_test(test_allocator
     ${SRC_ALLOCATOR}
     ${SRC_ACTIVATION}
     ${SRC_PERIPH_MGR}
+    ${SRC_MAPPERS}
+    ${SRC_MAPPING_PLAN}
     ${SRC_CAP_REG}
     ${SRC_BOARD_DESC}
     ${SRC_DRV_TABLE}
     ${SRC_MANIFEST_PARSER}
     ${SRC_LOG}
     ${SRC_DIAG}
+)
+
+# ---------------------------------------------------------------------------
+# Stage 9 tests
+# ---------------------------------------------------------------------------
+
+add_host_test(test_bus_mapper
+    host/test_bus_mapper.cc
+    ${SRC_MAPPERS}
+    ${SRC_MAPPING_PLAN}
+    ${SRC_MANIFEST_PARSER}
+    ${SRC_DIAG}
+    # Note: bus.cc (Core 0 hardware loop) is intentionally excluded here.
+    # It only compiles for the RP2350 target.
 )
 
 add_host_test(test_collections

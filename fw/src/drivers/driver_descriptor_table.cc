@@ -11,12 +11,17 @@ const DriverDescriptor kDriverDescriptors[] = {
     // Core API service — always present; provides core.ping, core.get_info, etc.
     { "api.core" },
 
+    // MSX mapper emulation (Stage 9).  No SRAM budget: ROM lives in XIP flash and
+    // mapper register state is negligible.  Mapper type (ROM/Konami/ASCII8/…) is
+    // specified per-payload in the Collection manifest, not in this descriptor.
+    // See bus/mapping_plan.h and bootstrapping.md Stage 9.
+    { "sw.mapper", {} },
+
     // Future entries are added here following the same pattern:
-    // { "sw.psg"      },  // PSG audio emulation
-    // { "sw.scc"      },  // SCC audio emulation
-    // { "sw.mapper"   },  // MSX mapper emulation
-    // { "sw.menu"     },  // menu host ABI
-    // { "net.esp32"   },  // ESP32 network transport
+    // { "sw.psg",   {} },  // PSG audio emulation
+    // { "sw.scc",   {} },  // SCC audio emulation
+    // { "sw.menu",  {} },  // menu host ABI
+    // { "net.esp32",{} },  // ESP32 network transport
 };
 
 const size_t kDriverDescriptorCount =

@@ -1,9 +1,14 @@
 // peripheral_manager.cc — PeripheralManager implementation.
 
 #include "peripherals/peripheral_manager.h"
+#include "mappers/mappers.h"
 #include "log/log.h"
 #include <cstdio>
 #include <cstring>
+
+#ifndef JLPICART_HOST_TEST
+#  include "bus/bus.h"
+#endif
 
 // String table for LaunchFailureKind — must stay in sync with the enum.
 static const char* const kFailureKindStr[] = {
@@ -25,11 +30,58 @@ bool PeripheralManager::apply(const LaunchPlan& plan, CapabilityRegistry& regist
         registry.mark_activated(plan.activated_ids[i]);
     }
 
-    // TODO(bus-layer): apply MSX-visible hardware mappings from the MappingPlan
-    // (port ranges, memory pages, subslots) once the bus layer is wired in
-    // Stage 9+.
-
     return plan.ok;
+}
+
+bool PeripheralManager::apply_mapping(const MappingPlan& plan) {
+    char buf[96];
+    if (plan.entry_count == 0) {
+        log_info("mapping: no entries (no collection loaded or no mapper_type specified)");
+        return true;
+    }
+
+    for (size_t i = 0; i < plan.entry_count; ++i) {
+        const MappingEntry& e = plan.entries[i];
+        snprintf(buf, sizeof(buf), "mapping[%zu]: mapper=%s subslot=%u rom_data=%s",
+                 i, mapper_type_to_string(e.mapper_type), e.subslot,
+                 e.rom_data ? "loaded" : "pending");
+        log_info(buf);
+
+        if (e.rom_data == nullptr && e.ram_data == nullptr) {
+            // ROM not yet loaded from flash storage — deferred to content-load stage.
+            log_info("  ROM data pending content-load stage; bus wiring skipped");
+            continue;
+        }
+
+#ifndef JLPICART_HOST_TEST
+        // Wire the mapper into BUS::cartridges[subslot].
+        Cartridge& slot = BUS::cartridges[e.subslot];
+        switch (e.mapper_type) {
+            case MapperType::ROM:
+                mapper_setup_rom(slot, e.rom_data, e.rom_size);       break;
+            case MapperType::ROM_32K_MIRRORED:
+                mapper_setup_rom_32k_mirrored(slot, e.rom_data);      break;
+            case MapperType::KONAMI:
+                mapper_setup_konami(slot, e.rom_data);                 break;
+            case MapperType::KONAMI_Z:
+                mapper_setup_konami_z(slot, e.rom_data);               break;
+            case MapperType::ASCII8:
+                mapper_setup_ascii8(slot, e.rom_data);                 break;
+            case MapperType::ASCII16:
+                mapper_setup_ascii16(slot, e.rom_data);                break;
+            case MapperType::RAM:
+                mapper_setup_ram(slot, e.ram_data, e.ram_size);        break;
+            case MapperType::NONE:
+                slot.clear();                                          break;
+        }
+#endif
+    }
+
+#ifndef JLPICART_HOST_TEST
+    BUS::is_expanded = plan.expanded;
+#endif
+
+    return true;
 }
 
 void PeripheralManager::log_report(const LaunchPlan& plan) const {

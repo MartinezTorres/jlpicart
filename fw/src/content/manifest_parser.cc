@@ -97,14 +97,19 @@ struct Scanner {
             }
             default: {
                 // Number: leading digit or minus.
+                // Store digits in sv[] so callers can read small integer values.
                 if (c == '-' || (c >= '0' && c <= '9')) {
+                    sv_len = 0;
+                    if (sv_len < sizeof(sv) - 1u) sv[sv_len++] = c;
                     while (pos < len) {
                         char nc = src[pos];
                         if ((nc >= '0' && nc <= '9') || nc == '.' ||
-                            nc == 'e' || nc == 'E' || nc == '+' || nc == '-')
+                            nc == 'e' || nc == 'E' || nc == '+' || nc == '-') {
                             ++pos;
-                        else break;
+                            if (sv_len < sizeof(sv) - 1u) sv[sv_len++] = nc;
+                        } else break;
                     }
+                    if (sv_len < sizeof(sv)) sv[sv_len] = '\0';
                     return Tok::NUM;
                 }
                 return Tok::ERR;
@@ -319,6 +324,14 @@ static DiagStatus parse_payload_body(Scanner& s, PayloadEntry& pe) {
                 if (at == Tok::COMMA) at = s.next();
                 else if (at != Tok::RBRACKET) return kBadManifest;
             }
+        } else if (strcmp(key, "mapper_type") == 0) {
+            if (vt != Tok::STR) return kBadManifest;
+            if (!s.copy_sv(pe.mapper_type, PAYLOAD_MAPPER_TYPE_MAX)) return kBadManifest;
+        } else if (strcmp(key, "subslot") == 0) {
+            if (vt != Tok::NUM) return kBadManifest;
+            // sv[] holds the number as a string; parse single digit.
+            if (s.sv_len != 1 || s.sv[0] < '0' || s.sv[0] > '3') return kBadManifest;
+            pe.subslot = static_cast<uint8_t>(s.sv[0] - '0');
         } else {
             if (!skip_value(s, vt)) return kBadManifest;
         }

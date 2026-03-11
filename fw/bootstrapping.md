@@ -559,7 +559,126 @@ This plan assumes Linux amd64.
 
 ---
 
-## Stage 9+ — Feature peripherals and services
+## Stage 9 — MSX bus layer and sw.mapper capability
+
+**Goal:** Port the proven MSX bus loop into the new firmware tree, declare `sw.mapper`
+as an activatable SW capability, and connect the Allocator output to bus configuration
+via `MappingPlan`.  The bus loop runs on Core 0 (noreturn); a Core 1 service function
+handles the API window and menu mailbox.
+
+### Files added
+
+- `fw/src/boards/gpio_defs.h` — GPIO pin and bit constants for jlpicart_board (no SDK deps)
+- `fw/src/cartridges/cartridge.h` — Cartridge struct: 8×8KB memory segments, 256 IO port
+  callbacks, bus-callback typedef; portable (no SDK includes)
+- `fw/src/mappers/mappers.h`, `fw/src/mappers/mappers.cc` — ROM/RAM/Konami/ASCII8/ASCII16
+  mapper setup functions and their RAMFUNC callbacks
+- `fw/src/bus/bus.h` — MSX bus interface: `BUS::cartridges[]`, subslot state, `BUS::start()`
+- `fw/src/bus/bus.cc` — Core 0 tight loop (hardware-only; excluded from host-test builds)
+- `fw/src/bus/mapping_plan.h` — `MapperType` enum, `MappingPlan` / `MappingEntry` structs,
+  `mapper_type_from_string()`, `mapper_type_to_string()`
+- `fw/src/bus/mapping_plan.cc` — `mapper_plan_from_manifest()` bridge function
+
+### Files modified
+
+- `fw/src/content/manifest.h` — add `mapper_type[24]` and `subslot` to `PayloadEntry`
+- `fw/src/content/manifest_parser.cc` — parse `mapper_type` and `subslot` in payload body
+- `fw/src/drivers/driver_descriptor_table.cc` — add `sw.mapper` (no resource requirements)
+- `fw/src/peripherals/peripheral_manager.h`, `.cc` — add `apply_mapping(MappingPlan)`
+- `fw/src/main.cc` — launch Core 1 for service loop; Core 0 enters `BUS::start()`
+- `fw/tests/CMakeLists.txt` — add `test_bus_mapper`
+
+### Checklist
+
+**9.1 Declare sw.mapper capability**
+- [ ] Add `{ "sw.mapper", {} }` to `kDriverDescriptors[]`; no resource requirements
+      (ROM lives in XIP flash; mapper register state is negligible)
+- [ ] Comment: mapper type (ROM/RAM/banking) is specified in the manifest, not here
+
+**9.2 GPIO pin definitions**
+- [ ] Create `fw/src/boards/gpio_defs.h` with `PinMapping` enum (GPIO_A0…GPIO_SLTSL,
+      GPIO64_CLK…GPIO64_BATSENS) and `PinBitMapping` / `PinBitMapping64` enums
+- [ ] No SDK includes — pure constants; safe to include in host tests
+
+**9.3 Cartridge abstraction**
+- [ ] `struct Cartridge` with `name`, `rom_base`, `ram_base`,
+      `memory_read_addresses[8]`, `memory_write_addresses[8]`,
+      `memory_read_callbacks[8]`, `memory_write_callbacks[8]`,
+      `io_read_callbacks[256]`, `io_write_callbacks[256]`
+- [ ] `using BusCallback = std::pair<bool,uint8_t>(*)(Cartridge&, uint32_t)` — no SDK
+- [ ] `void Cartridge::clear()` zeros all fields via `*this = Cartridge{}`
+- [ ] Define `RAMFUNC` macro: `__no_inline_not_in_flash_func` on hardware, no-op for
+      host tests (guarded by `JLPICART_HOST_TEST`)
+
+**9.4 Mapper setup functions**
+- [ ] `mapper_setup_rom(c, rom_base, rom_size)` — linear; mirrors last seg if < 64 KB
+- [ ] `mapper_setup_rom_32k_mirrored(c, rom_base)` — 32 KB ROM, `((i+2)%4)` pattern
+- [ ] `mapper_setup_konami(c, rom_base)` — Konami 8 KB banking; pages 2–5 switchable
+- [ ] `mapper_setup_konami_z(c, rom_base)` — Konami without 0x6000 register; pages 4–5
+- [ ] `mapper_setup_ascii8(c, rom_base)` — ASCII 8 KB banking; write callback on seg 3
+- [ ] `mapper_setup_ascii16(c, rom_base)` — ASCII 16 KB banking; write callback on seg 3
+- [ ] `mapper_setup_ram(c, ram_base, ram_size)` — flat RAM; both read and write addresses
+- [ ] All switch callbacks declared `static` in mappers.cc with RAMFUNC; never null-deref
+
+**9.5 MappingPlan**
+- [ ] `enum class MapperType : uint8_t` — ROM, ROM_32K_MIRRORED, KONAMI, KONAMI_Z,
+      ASCII8, ASCII16, RAM, NONE
+- [ ] `mapper_type_from_string(s)` — canonical lowercase strings; NONE for unknown
+- [ ] `mapper_type_to_string(t)` — inverse; returns `"none"` for NONE
+- [ ] `struct MappingEntry { MapperType, subslot, rom_data, rom_size, ram_data, ram_size }`
+- [ ] `struct MappingPlan { entries[4], entry_count, expanded }`
+- [ ] `MappingPlan mapper_plan_from_manifest(manifest, payload_index)` — converts
+      `PayloadEntry.mapper_type` and `.subslot` to a `MappingEntry`; `rom_data = nullptr`
+      (ROM loading deferred to content-load stage); out-of-range index → empty plan
+
+**9.6 Manifest extensions**
+- [ ] Add `char mapper_type[PAYLOAD_MAPPER_TYPE_MAX]` (24 chars) to `PayloadEntry`
+- [ ] Add `uint8_t subslot` (0–3, default 0) to `PayloadEntry`
+- [ ] `PAYLOAD_MAPPER_TYPE_MAX = 24` constant in `manifest.h`
+- [ ] Extend `parse_payload_body()` to handle both new fields; reject `subslot > 3`
+
+**9.7 Bus layer**
+- [ ] `bus.h`: `BUS::cartridges[8]`, `BUS::subslot_indexes[4]`, `BUS::is_expanded`,
+      `BUS::reset_callback`, `[[noreturn]] BUS::start()`
+- [ ] `bus.cc`: Core 0 tight loop identical in logic to `old_src/bus/bus.cc`; hot state
+      (`subslot_indexes`, `is_expanded`, `reset_callback`) placed in `.scratch_y`;
+      guarded by `#ifndef JLPICART_HOST_TEST`
+
+**9.8 PeripheralManager wiring**
+- [ ] Add `bool apply_mapping(const MappingPlan& plan)` to `PeripheralManager`
+- [ ] For each entry with `rom_data != nullptr`: call `mapper_setup_XXX(BUS::cartridges[subslot], ...)`
+      and set `BUS::is_expanded` when `entry_count > 1`
+- [ ] If `entry.rom_data == nullptr`: log "ROM not loaded — deferred to content-load stage"
+- [ ] Hardware call to `BUS::cartridges` guarded with `#ifndef JLPICART_HOST_TEST`
+
+**9.9 Main wiring**
+- [ ] After activation preflight, compute `MappingPlan` from active payload (empty in
+      standby/menu mode) and call `periph_mgr.apply_mapping(mapping_plan)`
+- [ ] On hardware: declare `api_win` and `menu_mbx` as `static`; store pointers in
+      file-scope globals; launch Core 1 via `multicore_launch_core1(service_loop_core1)`;
+      then call `BUS::start()` (noreturn)
+- [ ] On host: existing `while (true)` service loop unchanged
+- [ ] Set `BUS::reset_callback` before `BUS::start()` (stub for Stage 9)
+
+**9.10 Host tests (`test_bus_mapper.cc`)**
+- [ ] `mapper_type_from_string` round-trip for all 7 named types + unknown → NONE
+- [ ] `mapper_setup_rom`: `read_addresses[i]` correct for 16 KB, 32 KB, 64 KB inputs
+- [ ] `mapper_setup_konami`: initial addresses + write callback present on pages 2–5;
+      simulate write (construct bus word) → verify address switch
+- [ ] `mapper_setup_ascii8`: write callback on seg 3; simulate segment switch
+- [ ] `mapper_plan_from_manifest`: manifest with `mapper_type` + `subslot` → `MappingPlan`
+- [ ] `mapper_plan_from_manifest` with out-of-range index → empty plan
+
+### Definition of done
+
+- [ ] Bus loop compiles for RP2350 target; host tests compile and pass
+- [ ] `sw.mapper` appears in declared/allowed capabilities on boot
+- [ ] `MappingPlan` is computed from the active payload manifest
+- [ ] `PeripheralManager` logs mapper configuration on boot
+
+---
+
+## Stage 10+ — Feature peripherals and services
 
 **Goal:** Implement concrete peripherals and services by following the same pattern.
 

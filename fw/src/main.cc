@@ -1,26 +1,25 @@
-// JLPiCart firmware — Stage 8: Activation v1 (Requested → Activated).
+// JLPiCart firmware — Stage 9: MSX bus layer and sw.mapper.
 //
-// Boot order (spec.md §4.4, bootstrapping.md Stage 8):
+// Boot order (spec.md §4.4, bootstrapping.md Stage 9):
 //   1. diag/log init
-//   2. SecurityPosture (OTP read — once, never again)
-//   3. Storage init: KvStore (SYSTEM_KV) + AppendLog (EVENT_LOG)
+//   2. Storage init: KvStore (SYSTEM_KV) + AppendLog (EVENT_LOG)
+//   3. SecurityPosture (OTP read — once, never again)
 //   4. PolicyStore (flash read + HMAC verify)
 //   5. CapabilityRegistry (declared → allowed)
 //   6. Activation preflight: Allocator → LaunchPlan → PeripheralManager
-//   7. ApiWindow init (header + rings)
-//   8. MenuMailbox init (menu page header + mailbox registers)
-//   9. Append BOOT record to EVENT_LOG
-//  10. Print boot banner
-//  11. Collection install from USB (TODO: deferred to usb-host stage)
-//  12. Service loop (poll request ring, dispatch, post response; tick mailbox)
+//   7. MappingPlan: compute from active payload manifest; apply_mapping()
+//   8. ApiWindow init (header + rings)
+//   9. MenuMailbox init (menu page header + mailbox registers)
+//  10. Append BOOT record to EVENT_LOG
+//  11. Print boot banner
+//  12. Collection install from USB (TODO: deferred to usb-host stage)
+//  [hardware only]
+//  13. Launch Core 1 (service loop: API window + menu mailbox)
+//  14. Core 0 enters BUS::start() — never returns
 //
-// Neither the API window nor the menu page is yet wired into the MSX bus —
-// that integration belongs to the bus-layer stage.  Both objects are
-// initialised here so host tests and emulator tests can exercise the protocol
-// logic independently.
-//
-// TODO(bus-layer): map api_win.buf() into MSX page 2 subslot 2 via bus layer.
-// TODO(bus-layer): map menu_page into MSX page 1 subslot 1 and load menu_stub.rom.
+// TODO(api-bus): map api_win.buf() into MSX page 2 subslot 2 via bus layer.
+// TODO(menu-bus): map menu_page into MSX page 1 subslot 1 and load menu_stub.rom.
+// TODO(content-load): set rom_data in MappingPlan once USB host + content store land.
 //
 // See fw/spec.md and fw/bootstrapping.md for context.
 
@@ -33,6 +32,7 @@
 #include "allocator/allocator.h"
 #include "allocator/resource_model.h"
 #include "peripherals/peripheral_manager.h"
+#include "bus/mapping_plan.h"
 #include "boards/board_descriptor.h"
 #include "drivers/driver_descriptor.h"
 #include "msx/api/api_window.h"
@@ -43,6 +43,11 @@
 #include "storage/append_log.h"
 #include "pico/stdlib.h"
 #include <cstdio>
+
+#ifndef JLPICART_HOST_TEST
+#  include "bus/bus.h"
+#  include <pico/multicore.h>
+#endif
 
 // Build ID injected by CMake (-DFW_BUILD_ID=...).
 #ifndef FW_BUILD_ID
@@ -118,18 +123,29 @@ int main() {
         periph_mgr.log_report(plan);
     }
 
-    // 7. Init API window (16KB buffer; bus mapping deferred to bus-layer stage).
-    ApiWindow api_win;
+    // 7. MappingPlan: in standby/menu mode there is no active payload, so the
+    //    plan has zero entries.  apply_mapping() logs that and returns.
+    //    When a collection is launched, this block re-runs with a real payload.
+    {
+        // No active payload on first boot — produce an empty plan.
+        CollectionManifest empty_manifest = {};
+        MappingPlan mapping_plan = mapper_plan_from_manifest(empty_manifest, 0);
+        PeripheralManager map_mgr;
+        map_mgr.apply_mapping(mapping_plan);
+    }
+
+    // 8. Init API window (16KB buffer; bus mapping deferred to api-bus stage).
+    static ApiWindow api_win;
     api_win.init(posture, policy_store, registry);
     log_info("API window initialised");
 
-    // 8. Init Menu mailbox (16KB page buffer; bus mapping deferred to bus-layer stage).
+    // 9. Init Menu mailbox (16KB page buffer; bus mapping deferred to menu-bus stage).
     static uint8_t menu_page[MENU_PAGE_SIZE];
-    MenuMailbox menu_mbx;
+    static MenuMailbox menu_mbx;
     menu_mbx.init(menu_page, MENU_DATA_OFS); // stub_entry = 0x0100 (page-relative)
     log_info("Menu mailbox initialised");
 
-    // 9. Append BOOT record to EVENT_LOG (spec §6.5 boot integration).
+    // 10. Append BOOT record to EVENT_LOG (spec §6.5 boot integration).
     {
         BootRecord boot_rec = {};
         const char* build_id = FW_BUILD_ID;
@@ -142,7 +158,7 @@ int main() {
                          sizeof(boot_rec));
     }
 
-    // 10. Print boot banner to log (flushed to UART/OLED in later stages).
+    // 11. Print boot banner to log (flushed to UART/OLED in later stages).
     {
         char buf[128];
         snprintf(buf, sizeof(buf),
@@ -157,15 +173,38 @@ int main() {
         log_info(buf);
     }
 
-    // 11. Collection install from USB (deferred to usb-host stage).
+    // 12. Collection install from USB (deferred to usb-host stage).
     // TODO(usb-host): wire UsbInstallScanner here once tinyusb is integrated.
     log_info("collection install: USB host not integrated (TODO(usb-host))");
 
-    // 12. Service loop — poll the API request ring and tick the menu mailbox.
-    // TODO(bus-layer): replace with interrupt-driven or Core1 handler once bus is wired.
+    // 13–14. On hardware: launch Core 1 for the service loop, then Core 0 enters
+    //        BUS::start() and never returns.
+    //        On host (JLPICART_HOST_TEST): run the service loop on the single thread.
+
+#ifndef JLPICART_HOST_TEST
+    // Core 1 service loop — handles API window and menu mailbox.
+    // api_win and menu_mbx are static (file-visible from any point in this function)
+    // so the function pointer can reach them without capturing.
+    static ApiWindow*   g_api_win  = &api_win;
+    static MenuMailbox* g_menu_mbx = &menu_mbx;
+    multicore_launch_core1([]() {
+        while (true) {
+            g_api_win->service_once();
+            g_menu_mbx->tick();
+            tight_loop_contents();
+        }
+    });
+
+    // BUS::reset_callback: stub — no cartridge re-init needed in standby mode.
+    BUS::reset_callback = nullptr;
+
+    // Core 0 enters the MSX bus loop.  [[noreturn]]
+    log_info("entering bus loop on Core 0");
+    BUS::start();
+#else
     while (true) {
         api_win.service_once();
         menu_mbx.tick();
-        tight_loop_contents();
     }
+#endif
 }
