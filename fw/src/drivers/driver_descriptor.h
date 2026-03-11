@@ -1,5 +1,6 @@
 #pragma once
 #include <cstddef>
+#include "allocator/resource_model.h"
 
 // driver_descriptor.h — software capability declarations.
 //
@@ -9,7 +10,8 @@
 // No other file may add entries to that table.
 
 struct DriverDescriptor {
-    const char* name;  // stable capability name (e.g. "api.core", "sw.psg")
+    const char*          name;       // stable capability name (e.g. "api.core")
+    ResourceRequirements resources = {};  // budget consumed when active (zero = none)
 };
 
 extern const DriverDescriptor kDriverDescriptors[];

@@ -290,6 +290,35 @@ static DiagStatus parse_payload_body(Scanner& s, PayloadEntry& pe) {
         } else if (strcmp(key, "title") == 0) {
             if (vt != Tok::STR) return kBadManifest;
             if (!s.copy_sv(pe.title, sizeof(pe.title))) return kBadManifest;
+        } else if (strcmp(key, "required_capabilities") == 0) {
+            if (vt != Tok::LBRACKET) return kBadManifest;
+            Tok at = s.next();
+            while (at != Tok::RBRACKET) {
+                if (at != Tok::STR) return kBadManifest;
+                if (pe.required_cap_count < PAYLOAD_CAPS_MAX) {
+                    if (!s.copy_sv(pe.required_capabilities[pe.required_cap_count],
+                                   PAYLOAD_CAP_ID_MAX)) return kBadManifest;
+                    ++pe.required_cap_count;
+                }
+                // Extra entries beyond PAYLOAD_CAPS_MAX are silently ignored.
+                at = s.next();
+                if (at == Tok::COMMA) at = s.next();
+                else if (at != Tok::RBRACKET) return kBadManifest;
+            }
+        } else if (strcmp(key, "optional_capabilities") == 0) {
+            if (vt != Tok::LBRACKET) return kBadManifest;
+            Tok at = s.next();
+            while (at != Tok::RBRACKET) {
+                if (at != Tok::STR) return kBadManifest;
+                if (pe.optional_cap_count < PAYLOAD_CAPS_MAX) {
+                    if (!s.copy_sv(pe.optional_capabilities[pe.optional_cap_count],
+                                   PAYLOAD_CAP_ID_MAX)) return kBadManifest;
+                    ++pe.optional_cap_count;
+                }
+                at = s.next();
+                if (at == Tok::COMMA) at = s.next();
+                else if (at != Tok::RBRACKET) return kBadManifest;
+            }
         } else {
             if (!skip_value(s, vt)) return kBadManifest;
         }

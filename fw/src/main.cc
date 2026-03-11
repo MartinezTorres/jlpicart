@@ -1,17 +1,18 @@
-// JLPiCart firmware — Stage 7: Collections v1 (format, manifest, install, receipts).
+// JLPiCart firmware — Stage 8: Activation v1 (Requested → Activated).
 //
-// Boot order (spec.md §4.4, bootstrapping.md Stage 6):
+// Boot order (spec.md §4.4, bootstrapping.md Stage 8):
 //   1. diag/log init
 //   2. SecurityPosture (OTP read — once, never again)
 //   3. Storage init: KvStore (SYSTEM_KV) + AppendLog (EVENT_LOG)
 //   4. PolicyStore (flash read + HMAC verify)
 //   5. CapabilityRegistry (declared → allowed)
-//   6. ApiWindow init (header + rings)
-//   7. MenuMailbox init (menu page header + mailbox registers)
-//   8. Append BOOT record to EVENT_LOG
-//   9. Print boot banner
-//  10. Collection install from USB (TODO: deferred to usb-host stage)
-//  11. Service loop (poll request ring, dispatch, post response; tick mailbox)
+//   6. Activation preflight: Allocator → LaunchPlan → PeripheralManager
+//   7. ApiWindow init (header + rings)
+//   8. MenuMailbox init (menu page header + mailbox registers)
+//   9. Append BOOT record to EVENT_LOG
+//  10. Print boot banner
+//  11. Collection install from USB (TODO: deferred to usb-host stage)
+//  12. Service loop (poll request ring, dispatch, post response; tick mailbox)
 //
 // Neither the API window nor the menu page is yet wired into the MSX bus —
 // that integration belongs to the bus-layer stage.  Both objects are
@@ -28,6 +29,10 @@
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
+#include "spine/activation.h"
+#include "allocator/allocator.h"
+#include "allocator/resource_model.h"
+#include "peripherals/peripheral_manager.h"
 #include "boards/board_descriptor.h"
 #include "drivers/driver_descriptor.h"
 #include "msx/api/api_window.h"
@@ -97,18 +102,34 @@ int main() {
                   kDriverDescriptors, kDriverDescriptorCount,
                   policy_store.info());
 
-    // 6. Init API window (16KB buffer; bus mapping deferred to bus-layer stage).
+    // 6. Activation preflight: compute Launch Plan and activate capabilities.
+    // No Collection loaded yet — use all_allowed=true (menu/standby mode),
+    // which activates everything in declared ∩ allowed, subject to resource budgets.
+    {
+        ResourceModel resource_model;
+        RequestedCapabilities requested = {};
+        requested.all_allowed = true;
+
+        Allocator allocator;
+        LaunchPlan plan = allocator.compute(registry, requested, resource_model);
+
+        PeripheralManager periph_mgr;
+        periph_mgr.apply(plan, registry);
+        periph_mgr.log_report(plan);
+    }
+
+    // 7. Init API window (16KB buffer; bus mapping deferred to bus-layer stage).
     ApiWindow api_win;
     api_win.init(posture, policy_store, registry);
     log_info("API window initialised");
 
-    // 7. Init Menu mailbox (16KB page buffer; bus mapping deferred to bus-layer stage).
+    // 8. Init Menu mailbox (16KB page buffer; bus mapping deferred to bus-layer stage).
     static uint8_t menu_page[MENU_PAGE_SIZE];
     MenuMailbox menu_mbx;
     menu_mbx.init(menu_page, MENU_DATA_OFS); // stub_entry = 0x0100 (page-relative)
     log_info("Menu mailbox initialised");
 
-    // 8. Append BOOT record to EVENT_LOG (spec §6.5 boot integration).
+    // 9. Append BOOT record to EVENT_LOG (spec §6.5 boot integration).
     {
         BootRecord boot_rec = {};
         const char* build_id = FW_BUILD_ID;
@@ -121,24 +142,26 @@ int main() {
                          sizeof(boot_rec));
     }
 
-    // 9. Print boot banner to log (flushed to UART/OLED in later stages).
+    // 10. Print boot banner to log (flushed to UART/OLED in later stages).
     {
         char buf[128];
         snprintf(buf, sizeof(buf),
-            "JLPiCart " FW_BUILD_ID " | declared=%zu allowed=%zu | policy_ok=%d secure_boot=%d",
+            "JLPiCart " FW_BUILD_ID
+            " | declared=%zu allowed=%zu activated=%zu"
+            " | policy_ok=%d secure_boot=%d",
             registry.declared_count(),
             registry.allowed_count(),
+            registry.activated_count(),
             policy_store.loaded_ok(),
             posture.secure_boot_enabled);
         log_info(buf);
     }
 
-    // 10. Collection install from USB (Stage 7 — USB host not yet integrated).
+    // 11. Collection install from USB (deferred to usb-host stage).
     // TODO(usb-host): wire UsbInstallScanner here once tinyusb is integrated.
-    // Until then, the installer is exercised via host tests only.
     log_info("collection install: USB host not integrated (TODO(usb-host))");
 
-    // 11. Service loop — poll the API request ring and tick the menu mailbox.
+    // 12. Service loop — poll the API request ring and tick the menu mailbox.
     // TODO(bus-layer): replace with interrupt-driven or Core1 handler once bus is wired.
     while (true) {
         api_win.service_once();

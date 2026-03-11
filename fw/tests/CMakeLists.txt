@@ -135,6 +135,28 @@ add_host_test(test_storage
 set(SRC_MANIFEST_PARSER "${FW_SRC}/content/manifest_parser.cc")
 set(SRC_INSTALLER       "${FW_SRC}/content/installer.cc")
 set(SRC_RECEIPTS        "${FW_SRC}/content/receipts.cc")
+set(SRC_RESOURCE_MODEL  "${FW_SRC}/allocator/resource_model.cc")
+set(SRC_ALLOCATOR       "${FW_SRC}/allocator/allocator.cc")
+set(SRC_ACTIVATION      "${FW_SRC}/spine/activation.cc")
+set(SRC_PERIPH_MGR      "${FW_SRC}/peripherals/peripheral_manager.cc")
+
+# ---------------------------------------------------------------------------
+# Stage 8 tests
+# ---------------------------------------------------------------------------
+
+add_host_test(test_allocator
+    host/test_allocator.cc
+    ${SRC_RESOURCE_MODEL}
+    ${SRC_ALLOCATOR}
+    ${SRC_ACTIVATION}
+    ${SRC_PERIPH_MGR}
+    ${SRC_CAP_REG}
+    ${SRC_BOARD_DESC}
+    ${SRC_DRV_TABLE}
+    ${SRC_MANIFEST_PARSER}
+    ${SRC_LOG}
+    ${SRC_DIAG}
+)
 
 add_host_test(test_collections
     host/test_collections.cc

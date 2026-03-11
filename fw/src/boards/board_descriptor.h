@@ -1,5 +1,6 @@
 #pragma once
 #include <cstddef>
+#include "allocator/resource_model.h"
 
 // board_descriptor.h — hardware capability declarations for JLPiCart.
 //
@@ -9,8 +10,9 @@
 // See spec.md §5.1 (Resource and capability model contract v1).
 
 struct BoardCapabilityDecl {
-    const char* name;         // stable capability name (e.g. "hw.wifi")
-    bool        safe_verify;  // true = firmware MAY probe this HW to verify presence
+    const char*          name;         // stable capability name (e.g. "bus.msx")
+    bool                 safe_verify;  // true = firmware MAY probe this HW
+    ResourceRequirements resources = {};  // budget consumed when active (zero = none)
 };
 
 struct BoardDescriptor {
