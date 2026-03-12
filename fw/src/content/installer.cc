@@ -23,7 +23,9 @@
 #include "content/receipts.h"
 #include "crypto/sha256.h"
 #include "spine/policy_store.h"
+#include "storage/flash_layout.h"
 #include <cstring>
+#include <cstdio>
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -247,6 +249,41 @@ DiagStatus Installer::run(InstallReader& reader,
                 result_out.manifest_sha256, s.code);
             return s;
         }
+    }
+
+    // ------------------------------------------------------------------
+    // 3b. Write per-payload records (best-effort; non-fatal per spec §10.4).
+    //
+    //     data_flash_offset = FLASH_CONTENT_DATA_OFS; data_size = 0 until
+    //     populate_flash.py writes the ROM bytes.  apply_mapping() skips
+    //     bus wiring whenever data_size == 0.
+    // ------------------------------------------------------------------
+    for (uint8_t i = 0; i < manifest.payload_count; ++i) {
+        const PayloadEntry& pe = manifest.payloads[i];
+        if (pe.payload_id[0] == '\0') continue;
+
+        PayloadRecord pr = {};
+        memcpy(pr.payload_id,  pe.payload_id,  sizeof(pr.payload_id));
+        memcpy(pr.mapper_type, pe.mapper_type, sizeof(pr.mapper_type));
+        pr.subslot           = pe.subslot;
+        pr.data_flash_offset = FLASH_CONTENT_DATA_OFS;
+        pr.data_size         = 0;  // ROM not yet written; populate_flash.py sets this
+
+        // Build "pl.<payload_id>".  payload_id must be ≤ 45 chars to fit in
+        // KV_MAX_KEY_LEN (48).  Silently skip any record that exceeds this.
+        const size_t prefix_len = strlen(KV_PAYLOAD_PREFIX);  // 3
+        const size_t id_len     = strlen(pe.payload_id);
+        if (prefix_len + id_len > KV_MAX_KEY_LEN) continue;
+
+        char key[KV_MAX_KEY_LEN + 1];
+        memcpy(key, KV_PAYLOAD_PREFIX, prefix_len);
+        memcpy(key + prefix_len, pe.payload_id, id_len);
+        key[prefix_len + id_len] = '\0';
+
+        DiagStatus ps = kv.put(key,
+                               reinterpret_cast<const uint8_t*>(&pr),
+                               static_cast<uint16_t>(sizeof(pr)));
+        (void)ps;  // non-fatal: bus wiring skipped when data_size == 0
     }
 
     // ------------------------------------------------------------------

@@ -10,9 +10,8 @@
 static constexpr size_t PAYLOAD_CAPS_MAX    = 4;
 static constexpr size_t PAYLOAD_CAP_ID_MAX  = 64;
 
-// Max length of the "mapper_type" string in a payload entry (Stage 9).
-// Must accommodate all MapperType canonical strings (longest: "rom_32k_mirrored" = 16).
-static constexpr size_t PAYLOAD_MAPPER_TYPE_MAX = 24;
+// PAYLOAD_MAPPER_TYPE_MAX is defined in collection_format.h (Stage 10: moved there
+// so PayloadRecord and PayloadEntry share the same constant without circular includes).
 
 struct PayloadEntry {
     char payload_id[PAYLOAD_ID_MAX];

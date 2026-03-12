@@ -34,6 +34,39 @@ const char* mapper_type_to_string(MapperType t) {
 }
 
 // ---------------------------------------------------------------------------
+// mapping_plan_from_payload_record
+// ---------------------------------------------------------------------------
+
+MappingPlan mapping_plan_from_payload_record(const PayloadRecord& record)
+{
+    MappingPlan plan = {};
+
+    MapperType mt = mapper_type_from_string(record.mapper_type);
+    if (mt == MapperType::NONE) return plan;   // no mapper specified
+    if (record.data_size == 0)  return plan;   // ROM not yet written to flash
+
+    MappingEntry& entry  = plan.entries[0];
+    entry.mapper_type    = mt;
+    entry.subslot        = record.subslot;
+    entry.rom_size       = record.data_size;
+    entry.ram_data       = nullptr;
+    entry.ram_size       = 0;
+
+#ifndef JLPICART_HOST_TEST
+    // XIP_BASE = 0x10000000 on RP2350.  ROM data is directly readable at this address.
+    static constexpr uint32_t XIP_BASE = 0x10000000u;
+    entry.rom_data = reinterpret_cast<const uint8_t*>(XIP_BASE + record.data_flash_offset);
+#else
+    // XIP is not available on the host; caller must not dereference rom_data.
+    entry.rom_data = nullptr;
+#endif
+
+    plan.entry_count = 1;
+    plan.expanded    = false;  // single subslot; no subslot expansion register
+    return plan;
+}
+
+// ---------------------------------------------------------------------------
 // mapper_plan_from_manifest
 // ---------------------------------------------------------------------------
 

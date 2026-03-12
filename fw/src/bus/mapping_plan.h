@@ -12,6 +12,7 @@
 //
 // See spec.md §5.1 and bootstrapping.md Stage 9.
 
+#include "content/collection_format.h"
 #include "content/manifest.h"
 #include <cstddef>
 #include <cstdint>
@@ -56,6 +57,17 @@ struct MappingPlan {
     // must be enabled.  apply_mapping() sets BUS::is_expanded accordingly.
     bool         expanded;
 };
+
+// Build a MappingPlan from a stored PayloadRecord (read from ContentStore).
+//
+// Returns an empty plan (entry_count=0) if mapper_type is empty/NONE or
+// data_size is zero (ROM not yet written to flash).
+//
+// On hardware: rom_data is set to the XIP flash pointer
+//   (0x10000000 + record.data_flash_offset).
+// On host (JLPICART_HOST_TEST): rom_data is always nullptr — XIP is
+//   not available; verify other fields (mapper_type, subslot, rom_size).
+MappingPlan mapping_plan_from_payload_record(const PayloadRecord& record);
 
 // Build a MappingPlan from one payload entry in a manifest.
 //

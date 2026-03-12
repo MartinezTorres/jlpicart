@@ -9,12 +9,13 @@
 // Size bounds (from spec.md §6.3 JSON schemas)
 // ---------------------------------------------------------------------------
 
-static constexpr size_t COL_ID_MAX            = 64;   // collection_id maxLength
+static constexpr size_t COL_ID_MAX             = 64;   // collection_id maxLength
 static constexpr size_t COL_VERSION_MAX        = 32;   // version maxLength
 static constexpr size_t COL_TITLE_MAX          = 128;  // title maxLength
 static constexpr size_t PUB_ID_MAX             = 64;   // publisher_id maxLength
 static constexpr size_t PAYLOAD_ID_MAX         = 64;   // payload_id maxLength
 static constexpr size_t PAYLOAD_PATH_MAX       = 200;  // path maxLength (spec §6.1)
+static constexpr size_t PAYLOAD_MAPPER_TYPE_MAX = 24;  // "rom_32k_mirrored" = 16 chars max
 static constexpr size_t SIG_KEY_ID_MAX         = 64;   // key_id in bundle.sig
 static constexpr size_t BUNDLE_MAX_FILES       = 8;    // max files listed in bundle.sig
 static constexpr size_t MANIFEST_MAX_PAYLOADS  = 4;    // max payload entries parsed
@@ -81,3 +82,38 @@ struct CollectionRecord {
 static_assert(sizeof(CollectionRecord) == 357, "CollectionRecord layout has changed");
 static_assert(sizeof(CollectionRecord) <= 512,
               "CollectionRecord must fit in KV_MAX_VAL_LEN (512)");
+
+// ---------------------------------------------------------------------------
+// Per-payload runtime record (stored in KvStore under "pl.<payload_id>").
+//
+// Written by Installer::run() at commit time and by populate_flash.py when
+// pre-populating flash from a ROM file.  Read at boot by ContentStore.
+//
+// data_flash_offset: offset from the start of external flash (not XIP base).
+//   On RP2350: XIP pointer = 0x10000000 + data_flash_offset.
+// data_size: size of ROM/RAM data in bytes.
+//   0 means the ROM has not been written to flash yet (bus wiring skipped).
+//
+// KV key: KV_PAYLOAD_PREFIX + payload_id.  payload_id must be ≤ 45 chars
+// so the full key fits within KV_MAX_KEY_LEN (48).
+// ---------------------------------------------------------------------------
+
+static constexpr const char* KV_PAYLOAD_PREFIX = "pl.";  // 3-char prefix
+// Full KV key = KV_PAYLOAD_PREFIX + payload_id; payload_id must be ≤ 45 chars
+// so the combined key fits within KV_MAX_KEY_LEN (48).
+
+#pragma pack(push, 1)
+struct PayloadRecord {
+    char     payload_id[PAYLOAD_ID_MAX];           // 64 bytes
+    char     mapper_type[PAYLOAD_MAPPER_TYPE_MAX]; // 24 bytes
+    uint8_t  subslot;                              //  1 byte  (0–3)
+    uint8_t  _pad[3];                              //  3 bytes (alignment)
+    uint32_t data_flash_offset;                    //  4 bytes (offset from flash start)
+    uint32_t data_size;                            //  4 bytes (0 = not yet written)
+    // Total: 64 + 24 + 1 + 3 + 4 + 4 = 100 bytes
+};
+#pragma pack(pop)
+static_assert(sizeof(PayloadRecord) == 100, "PayloadRecord layout has changed");
+// KV_MAX_VAL_LEN = 512; PayloadRecord (100) fits comfortably.
+static_assert(sizeof(PayloadRecord) <= 512,
+              "PayloadRecord must fit in KvStore value limit (512)");

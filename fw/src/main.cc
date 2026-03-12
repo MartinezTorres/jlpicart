@@ -1,13 +1,13 @@
-// JLPiCart firmware — Stage 9: MSX bus layer and sw.mapper.
+// JLPiCart firmware — Stage 10: ContentStore launch pipeline.
 //
-// Boot order (spec.md §4.4, bootstrapping.md Stage 9):
+// Boot order (spec.md §4.4, bootstrapping.md Stage 10):
 //   1. diag/log init
 //   2. Storage init: KvStore (SYSTEM_KV) + AppendLog (EVENT_LOG)
 //   3. SecurityPosture (OTP read — once, never again)
 //   4. PolicyStore (flash read + HMAC verify)
 //   5. CapabilityRegistry (declared → allowed)
 //   6. Activation preflight: Allocator → LaunchPlan → PeripheralManager
-//   7. MappingPlan: compute from active payload manifest; apply_mapping()
+//   7. MappingPlan: ContentStore lookup → mapping_plan_from_payload_record → apply_mapping()
 //   8. ApiWindow init (header + rings)
 //   9. MenuMailbox init (menu page header + mailbox registers)
 //  10. Append BOOT record to EVENT_LOG
@@ -19,7 +19,6 @@
 //
 // TODO(api-bus): map api_win.buf() into MSX page 2 subslot 2 via bus layer.
 // TODO(menu-bus): map menu_page into MSX page 1 subslot 1 and load menu_stub.rom.
-// TODO(content-load): set rom_data in MappingPlan once USB host + content store land.
 //
 // See fw/spec.md and fw/bootstrapping.md for context.
 
@@ -33,6 +32,7 @@
 #include "allocator/resource_model.h"
 #include "peripherals/peripheral_manager.h"
 #include "bus/mapping_plan.h"
+#include "content/content_store.h"
 #include "boards/board_descriptor.h"
 #include "drivers/driver_descriptor.h"
 #include "msx/api/api_window.h"
@@ -123,13 +123,26 @@ int main() {
         periph_mgr.log_report(plan);
     }
 
-    // 7. MappingPlan: in standby/menu mode there is no active payload, so the
-    //    plan has zero entries.  apply_mapping() logs that and returns.
-    //    When a collection is launched, this block re-runs with a real payload.
+    // 7. MappingPlan: look up the default payload from ContentStore.
+    //    If there is no active collection or data_size == 0, fall back to
+    //    an empty plan (standby/menu mode).  apply_mapping() logs the result.
     {
-        // No active payload on first boot — produce an empty plan.
-        CollectionManifest empty_manifest = {};
-        MappingPlan mapping_plan = mapper_plan_from_manifest(empty_manifest, 0);
+        ContentStore content_store(kv_store);
+        MappingPlan mapping_plan = {};
+
+        if (content_store.has_active_collection()) {
+            PayloadRecord pr = {};
+            DiagStatus s = content_store.load_default_payload(pr);
+            if (s.ok() && pr.data_size > 0) {
+                mapping_plan = mapping_plan_from_payload_record(pr);
+                log_info("MappingPlan: active payload found — bus wiring requested");
+            } else {
+                log_info("MappingPlan: payload data_size=0 (ROM not loaded) — standby");
+            }
+        } else {
+            log_info("MappingPlan: no active collection — standby mode");
+        }
+
         PeripheralManager map_mgr;
         map_mgr.apply_mapping(mapping_plan);
     }

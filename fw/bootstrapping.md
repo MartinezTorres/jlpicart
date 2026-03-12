@@ -678,7 +678,101 @@ handles the API window and menu mailbox.
 
 ---
 
-## Stage 10+ — Feature peripherals and services
+## Stage 10 — Content runtime: PayloadRecord, ContentStore, launch pipeline
+
+**Goal:** Close the loop between the installed collection store (Stage 7) and the bus
+layer (Stage 9).  After this stage, if a ROM is present in CONTENT_DATA flash the
+firmware will boot it directly through the full ContentStore → MappingPlan → bus loop
+pipeline.  A `populate_flash.py` tool pre-populates flash from a ROM file so the
+pipeline can be validated without USB host hardware.
+
+### Files added
+
+- `fw/src/content/content_store.h`, `.cc` — `ContentStore`: reads `CollectionRecord` and
+  `PayloadRecord`s from `KvStore`; exposes `has_active_collection()`,
+  `load_collection()`, `load_payload()`, `load_default_payload()`
+- `fw/tools/populate_flash.py` — generates a UF2 patch from a ROM file; writes
+  `SYSTEM_KV` records (`col.state`, `col.record`, `pl.<id>`) and `CONTENT_DATA`
+  ROM bytes at the correct flash addresses; prints `picotool` flash command
+- `fw/tests/host/test_content_store.cc` — host tests
+
+### Files modified
+
+- `fw/src/content/collection_format.h` — add `PayloadRecord` struct and
+  `KV_PAYLOAD_PREFIX` constant
+- `fw/src/bus/mapping_plan.h`, `.cc` — add
+  `mapping_plan_from_payload_record(const PayloadRecord&)`
+- `fw/src/content/installer.cc` — write `PayloadRecord` per payload at commit step
+- `fw/src/main.cc` — check `ContentStore` on boot; replace the empty-plan MappingPlan
+  block with a real payload lookup
+- `fw/tests/CMakeLists.txt` — add `test_content_store`
+
+### Checklist
+
+**10.1 PayloadRecord**
+- [x] Add to `collection_format.h`:
+  - [x] `KV_PAYLOAD_PREFIX = "pl."` (3-char prefix; payload_id ≤ 45 chars in KV key)
+  - [x] `PayloadRecord { payload_id[64], mapper_type[24], subslot, _pad[3],
+        data_flash_offset, data_size }` — 100 bytes, packed
+  - [x] `static_assert(sizeof(PayloadRecord) == 100)`
+  - [x] `static_assert(sizeof(PayloadRecord) <= KV_MAX_VAL_LEN)`
+
+**10.2 ContentStore**
+- [x] `has_active_collection()` — reads `KV_COL_STATE`; returns true iff `"active"`
+- [x] `load_collection(CollectionRecord&)` — reads `KV_COL_RECORD`
+- [x] `load_payload(payload_id, PayloadRecord&)` — reads `"pl.<id>"` from KvStore
+- [x] `load_default_payload(PayloadRecord&)` — chains through `CollectionRecord.default_payload_id`
+- [x] Returns `STORAGE_NOT_FOUND` gracefully for all missing-key cases
+
+**10.3 mapping_plan_from_payload_record**
+- [x] Returns empty plan if `mapper_type` is empty/NONE or `data_size == 0`
+- [x] On hardware: `rom_data = reinterpret_cast<const uint8_t*>(0x10000000u + data_flash_offset)`
+- [x] On host (`JLPICART_HOST_TEST`): `rom_data = nullptr` (XIP not available)
+- [x] Sets `rom_size`, `subslot`, `mapper_type`; `expanded = false` (single entry)
+
+**10.4 Installer writes PayloadRecords**
+- [x] After the `col.state = "active"` commit step, iterate `manifest.payloads[]`
+- [x] For each payload: build `PayloadRecord` with `data_flash_offset = FLASH_CONTENT_DATA_OFS`
+      and `data_size = 0` (ROM bytes written separately by `populate_flash.py`)
+- [x] Put to KvStore with key `"pl.<payload_id>"`; failure is non-fatal (logged, not returned)
+- [x] Document: `data_size = 0` means ROM not yet written; `apply_mapping()` skips bus wiring
+
+**10.5 Main wiring**
+- [x] Replace the Stage 9 empty-manifest MappingPlan block with `ContentStore` lookup
+- [x] If `has_active_collection()` and `load_default_payload()` succeeds and `data_size > 0`:
+      call `mapping_plan_from_payload_record()` and pass result to `apply_mapping()`
+- [x] Otherwise: log reason and use empty MappingPlan (standby mode)
+
+**10.6 populate_flash.py**
+- [x] Parse mapper type from `MAPPER_<TYPE>` suffix in ROM filename (case-insensitive)
+      or from `--mapper` flag
+- [x] Generate KV region binary with correct CRC32 records (IEEE 802.3 / zlib)
+- [x] Generate CONTENT_DATA binary (raw ROM bytes at `FLASH_CONTENT_DATA_OFS = 0x600000`)
+- [x] Output single UF2 with two address ranges:
+      KV at `0x10200000`; ROM at `0x10600000`
+- [x] Print `picotool load <output>.uf2` command after generation
+- [x] `--help` shows supported mapper names and example invocation
+
+**10.7 Host tests (`test_content_store.cc`)**
+- [x] `has_active_collection()` false on empty KvStore
+- [x] `has_active_collection()` false when `col.state = "pending"`
+- [x] Round-trip: put `col.state + col.record + pl.<id>` → `load_collection()` + `load_payload()` correct
+- [x] `load_default_payload()` finds payload via `CollectionRecord.default_payload_id`
+- [x] `mapping_plan_from_payload_record()` with `data_size > 0` → `entry_count = 1`, fields correct
+- [x] `mapping_plan_from_payload_record()` with `data_size = 0` → `entry_count = 0`
+- [x] `mapping_plan_from_payload_record()` with empty `mapper_type` → `entry_count = 0`
+- [x] Installer integration: after `Installer::run()`, KvStore contains `pl.<id>` record
+
+### Definition of done
+
+- [x] Host tests pass; installer writes PayloadRecords
+- [x] `populate_flash.py` generates a valid UF2 from `fw/roms/flash1M/Menace f Triton.MAPPER_LINEAR.rom`
+- [ ] On hardware: flashing firmware UF2 + collection UF2 boots the ROM through the
+      ContentStore → MappingPlan → bus loop pipeline with no hardcoded ROM pointers
+
+---
+
+## Stage 11+ — Feature peripherals and services
 
 **Goal:** Implement concrete peripherals and services by following the same pattern.
 

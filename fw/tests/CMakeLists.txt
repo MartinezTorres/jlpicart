@@ -135,6 +135,7 @@ add_host_test(test_storage
 set(SRC_MANIFEST_PARSER "${FW_SRC}/content/manifest_parser.cc")
 set(SRC_INSTALLER       "${FW_SRC}/content/installer.cc")
 set(SRC_RECEIPTS        "${FW_SRC}/content/receipts.cc")
+set(SRC_CONTENT_STORE   "${FW_SRC}/content/content_store.cc")
 set(SRC_RESOURCE_MODEL  "${FW_SRC}/allocator/resource_model.cc")
 set(SRC_ALLOCATOR       "${FW_SRC}/allocator/allocator.cc")
 set(SRC_ACTIVATION      "${FW_SRC}/spine/activation.cc")
@@ -178,6 +179,28 @@ add_host_test(test_bus_mapper
 
 add_host_test(test_collections
     host/test_collections.cc
+    ${SRC_MANIFEST_PARSER}
+    ${SRC_INSTALLER}
+    ${SRC_RECEIPTS}
+    ${SRC_KV_STORE}
+    ${SRC_APPEND_LOG}
+    ${SRC_FLASH_DEVICE}
+    ${SRC_DIAG}
+    ${SRC_SHA256}
+    ${SRC_POL_VERIFY}
+    ${SRC_POL_STORE}
+    ${SRC_POSTURE}
+)
+
+# ---------------------------------------------------------------------------
+# Stage 10 tests
+# ---------------------------------------------------------------------------
+
+add_host_test(test_content_store
+    host/test_content_store.cc
+    ${SRC_CONTENT_STORE}
+    ${SRC_MAPPING_PLAN}
+    ${SRC_MAPPERS}
     ${SRC_MANIFEST_PARSER}
     ${SRC_INSTALLER}
     ${SRC_RECEIPTS}
