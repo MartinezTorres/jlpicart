@@ -258,6 +258,10 @@ DiagStatus Installer::run(InstallReader& reader,
     //     populate_flash.py writes the ROM bytes.  apply_mapping() skips
     //     bus wiring whenever data_size == 0.
     // ------------------------------------------------------------------
+    // KV_PAYLOAD_PREFIX is a compile-time string literal; compute length once.
+    static constexpr size_t kPrefixLen = 3;  // strlen("pl.")
+    static_assert(kPrefixLen == 3, "KV_PAYLOAD_PREFIX length mismatch");
+
     for (uint8_t i = 0; i < manifest.payload_count; ++i) {
         const PayloadEntry& pe = manifest.payloads[i];
         if (pe.payload_id[0] == '\0') continue;
@@ -271,19 +275,18 @@ DiagStatus Installer::run(InstallReader& reader,
 
         // Build "pl.<payload_id>".  payload_id must be ≤ 45 chars to fit in
         // KV_MAX_KEY_LEN (48).  Silently skip any record that exceeds this.
-        const size_t prefix_len = strlen(KV_PAYLOAD_PREFIX);  // 3
-        const size_t id_len     = strlen(pe.payload_id);
-        if (prefix_len + id_len > KV_MAX_KEY_LEN) continue;
+        const size_t id_len = strlen(pe.payload_id);
+        if (kPrefixLen + id_len > KV_MAX_KEY_LEN) continue;
 
         char key[KV_MAX_KEY_LEN + 1];
-        memcpy(key, KV_PAYLOAD_PREFIX, prefix_len);
-        memcpy(key + prefix_len, pe.payload_id, id_len);
-        key[prefix_len + id_len] = '\0';
+        memcpy(key, KV_PAYLOAD_PREFIX, kPrefixLen);
+        memcpy(key + kPrefixLen, pe.payload_id, id_len);
+        key[kPrefixLen + id_len] = '\0';
 
         DiagStatus ps = kv.put(key,
                                reinterpret_cast<const uint8_t*>(&pr),
                                static_cast<uint16_t>(sizeof(pr)));
-        (void)ps;  // non-fatal: bus wiring skipped when data_size == 0
+        (void)ps;  // non-fatal: best-effort write
     }
 
     // ------------------------------------------------------------------

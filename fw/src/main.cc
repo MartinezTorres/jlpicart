@@ -133,11 +133,13 @@ int main() {
         if (content_store.has_active_collection()) {
             PayloadRecord pr = {};
             DiagStatus s = content_store.load_default_payload(pr);
-            if (s.ok() && pr.data_size > 0) {
+            if (!s.ok()) {
+                log_info("MappingPlan: no default payload in collection — standby");
+            } else if (pr.data_size == 0) {
+                log_info("MappingPlan: payload data_size=0 (ROM not loaded) — standby");
+            } else {
                 mapping_plan = mapping_plan_from_payload_record(pr);
                 log_info("MappingPlan: active payload found — bus wiring requested");
-            } else {
-                log_info("MappingPlan: payload data_size=0 (ROM not loaded) — standby");
             }
         } else {
             log_info("MappingPlan: no active collection — standby mode");

@@ -203,6 +203,20 @@ static void test_load_default_payload_no_collection() {
     CHECK_FAIL(cs.load_default_payload(pr));
 }
 
+static void test_load_default_payload_empty_id() {
+    // Collection record present but default_payload_id is empty ("").
+    KvFixture fix;
+    CollectionRecord col = {};  // default_payload_id[0] == '\0'
+    strncpy(col.collection_id, "com.test.noid", sizeof(col.collection_id) - 1u);
+    col.payload_count = 1;
+    kv_put_str( fix.kv, KV_COL_STATE,  COL_STATE_ACTIVE);
+    kv_put_blob(fix.kv, KV_COL_RECORD, &col, sizeof(col));
+
+    ContentStore cs(fix.kv);
+    PayloadRecord pr = {};
+    CHECK_FAIL(cs.load_default_payload(pr));
+}
+
 // ---------------------------------------------------------------------------
 // Tests: mapping_plan_from_payload_record
 // ---------------------------------------------------------------------------
@@ -366,6 +380,7 @@ int main() {
     test_load_payload_not_found();
     test_load_default_payload();
     test_load_default_payload_no_collection();
+    test_load_default_payload_empty_id();
     test_mapping_plan_from_record_with_data();
     test_mapping_plan_from_record_data_size_zero();
     test_mapping_plan_from_record_empty_mapper();

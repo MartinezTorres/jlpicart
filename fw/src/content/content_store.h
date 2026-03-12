@@ -24,7 +24,8 @@ public:
     bool has_active_collection() const;
 
     // Read the installed CollectionRecord.
-    // Returns STORAGE_NOT_FOUND if no active collection or record is absent.
+    // Returns STORAGE_NOT_FOUND if the KV_COL_RECORD key is absent.
+    // Does NOT check col.state; call has_active_collection() first if needed.
     DiagStatus load_collection(CollectionRecord& out) const;
 
     // Read a PayloadRecord by payload_id.
@@ -33,8 +34,9 @@ public:
 
     // Load the default payload for the active collection.
     // Reads CollectionRecord.default_payload_id, then calls load_payload().
-    // Returns STORAGE_NOT_FOUND if there is no active collection, no default
-    // payload id is set, or the PayloadRecord has not been written yet.
+    // Returns STORAGE_NOT_FOUND if the collection record is absent,
+    // default_payload_id is empty, or the PayloadRecord has not been written.
+    // Does NOT check col.state; call has_active_collection() first if needed.
     DiagStatus load_default_payload(PayloadRecord& out) const;
 
 private:
