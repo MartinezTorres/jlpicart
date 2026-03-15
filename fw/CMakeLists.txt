@@ -70,10 +70,31 @@ add_executable(jlpicart
     src/storage/append_log.cc
     src/storage/storage_health.cc
 
+    # Allocator (Stage 8)
+    src/allocator/allocator.cc
+    src/allocator/resource_model.cc
+
+    # Activation (Stage 8)
+    src/spine/activation.cc
+
+    # Mappers (Stage 9)
+    src/mappers/mappers.cc
+
+    # Bus loop (Stage 9)
+    src/bus/bus.cc
+    src/bus/mapping_plan.cc
+
     # Collections (Stage 7)
     src/content/manifest_parser.cc
     src/content/installer.cc
     src/content/receipts.cc
+    src/content/content_store.cc
+
+    # Bus mapping (Stage 13)
+    src/bus/bus_map.cc
+
+    # Peripheral bus wiring (Stage 9 + Stage 13)
+    src/peripherals/peripheral_manager.cc
 )
 
 pico_set_program_name(jlpicart "jlpicart")

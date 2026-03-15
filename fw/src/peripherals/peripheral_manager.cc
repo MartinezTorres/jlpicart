@@ -1,6 +1,7 @@
 // peripheral_manager.cc — PeripheralManager implementation.
 
 #include "peripherals/peripheral_manager.h"
+#include "bus/bus_map.h"
 #include "mappers/mappers.h"
 #include "log/log.h"
 #include <cstdio>
@@ -82,6 +83,19 @@ bool PeripheralManager::apply_mapping(const MappingPlan& plan) {
 #endif
 
     return true;
+}
+
+void PeripheralManager::map_menu_page(uint8_t* page) {
+    BusMap::map_rw_region(1, 0x4000, page);
+#ifndef JLPICART_HOST_TEST
+    BUS::is_expanded = true;
+#endif
+    log_info("Menu page mapped: subslot 1 page 1 (0x4000-0x7FFF) RW");
+}
+
+void PeripheralManager::map_api_window(const uint8_t* buf) {
+    BusMap::map_ro_region(2, 0x8000, buf);
+    log_info("API window mapped: subslot 2 page 2 (0x8000-0xBFFF) RO");
 }
 
 void PeripheralManager::log_report(const LaunchPlan& plan) const {

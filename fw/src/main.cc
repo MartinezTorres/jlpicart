@@ -1,6 +1,6 @@
-// JLPiCart firmware — Stage 10: ContentStore launch pipeline.
+// JLPiCart firmware — Stage 13: Menu and API window bus wiring.
 //
-// Boot order (spec.md §4.4, bootstrapping.md Stage 10):
+// Boot order (spec.md §4.4, bootstrapping.md Stage 13):
 //   1. diag/log init
 //   2. Storage init: KvStore (SYSTEM_KV) + AppendLog (EVENT_LOG)
 //   3. SecurityPosture (OTP read — once, never again)
@@ -10,15 +10,13 @@
 //   7. MappingPlan: ContentStore lookup → mapping_plan_from_payload_record → apply_mapping()
 //   8. ApiWindow init (header + rings)
 //   9. MenuMailbox init (menu page header + mailbox registers)
-//  10. Append BOOT record to EVENT_LOG
-//  11. Print boot banner
-//  12. Collection install from USB (TODO: deferred to usb-host stage)
+//  10. Bus wiring: map_menu_page() + map_api_window() → BUS::cartridges[]
+//  11. Append BOOT record to EVENT_LOG
+//  12. Print boot banner
+//  13. Collection install from USB (TODO: deferred to usb-host stage)
 //  [hardware only]
-//  13. Launch Core 1 (service loop: API window + menu mailbox)
-//  14. Core 0 enters BUS::start() — never returns
-//
-// TODO(api-bus): map api_win.buf() into MSX page 2 subslot 2 via bus layer.
-// TODO(menu-bus): map menu_page into MSX page 1 subslot 1 and load menu_stub.rom.
+//  14. Launch Core 1 (service loop: API window + menu mailbox)
+//  15. Core 0 enters BUS::start() — never returns
 //
 // See fw/spec.md and fw/bootstrapping.md for context.
 
@@ -126,6 +124,7 @@ int main() {
     // 7. MappingPlan: look up the default payload from ContentStore.
     //    If there is no active collection or data_size == 0, fall back to
     //    an empty plan (standby/menu mode).  apply_mapping() logs the result.
+    PeripheralManager map_mgr;
     {
         ContentStore content_store(kv_store);
         MappingPlan mapping_plan = {};
@@ -145,22 +144,26 @@ int main() {
             log_info("MappingPlan: no active collection — standby mode");
         }
 
-        PeripheralManager map_mgr;
         map_mgr.apply_mapping(mapping_plan);
     }
 
-    // 8. Init API window (16KB buffer; bus mapping deferred to api-bus stage).
+    // 8. Init API window (16KB buffer, writes "JLP1" header).
     static ApiWindow api_win;
     api_win.init(posture, policy_store, registry);
     log_info("API window initialised");
 
-    // 9. Init Menu mailbox (16KB page buffer; bus mapping deferred to menu-bus stage).
+    // 9. Init Menu mailbox (16KB page buffer, writes "JLMN" header + stub code).
     static uint8_t menu_page[MENU_PAGE_SIZE];
     static MenuMailbox menu_mbx;
-    menu_mbx.init(menu_page, MENU_DATA_OFS); // stub_entry = 0x0100 (page-relative)
+    menu_mbx.init(menu_page, MENU_DATA_OFS);
     log_info("Menu mailbox initialised");
 
-    // 10. Append BOOT record to EVENT_LOG (spec §6.5 boot integration).
+    // 10. Wire bus mappings: menu page at subslot 1 / 0x4000 (RW),
+    //     API window at subslot 2 / 0x8000 (RO).
+    map_mgr.map_menu_page(menu_page);
+    map_mgr.map_api_window(api_win.buf());
+
+    // 11. Append BOOT record to EVENT_LOG (spec §6.5 boot integration).
     {
         BootRecord boot_rec = {};
         const char* build_id = FW_BUILD_ID;
@@ -173,7 +176,7 @@ int main() {
                          sizeof(boot_rec));
     }
 
-    // 11. Print boot banner to log (flushed to UART/OLED in later stages).
+    // 12. Print boot banner to log (flushed to UART/OLED in later stages).
     {
         char buf[128];
         snprintf(buf, sizeof(buf),
@@ -188,11 +191,11 @@ int main() {
         log_info(buf);
     }
 
-    // 12. Collection install from USB (deferred to usb-host stage).
+    // 13. Collection install from USB (deferred to usb-host stage).
     // TODO(usb-host): wire UsbInstallScanner here once tinyusb is integrated.
     log_info("collection install: USB host not integrated (TODO(usb-host))");
 
-    // 13–14. On hardware: launch Core 1 for the service loop, then Core 0 enters
+    // 14–15. On hardware: launch Core 1 for the service loop, then Core 0 enters
     //        BUS::start() and never returns.
     //        On host (JLPICART_HOST_TEST): run the service loop on the single thread.
 

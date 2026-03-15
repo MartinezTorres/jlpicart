@@ -14,6 +14,7 @@
 #include "bus/mapping_plan.h"
 #include "spine/capability_registry.h"
 #include <cstddef>
+#include <cstdint>
 
 class PeripheralManager {
 public:
@@ -27,6 +28,17 @@ public:
     // If rom_data is nullptr, logs that ROM loading is deferred.
     // Returns true on success (including the deferred case).
     bool apply_mapping(const MappingPlan& plan);
+
+    // Map the 16 KB menu page buffer into the bus at MSX page 1 (0x4000–0x7FFF,
+    // subslot 1) as a read-write region.  The Z80 stub and the RP2350 both
+    // read and write this buffer (mailbox registers, data buffer).
+    // Sets BUS::is_expanded = true.
+    void map_menu_page(uint8_t* page);
+
+    // Map the 16 KB API window buffer into the bus at MSX page 2 (0x8000–0xBFFF,
+    // subslot 2) as a read-only region.  The Z80 reads the API window; writes
+    // from the Z80 are silently discarded by the bus loop.
+    void map_api_window(const uint8_t* buf);
 
     // Log a human-readable activation report via log_info/log_warn.
     void log_report(const LaunchPlan& plan) const;

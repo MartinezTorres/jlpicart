@@ -1,0 +1,116 @@
+<?xml version="1.0" ?>
+<!DOCTYPE msxconfig SYSTEM 'msxconfig2.dtd'>
+<msxconfig>
+
+  <!--
+    msx1_jlpicart_bus — test fixture for JLPiCart Stage 13 bus-wiring tests.
+
+    Like msx1_jlpicart but slot 1 is expanded into four subslots so that
+    the JLPiCart bus mapping can be simulated:
+      - subslot 1: 16 KB RAM at 0x4000 ("Menu Page RAM")   — RW in fixture
+      - subslot 2: 16 KB RAM at 0x8000 ("API Window RAM")  — RW in fixture
+
+    Note: in the real firmware the API window is read-only from the Z80 (the
+    bus loop ignores write callbacks and leaves memory_write_addresses null).
+    openMSX RAM is always writable; the RO invariant is enforced by hardware.
+
+    Usage:
+      TEST_MACHINE=msx1_jlpicart_bus \
+        bash fw/tests/openMSX/run_test.sh fw/tests/openMSX/test_menu_bus.tcl
+  -->
+
+  <info>
+    <manufacturer>JLPiCart</manufacturer>
+    <code>msx1_jlpicart_bus</code>
+    <release_year>2025</release_year>
+    <description>Test fixture: MSX1 with C-BIOS and JLPiCart subslotted slot 1 (menu page + API window). Used for Stage 13 bus wiring tests.</description>
+    <type>MSX</type>
+  </info>
+
+  <CassettePort/>
+
+  <devices>
+
+    <!-- Slot 0: C-BIOS Main ROM (32 KB) + Logo ROM (16 KB) -->
+    <primary slot="0">
+      <ROM id="C-BIOS Main ROM">
+        <mem base="0x0000" size="0x8000"/>
+        <rom>
+          <sha1>2f997e8a57528518c82ab3693fdae243dbbcc508</sha1>
+          <filename>cbios_main_msx1.rom</filename>
+        </rom>
+      </ROM>
+      <ROM id="C-BIOS Logo ROM">
+        <mem base="0x8000" size="0x4000"/>
+        <rom>
+          <sha1>9fbbe400dbaf186aeba42e170d9424b032412c42</sha1>
+          <filename>cbios_logo_msx1.rom</filename>
+        </rom>
+      </ROM>
+    </primary>
+
+    <!-- Slot 1: expanded (subslotted) — simulates the JLPiCart bus mapping.
+         subslot 0: empty (no device — bus returns 0xFF for unmapped reads)
+         subslot 1: 16 KB RAM at page 1 (0x4000–0x7FFF) — Menu Page
+         subslot 2: 16 KB RAM at page 2 (0x8000–0xBFFF) — API Window
+         subslot 3: empty -->
+    <primary slot="1">
+      <secondary slot="0"/>
+      <secondary slot="1">
+        <RAM id="Menu Page RAM">
+          <mem base="0x4000" size="0x4000"/>
+        </RAM>
+      </secondary>
+      <secondary slot="2">
+        <RAM id="API Window RAM">
+          <mem base="0x8000" size="0x4000"/>
+        </RAM>
+      </secondary>
+      <secondary slot="3"/>
+    </primary>
+
+    <!-- Slot 2: external — second cartridge slot (unused in this test) -->
+    <primary external="true" slot="2"/>
+
+    <!-- Slot 3: 64 KB RAM -->
+    <primary slot="3">
+      <RAM id="Main RAM">
+        <mem base="0x0000" size="0x10000"/>
+      </RAM>
+    </primary>
+
+    <PPI id="ppi">
+      <io base="0xA8" num="4"/>
+      <sound>
+        <volume>16000</volume>
+      </sound>
+      <key_ghosting>false</key_ghosting>
+      <keyboard_type>int</keyboard_type>
+      <has_keypad>false</has_keypad>
+      <code_kana_locks>false</code_kana_locks>
+      <graph_locks>false</graph_locks>
+    </PPI>
+
+    <VDP id="VDP">
+      <io base="0x98" num="2" type="O"/>
+      <io base="0x98" num="2" type="I"/>
+      <version>TMS9918A</version>
+      <vram>16</vram>
+    </VDP>
+
+    <PSG id="PSG">
+      <type>YM2149</type>
+      <io base="0xA0" num="2" type="O"/>
+      <io base="0xA2" num="1" type="I"/>
+      <sound>
+        <volume>21000</volume>
+      </sound>
+    </PSG>
+
+    <PrinterPort id="Printer Port">
+      <io base="0x90" num="2"/>
+    </PrinterPort>
+
+  </devices>
+
+</msxconfig>
