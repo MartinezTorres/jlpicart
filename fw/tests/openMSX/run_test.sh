@@ -44,10 +44,6 @@ TEST_SCRIPT="$(realpath "$TEST_SCRIPT")"
 
 # --- Configuration with overridable defaults ---
 OPENMSX_BIN="${OPENMSX_BIN:-$FW_ROOT/tools/openmsx/bin/openmsx}"
-# Fall back to system openMSX if local build not present.
-if [[ ! -x "$OPENMSX_BIN" ]] && command -v openmsx &>/dev/null; then
-    OPENMSX_BIN="$(command -v openmsx)"
-fi
 MENUPAGE_ROM="${MENUPAGE_ROM:-$FW_ROOT/src/msx/menu/stub/menupage.rom}"
 TEST_MACHINE="${TEST_MACHINE:-msx1_jlpicart}"
 TEST_TIMEOUT="${TEST_TIMEOUT:-30}"
@@ -75,10 +71,17 @@ export SDL_AUDIODRIVER="${SDL_AUDIODRIVER:-dummy}"
 #   fixtures/machines/msx1_jlpicart.xml  → machine "msx1_jlpicart"
 export OPENMSX_USER_DATA="$SCRIPT_DIR/fixtures"
 
-# Point OPENMSX_SYSTEM_DATA to the system openMSX data directory.
-# The built-from-source binary compiles in /opt/openMSX/share as its default;
-# we override to the system install which has C-BIOS machines and scripts.
-export OPENMSX_SYSTEM_DATA="${OPENMSX_SYSTEM_DATA:-/usr/share/openmsx}"
+# Point OPENMSX_SYSTEM_DATA to the pinned openMSX share directory.
+# Using the pinned share avoids version mismatches with system scripts.
+# C-BIOS ROMs are looked up in systemroms/ under both OPENMSX_USER_DATA and
+# OPENMSX_SYSTEM_DATA; the system cbios package (/usr/share/openmsx/systemroms)
+# is the fallback if the pinned share has no systemroms.
+OPENMSX_SRC_SHARE="$REPO_ROOT/third_party/openMSX/share"
+if [[ -d "$OPENMSX_SRC_SHARE" ]]; then
+    export OPENMSX_SYSTEM_DATA="${OPENMSX_SYSTEM_DATA:-$OPENMSX_SRC_SHARE}"
+else
+    export OPENMSX_SYSTEM_DATA="${OPENMSX_SYSTEM_DATA:-/usr/share/openmsx}"
+fi
 
 # Warn if OPENMSX_SYSTEM_DATA doesn't exist (C-BIOS ROMs won't be found).
 if [[ ! -d "$OPENMSX_SYSTEM_DATA" ]]; then

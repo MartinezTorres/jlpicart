@@ -1,0 +1,15 @@
+# SDCC build artifacts
+stub.ihx
+stub.bin
+stub.lst
+stub.map
+stub.noi
+stub.asm
+stub.rel
+stub.lk
+stub.sym
+crt0.rel
+crt0.lst
+crt0.asm
+crt0.sym
+menupage.rom
