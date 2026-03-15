@@ -1,6 +1,6 @@
-// JLPiCart firmware — Stage 13: Menu and API window bus wiring.
+// JLPiCart firmware — Stage 14: USB host collection install.
 //
-// Boot order (spec.md §4.4, bootstrapping.md Stage 13):
+// Boot order (spec.md §4.4, bootstrapping.md Stage 14):
 //   1. diag/log init
 //   2. Storage init: KvStore (SYSTEM_KV) + AppendLog (EVENT_LOG)
 //   3. SecurityPosture (OTP read — once, never again)
@@ -13,9 +13,9 @@
 //  10. Bus wiring: map_menu_page() + map_api_window() → BUS::cartridges[]
 //  11. Append BOOT record to EVENT_LOG
 //  12. Print boot banner
-//  13. Collection install from USB (TODO: deferred to usb-host stage)
+//  13. USB host init + collection install from USB (blocking scan; hot-plug in Core 1)
 //  [hardware only]
-//  14. Launch Core 1 (service loop: API window + menu mailbox)
+//  14. Launch Core 1 (service loop: API window + menu mailbox + USB poll)
 //  15. Core 0 enters BUS::start() — never returns
 //
 // See fw/spec.md and fw/bootstrapping.md for context.
@@ -35,6 +35,8 @@
 #include "drivers/driver_descriptor.h"
 #include "msx/api/api_window.h"
 #include "msx/menu/menu_host_abi.h"
+#include "usb/usb_host.h"
+#include "usb/usb_install_scanner.h"
 #include "storage/flash_device.h"
 #include "storage/flash_layout.h"
 #include "storage/kv_store.h"
@@ -191,24 +193,32 @@ int main() {
         log_info(buf);
     }
 
-    // 13. Collection install from USB (deferred to usb-host stage).
-    // TODO(usb-host): wire UsbInstallScanner here once tinyusb is integrated.
-    log_info("collection install: USB host not integrated (TODO(usb-host))");
+    // 13. USB host init + collection install from USB.
+    //     init() starts the tinyusb host stack; scan() is blocking (runs once
+    //     on boot).  Future hot-plug events are handled by Core 1 via poll().
+    static UsbHost usb_host;
+    usb_host.init();
+    {
+        UsbInstallScanner usb_scanner(usb_host);
+        usb_scanner.scan(kv_store, event_log, policy_store);
+    }
 
     // 14–15. On hardware: launch Core 1 for the service loop, then Core 0 enters
     //        BUS::start() and never returns.
     //        On host (JLPICART_HOST_TEST): run the service loop on the single thread.
 
 #ifndef JLPICART_HOST_TEST
-    // Core 1 service loop — handles API window and menu mailbox.
-    // api_win and menu_mbx are static (file-visible from any point in this function)
+    // Core 1 service loop — handles API window, menu mailbox, and USB poll.
+    // All three are static (file-visible from any point in this function)
     // so the function pointer can reach them without capturing.
     static ApiWindow*   g_api_win  = &api_win;
     static MenuMailbox* g_menu_mbx = &menu_mbx;
+    static UsbHost*     g_usb_host = &usb_host;
     multicore_launch_core1([]() {
         while (true) {
             g_api_win->service_once();
             g_menu_mbx->tick();
+            g_usb_host->poll();
             tight_loop_contents();
         }
     });

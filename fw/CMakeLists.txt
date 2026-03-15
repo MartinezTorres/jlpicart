@@ -95,6 +95,17 @@ add_executable(jlpicart
 
     # Peripheral bus wiring (Stage 9 + Stage 13)
     src/peripherals/peripheral_manager.cc
+
+    # USB host (Stage 14)
+    src/usb/usb_host.cc
+    src/usb/usb_install_reader.cc
+    src/usb/usb_install_scanner.cc
+    src/usb/diskio_tuh.cc
+
+    # FatFs (Stage 14) — from bundled tinyusb lib
+    ext/tinyusb/lib/fatfs/source/ff.c
+    ext/tinyusb/lib/fatfs/source/ffsystem.c
+    ext/tinyusb/lib/fatfs/source/ffunicode.c
 )
 
 pico_set_program_name(jlpicart "jlpicart")
@@ -105,7 +116,27 @@ pico_enable_stdio_usb(jlpicart 0)
 
 target_include_directories(jlpicart PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/src
+    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src
+    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/lib/fatfs/source
 )
+
+# tinyusb config target: exposes tusb_config.h via fw/src/usb/
+add_library(tinyusb_config INTERFACE)
+target_include_directories(tinyusb_config INTERFACE
+    ${CMAKE_CURRENT_LIST_DIR}/src/usb
+)
+
+# tinyusb host + MSC + rp2040 HCD sources (firmware only, not host tests).
+target_sources(jlpicart PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/tusb.c
+    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/common/tusb_fifo.c
+    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/host/usbh.c
+    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/host/hub.c
+    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/class/msc/msc_host.c
+    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/portable/raspberrypi/rp2040/hcd_rp2040.c
+    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/portable/raspberrypi/rp2040/rp2040_usb.c
+)
+target_link_libraries(jlpicart tinyusb_config)
 
 target_compile_definitions(jlpicart PRIVATE
     FW_BUILD_ID="${GIT_DESCRIBE}"
@@ -114,6 +145,7 @@ target_compile_definitions(jlpicart PRIVATE
 target_link_libraries(jlpicart
     pico_stdlib
     hardware_flash
+    pico_unique_id
 )
 
 set_target_properties(jlpicart PROPERTIES

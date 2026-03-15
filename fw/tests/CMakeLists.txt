@@ -148,6 +148,7 @@ set(SRC_CONTENT_STORE   "${FW_SRC}/content/content_store.cc")
 set(SRC_RESOURCE_MODEL  "${FW_SRC}/allocator/resource_model.cc")
 set(SRC_ALLOCATOR       "${FW_SRC}/allocator/allocator.cc")
 set(SRC_ACTIVATION      "${FW_SRC}/spine/activation.cc")
+set(SRC_BUS_MAP         "${FW_SRC}/bus/bus_map.cc")
 set(SRC_PERIPH_MGR      "${FW_SRC}/peripherals/peripheral_manager.cc")
 set(SRC_MAPPERS         "${FW_SRC}/mappers/mappers.cc")
 set(SRC_MAPPING_PLAN    "${FW_SRC}/bus/mapping_plan.cc")
@@ -161,6 +162,7 @@ add_host_test(test_allocator
     ${SRC_RESOURCE_MODEL}
     ${SRC_ALLOCATOR}
     ${SRC_ACTIVATION}
+    ${SRC_BUS_MAP}
     ${SRC_PERIPH_MGR}
     ${SRC_MAPPERS}
     ${SRC_MAPPING_PLAN}
@@ -199,6 +201,31 @@ add_host_test(test_collections
     ${SRC_POL_VERIFY}
     ${SRC_POL_STORE}
     ${SRC_POSTURE}
+)
+
+# ---------------------------------------------------------------------------
+# Stage 14 tests
+# ---------------------------------------------------------------------------
+
+set(SRC_USB_HOST    "${FW_SRC}/usb/usb_host.cc")
+set(SRC_USB_SCANNER "${FW_SRC}/usb/usb_install_scanner.cc")
+
+add_host_test(test_usb_scanner
+    host/test_usb_scanner.cc
+    ${SRC_USB_HOST}
+    ${SRC_USB_SCANNER}
+    ${SRC_MANIFEST_PARSER}
+    ${SRC_INSTALLER}
+    ${SRC_RECEIPTS}
+    ${SRC_KV_STORE}
+    ${SRC_APPEND_LOG}
+    ${SRC_FLASH_DEVICE}
+    ${SRC_DIAG}
+    ${SRC_SHA256}
+    ${SRC_POL_VERIFY}
+    ${SRC_POL_STORE}
+    ${SRC_POSTURE}
+    ${SRC_LOG}
 )
 
 # ---------------------------------------------------------------------------
