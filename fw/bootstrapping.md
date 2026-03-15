@@ -772,7 +772,424 @@ pipeline can be validated without USB host hardware.
 
 ---
 
-## Stage 11+ — Feature peripherals and services
+## Stage 11 — Z80 toolchain: SDCC setup and menu stub
+
+**Goal:** Compile the Z80 menu stub using a pinned SDCC version.  The stub binary
+is embedded in the firmware image and copied into the menu page on init.  No openMSX
+integration yet; the stage ends when the stub compiles and the firmware links.
+
+### Design note: stub placement within the menu page
+
+`data_ofs` is fixed at `0x0100` per spec §8.  To avoid overwriting stub code with
+command data, the stub lives at the **top** of the menu page at a fixed offset
+`MENU_STUB_OFS = 0x3800` (last 2 KB of the 16 KB page).  This gives:
+
+- command data buffer: `0x0100..0x37FF` (~14.6 KB, `MENU_USABLE_DATA_LEN = 0x3700`)
+- stub code region:    `0x3800..0x3FFF` (2 KB max)
+
+`stub_entry` is set to `MENU_STUB_OFS` in `MenuMailbox::init()`.
+
+### Files added
+
+- `fw/tools/lock.yml` — pinned SDCC 4.5.x tarball URL + SHA256
+- `fw/tools/get_sdcc.sh` — downloads + unpacks SDCC to `fw/tools/sdcc/`; verifies SHA256;
+  no-op if `fw/tools/sdcc/bin/sdcc` already exists
+- `fw/src/msx/menu/stub/crt0.s` — minimal Z80 startup: set SP, call `_main`, loop forever
+- `fw/src/msx/menu/stub/stub_bios.h` — MSX BIOS entry constants
+- `fw/src/msx/menu/stub/stub.c` — Z80 menu stub source (minimum conformance per spec §8)
+- `fw/src/msx/menu/stub/Makefile` — builds `stub.c` + `crt0.s` → `stub.bin` via SDCC
+- `fw/src/msx/menu/menu_stub_bin.h` — **generated**; `uint8_t kMenuStubBin[]` + size constant
+- `fw/tests/host/test_menu_stub.cc` — host tests
+
+### Files modified
+
+- `fw/src/msx/menu/menu_host_abi.h` — add `MENU_STUB_OFS`, `MENU_USABLE_DATA_LEN` constants
+- `fw/src/msx/menu/menu_host_abi.cc` — `init()`: copy `kMenuStubBin` into `page + MENU_STUB_OFS`;
+  set `hdr->stub_entry = MENU_STUB_OFS`; assert stub fits within 2 KB
+- `fw/CMakeLists.txt` — custom target to invoke `fw/src/msx/menu/stub/Makefile`;
+  `menu_stub_bin.h` as a generated file in the build tree
+- `fw/tests/CMakeLists.txt` — add `test_menu_stub`
+
+### Checklist
+
+**11.1 SDCC toolchain pin**
+- [x] Create `fw/tools/lock.yml`:
+  ```yaml
+  sdcc:
+    version: "4.4.0"
+    platform: linux-amd64
+    url: "https://sourceforge.net/projects/sdcc/files/sdcc-linux-amd64/4.4.0/sdcc-4.4.0-amd64-unknown-linux2.5.tar.bz2/download"
+    sha256: ""  # filled by get_sdcc.sh on first run
+  ```
+- [x] Create `fw/tools/get_sdcc.sh`:
+  - check for `fw/tools/sdcc/bin/sdcc`; exit 0 if present
+  - download URL from lock.yml; verify SHA256 with `sha256sum -c`
+  - self-pins SHA256 into lock.yml on first run; `--force` flag to re-download
+  - unpack to `fw/tools/sdcc/`
+- [x] Add `fw/tools/sdcc/` to `.gitignore`
+
+**11.2 Z80 stub source**
+- [x] `fw/src/msx/menu/stub/stub_bios.h` — MSX BIOS call addresses (page-0 ROM):
+  - `BIOS_CHGMOD  0x005F` — change screen mode; A = mode id
+  - `BIOS_POSIT   0x00C6` — set cursor; H = row (1-based), L = col (1-based)
+  - `BIOS_CHPUT   0x00A2` — write char in A to screen
+  - `BIOS_SNSMAT  0x0141` — sense keyboard matrix row A → result in A
+  - VDP data/cmd ports: `VDP_DATA = 0x98`, `VDP_CMD = 0x99`
+  - PSG ports: `PSG_REG = 0xA0`, `PSG_WRITE = 0xA1`, `PSG_READ = 0xA2`
+  - `BIOS_MSXVER 0x002D` — ROM byte: 0=MSX1, 1=MSX2, 2=MSX2+, 3=turboR
+- [x] `fw/src/msx/menu/stub/crt0.s` — `__start`: `di`; set SP to 0x77FE
+  (2 bytes below MENU_STUB_OFS, above data buffer); call `_main`; `halt` loop
+- [x] `fw/src/msx/menu/stub/stub.c` — Z80 menu stub (SDCC C + inline asm):
+  - Mailbox accessed via volatile pointer macros from page base 0x4000;
+    no `#include` of host headers (Z80 build is isolated)
+  - On startup: detect MSX generation from BIOS byte at `0x002D`; fill
+    `hdr->host_caps` and `hdr->vdp_caps`; set `mbx->resp_seq = mbx->cmd_seq` (signal ready)
+  - Main loop: spin on `MBX_CMD_SEQ != MBX_RESP_SEQ`; call `dispatch()`; ack
+  - `dispatch()`: clears `out_len`; switches on `cmd_id`; writes `status`; ack via `MBX_RESP_SEQ = MBX_CMD_SEQ`
+  - Commands (minimum conformance, spec §8):
+    - `NOP (0x0000)`: status = OK
+    - `GET_HOST_INFO (0x0001)`: fill `HostInfo` (12 bytes) into data buffer; `out_len = 12`
+    - `SET_MODE (0x0002)`: BIOS CHGMOD with `arg0 & 0xFF`; reject > 2 with E_UNSUPPORTED
+    - `CLEAR (0x0003)`: re-issue CHGMOD with `g_mode` (clears screen); status = OK
+    - `PUT_TEXT (0x0004)`: validate `in_len <= DATA_CAP`; POSIT to `(arg0>>8)&0xFF, arg0&0xFF` (1-based);
+      write bytes via CHPUT; non-ASCII replaced with `?`; E_OVERFLOW / E_BAD_STATE guards
+    - `READ_INPUT (0x0005)`: scan 11 keyboard rows via SNSMAT; PSG reg 14 for joy1;
+      fill 16-byte `InputSnapshot`; `out_len = 16`; status = OK
+    - `IDLE (0x000A)`: busy-wait `arg0` ms (~33 inner iters/ms at 3.58 MHz); status = OK
+    - all others: status = E_UNSUPPORTED
+- [x] `bios_posit` saves col in C register before clobbering HL for row load (audit fix)
+
+**11.3 Makefile and build integration**
+- [x] `fw/src/msx/menu/stub/Makefile`:
+  ```makefile
+  SDCC_FLAGS := -mz80 --no-std-crt0 --code-loc 0x7800 --data-loc 0x7700 \
+                --stack-auto --out-fmt-ihx
+  ```
+  Note: `--code-loc 0x7800` places code at Z80 address 0x7800 (page offset 0x3800, = `MENU_STUB_OFS`);
+  `--data-loc 0x7700` places static vars within the menu page (audit fix — without this SDCC
+  defaults to 0x0000, outside our mapped page); also builds `menupage.rom` (16 KB fixture for Stage 12)
+- [x] `fw/CMakeLists.txt` custom target `build_menu_stub`:
+  - gated on presence of `fw/tools/sdcc/bin/sdcc`; no-ops with message if absent
+  - runs `make -C fw/src/msx/menu/stub`
+  - runs `python3 fw/tools/bin_to_c_array.py stub.bin kMenuStubBin > menu_stub_bin.h`
+- [x] Create `fw/tools/bin_to_c_array.py`: reads binary file, outputs `uint8_t <name>[] = { … };`
+  and `uint16_t <name>_SIZE = N;`; handles empty/missing file by outputting a 1-byte placeholder
+  with `#pragma message` (not `#warning` — avoids `-Werror=cpp` failures in host test build)
+- [x] `static_assert(kMenuStubBin_SIZE <= 2048, "stub exceeds 2 KB slot")`
+
+**11.4 MenuMailbox::init() update**
+- [x] Add to `menu_host_abi.h`:
+  ```c
+  static constexpr uint16_t MENU_STUB_OFS        = 0x3800u; // stub code at top of page
+  static constexpr uint16_t MENU_USABLE_DATA_LEN = MENU_STUB_OFS - MENU_DATA_OFS; // 0x3700
+  ```
+- [x] `MenuMailbox::init(page, stub_entry_ignored)`: ignore the parameter; always use
+  `MENU_STUB_OFS` as stub_entry (parameter kept for API stability, reserved)
+- [x] Copy `kMenuStubBin` (from `menu_stub_bin.h`) into `page + MENU_STUB_OFS`
+- [x] Set `hdr->stub_entry = MENU_STUB_OFS`; `hdr->data_len = MENU_USABLE_DATA_LEN`
+
+**11.5 Host tests (`test_menu_stub.cc`)**
+- [x] `kMenuStubBin_SIZE <= 2048` (fits in stub slot)
+- [x] `kMenuStubBin_SIZE > 0` (non-empty when SDCC was available at build time)
+- [x] `MenuMailbox::init()` copies stub to `page + MENU_STUB_OFS`; `page[MENU_DATA_OFS]` unchanged
+- [x] `MenuStubHeader` in page has `sig == "JLMN"`, `abi_major == 1`,
+  `stub_entry == MENU_STUB_OFS`, `data_ofs == MENU_DATA_OFS`,
+  `data_len == MENU_USABLE_DATA_LEN`, `mailbox_ofs == MENU_MAILBOX_OFS`
+- [x] Updated `test_menu_mailbox` assertions to use `MENU_USABLE_DATA_LEN` and `MENU_STUB_OFS`
+  (these changed from Stage 5 values when Stage 11 updated `init()`)
+
+### Definition of done
+
+- [x] `fw/tools/get_sdcc.sh` succeeds on a clean Linux amd64 checkout
+- [x] `stub.c` compiles; `stub.bin` ≤ 2048 bytes
+- [x] Firmware builds; host tests pass
+- [x] `stub.bin` absent → firmware still builds with zero-stub placeholder + `#pragma message`
+
+---
+
+## Stage 12 — openMSX integration and menu emulator tests
+
+**Goal:** openMSX available via a pinned git submodule; a test harness in
+`fw/tests/openmsx/` can boot an MSX1 machine, load the firmware, and verify the
+menu stub responds to mailbox commands over a TCL script interface.
+
+Spec reference: spec.md §13.2.
+
+### Files added
+
+- `third_party/openMSX` — git submodule (openMSX source, pinned to a stable tag)
+- `fw/tools/lock.yml` — add `openmsx` block with pinned tag + expected binary SHA256
+- `fw/tools/build_openmsx.sh` — builds openMSX from submodule into `fw/tools/openmsx/`;
+  skip if binary already exists; installs system dependencies note in README
+- `fw/tests/openmsx/run_test.sh` — wrapper: launch `fw/tools/openmsx/bin/openmsx` with
+  a given TCL script; parse stdout for `PASS`/`FAIL` line; propagate exit code
+- `fw/tests/openmsx/fixtures/msx1_jlpicart.xml` — openMSX machine config: MSX1 with
+  16 KB VRAM, BIOS ROM from openMSX share, JLPiCart in primary slot (UF2 not needed;
+  use `--ext jlpicart_stub` with the menu-page RAM region loaded as a cartridge ROM image)
+- `fw/tests/openmsx/test_menu_stub_basic.tcl` — emulator test: boot, verify GET_HOST_INFO,
+  SET_MODE, CLEAR, PUT_TEXT, READ_INPUT
+
+### Files modified
+
+- `.gitmodules` — add `third_party/openMSX` entry
+- `fw/tools/lock.yml` — add `openmsx` block
+
+### Checklist
+
+**12.1 openMSX submodule**
+- [x] `git submodule add https://github.com/openMSX/openMSX.git third_party/openMSX`
+  (already registered at `cb61db762aba16752ff649990bf85e40627777af` = `RELEASE_21_0`)
+- [x] Pin to most recent stable tag: `fw/tools/lock.yml` updated with tag `RELEASE_21_0`
+  and commit SHA; `OPENMSX_SYSTEM_DATA` in `run_test.sh` points to `third_party/openMSX/share/`
+- [x] `fw/tools/build_openmsx.sh`:
+  - check for `fw/tools/openmsx/bin/openmsx`; skip if present (`--force` to rebuild)
+  - `make -C third_party/openMSX -j$(nproc)` (uses GNUmakefile, not build.py)
+  - finds binary at `derived/openmsx` symlink; copies to `fw/tools/openmsx/bin/openmsx`
+  - prints BIOS ROM requirements and next-step instructions
+- [x] Add `fw/tools/openmsx/` to `.gitignore`
+
+**12.2 Test runner**
+- [x] `fw/tests/openMSX/run_test.sh`:
+  - usage: `run_test.sh <test.tcl> [extra openMSX args]`
+  - sets `OPENMSX_USER_DATA=fw/tests/openMSX/fixtures/` (for custom machine lookup)
+  - sets `OPENMSX_SYSTEM_DATA=third_party/openMSX/share/` (built-from-source share)
+  - sets `SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy` for headless CI operation
+  - wraps `fw/tools/openmsx/bin/openmsx -machine msx1_jlpicart -cart menupage.rom -script <tcl> -nolog`
+  - scans output for `TESTRESULT: PASS` or `TESTRESULT: FAIL <reason>`
+  - exit 0 on PASS, 1 on FAIL or timeout (default 30 s via `timeout`)
+- [x] TCL test convention: test scripts call `pass` (prints `TESTRESULT: PASS`, exits 0) or
+  `fail <reason>` (prints `TESTRESULT: FAIL <reason>`, exits 1); `check_eq` for comparisons
+
+**12.3 Machine fixture**
+- [x] `fw/tests/openMSX/fixtures/machines/msx1_jlpicart.xml`:
+  - MSX1 using C-BIOS (no proprietary ROM; `apt install cbios`)
+  - TMS9918A VDP (NTSC), YM2149 PSG, 64 KB RAM
+  - slot 0: C-BIOS Main + Logo ROMs (SHA1s match system `/usr/share/openmsx/systemroms/`)
+  - slot 1: `external="true"` (JLPiCart menu page loaded via `-cart menupage.rom`)
+  - slot 2: `external="true"` (second cartridge slot, unused in tests)
+  - slot 3: 64 KB RAM
+  - `OPENMSX_USER_DATA=fw/tests/openMSX/fixtures/` → openMSX finds `machines/msx1_jlpicart.xml`
+  - `OPENMSX_SYSTEM_DATA=/usr/share/openmsx` → C-BIOS ROMs + standard machine scripts found
+- [x] `menupage.rom` generation target already in `fw/src/msx/menu/stub/Makefile` (Stage 11)
+
+**12.4 Menu stub emulator test (`test_menu_stub_basic.tcl`)**
+- [x] Boot MSX; `after time 2.0 step_wait_init` — wait 2 s machine time then check
+  `resp_seq == cmd_seq` at 0x4040
+- [x] `GET_HOST_INFO (0x0001)`: `mbx_send` → 0.1 s delay → check `status == OK`,
+  `out_len == 12`, `msx_gen ∈ [1..4]`, `text_cols == 40`
+- [x] `SET_MODE(0) (0x0002)`: arg0=0 → check `status == OK`
+- [x] `CLEAR (0x0003)`: check `status == OK`
+- [x] `PUT_TEXT (0x0004)` at (row=0,col=0) with "JLP": arg0=0x0000, in_str="JLP" → `status == OK`
+  (arg0 = (row<<8)|col; 0-based coords, stub converts to 1-based for POSIT)
+- [x] `READ_INPUT (0x0005)`: check `status == OK`, `out_len == 16`
+- [x] Unknown command (0xFFFF): check `status == MENU_E_UNSUPPORTED (0x0001)`
+- [x] All checks pass → `pass` proc prints `TESTRESULT: PASS`, calls `exit 0`
+
+### Definition of done
+
+- [ ] `fw/tools/build_openmsx.sh` succeeds on a clean Linux amd64 checkout
+- [ ] `run_test.sh test_menu_stub_basic.tcl` exits 0
+- [ ] `GET_HOST_INFO` returns `msx_gen == 1`, `text_cols == 40` for the MSX1 fixture
+
+---
+
+## Stage 13 — Menu and API window bus wiring
+
+**Goal:** Map the 16 KB menu page at MSX page 1 (0x4000–0x7FFF, subslot 1) and the
+16 KB API window buffer at MSX page 2 (0x8000–0xBFFF, subslot 2).  From this stage,
+the Z80 can read both pages through the bus loop; the menu stub executes and the
+MSX screen shows a banner.
+
+### Files added
+
+- `fw/src/bus/bus_map.h`, `.cc` — `BusMap::map_ro_region()`, `BusMap::map_rw_region()`:
+  wire a flat SRAM buffer into `BUS::cartridges[subslot]` read/write callbacks
+
+### Files modified
+
+- `fw/src/peripherals/peripheral_manager.h`, `.cc` — add `map_menu_page(uint8_t* page)`
+  and `map_api_window(const uint8_t* buf)` calling `BusMap`
+- `fw/src/main.cc` — wire both mappings after `menu_mbx.init()` and `api_win.init()`;
+  remove `TODO(menu-bus)` and `TODO(api-bus)` comments
+- `fw/tests/openmsx/test_menu_bus.tcl` — openMSX test: verify both pages are readable
+
+### Checklist
+
+**13.1 BusMap: flat SRAM region mapping**
+- [ ] `bus_map.h`:
+  ```cpp
+  // Map a read-only 16 KB region into BUS::cartridges[subslot].
+  // page_base must be one of: 0x0000, 0x4000, 0x8000, 0xC000.
+  void BusMap::map_ro_region(uint8_t subslot, uint16_t page_base,
+                              const uint8_t* data);
+  // Map a read-write 16 KB region (Z80 can write back, e.g., mailbox).
+  void BusMap::map_rw_region(uint8_t subslot, uint16_t page_base,
+                              uint8_t* data);
+  ```
+- [ ] `bus_map.cc` implementation:
+  - compute segment index: `seg = page_base >> 13` (gives 0–7 for the 8×8 KB segments)
+  - for ro: set `cartridge.memory_read_addresses[seg] = data` and `[seg+1] = data + 0x2000`
+    (two 8 KB segments covering the 16 KB page); clear write callbacks for those segments
+  - for rw: same plus `memory_write_addresses[seg/seg+1]`; set write callback to a small
+    trampoline that stores the written byte: `page[addr & 0x3FFF] = val`
+  - Guard all `BUS::` references with `#ifndef JLPICART_HOST_TEST`
+- [ ] `static_assert` in `bus_map.cc` that segment indices are valid (0–7)
+
+**13.2 PeripheralManager wiring**
+- [ ] Add to `peripheral_manager.h`:
+  ```cpp
+  void map_menu_page(uint8_t* page);          // subslot 1, page 1 (0x4000)
+  void map_api_window(const uint8_t* buf);    // subslot 2, page 2 (0x8000)
+  ```
+- [ ] `map_menu_page`: call `BusMap::map_rw_region(1, 0x4000, page)`; set
+  `BUS::is_expanded = true`; log `"Menu page mapped: subslot 1 page 1 (0x4000–0x7FFF)"`
+- [ ] `map_api_window`: call `BusMap::map_ro_region(2, 0x8000, buf)`;
+  log `"API window mapped: subslot 2 page 2 (0x8000–0xBFFF)"`
+
+**13.3 Main wiring**
+- [ ] After `menu_mbx.init()` (step 9) and `api_win.init()` (step 8):
+  ```cpp
+  map_mgr.map_menu_page(menu_page);
+  map_mgr.map_api_window(api_win.buf());
+  ```
+- [ ] `BUS::is_expanded = true` is idempotent; set once here; existing subslot register
+  at 0xFFFF in the bus loop already handles subslot routing
+- [ ] Remove `TODO(api-bus)` and `TODO(menu-bus)` comments
+
+**13.4 openMSX test (`test_menu_bus.tcl`)**
+- [ ] Load the full firmware image (or the menu-page ROM stub + API-window ROM stub);
+  configure openMSX with subslot expansion enabled for our cartridge slot
+- [ ] Select subslot 1 for page 1: write `0x51` to slot-select register (0xFFFF) to expose
+  subslot 1 at 0x4000; read byte at 0x4000; verify it is `'J'` (MenuStubHeader.sig[0])
+- [ ] Read bytes 0x4000–0x4003: verify `"JLMN"`
+- [ ] Read byte 0x4004: verify `abi_major == 1`
+- [ ] Select subslot 2 for page 2; read 0x8000–0x8003: verify `"JLP1"` (ApiWindowHeader.sig)
+- [ ] Write a byte to 0x4040 (mailbox area): verify that a subsequent read returns the
+  written value (RW mapping confirmed)
+- [ ] Write a byte to 0x8000 (API window, RO): verify the API window buffer is unchanged
+  (optional: openMSX should not crash; actual write protection depends on MSX memory model)
+
+### Definition of done
+
+- [ ] `run_test.sh test_menu_bus.tcl` passes in openMSX
+- [ ] Firmware compiles for RP2350; boot log shows both mapping messages
+- [ ] On hardware: MSX screen shows stub-initialised display (blank text mode)
+      and does not hang on subslot access
+
+---
+
+## Stage 14 — USB host: collection install from USB media
+
+**Goal:** Wire tinyusb (already a submodule at `fw/ext/tinyusb`) for USB mass-storage
+host class.  The cartridge scans a USB stick for `/JLPICART/INSTALL/<id>/manifest.json`
+on boot and calls `Installer::run()` for each found Install Intent.  After a successful
+install the device boots the collection on next power cycle.
+
+Spec reference: spec.md §11.1 (USB provisioning media layout, acceptance rules, receipts).
+
+### Files added
+
+- `fw/src/usb/usb_host.h`, `.cc` — `UsbHost`: init tinyusb, `poll()` (calls `tuh_task()`),
+  `is_msc_mounted()`, mount/unmount callbacks
+- `fw/src/usb/usb_install_reader.h`, `.cc` — `UsbInstallReader : InstallReader` backed
+  by FatFs over tinyusb MSC block reads
+- `fw/src/usb/usb_install_scanner.h`, `.cc` — `UsbInstallScanner::scan()`: enumerate
+  `/JLPICART/INSTALL/*/manifest.json`; call `Installer::run()` for each; log results
+- `fw/src/usb/diskio_tuh.cc` — FatFs `diskio` backend wired to `tuh_msc_read10()`
+- `fw/tests/host/test_usb_scanner.cc` — host tests for scanner logic using `MemInstallReader`
+
+### Files modified
+
+- `fw/CMakeLists.txt` — enable tinyusb host (`CFG_TUH_ENABLED=1`, `CFG_TUH_MSC=1`);
+  add FatFs sources; add `usb/` sources; configure tinyusb for RP2350 USB FS
+- `fw/src/main.cc` — step 12: replace `TODO(usb-host)` stub with `usb_scanner.scan()`;
+  add `usb_host.poll()` to Core 1 service loop
+- `fw/tests/CMakeLists.txt` — add `test_usb_scanner`
+
+### Checklist
+
+**14.1 tinyusb host MSC**
+- [ ] In `fw/CMakeLists.txt`:
+  - add `fw/ext/tinyusb/src/` and host-class sources to the build
+  - define `CFG_TUH_ENABLED=1`, `CFG_TUH_MSC=1`, `CFG_TUSB_MCU=OPT_MCU_RP2350` via
+    a `tusb_config.h` header (add to `fw/src/usb/tusb_config.h`)
+  - link `pico_unique_id` (needed for USB serial descriptor)
+- [ ] `usb_host.cc`:
+  - `UsbHost::init()`: call `tusb_init(BOARD_TUH_RHPORT, &tuh_config)` with RP2350 USB FS
+    port; register mount/umount callbacks; set `g_msc_mounted = false`
+  - `UsbHost::poll()`: call `tuh_task()`; guard with `#ifndef JLPICART_HOST_TEST`
+  - `tuh_msc_mount_cb`: set `g_msc_mounted = true`; log `"USB MSC mounted (LUN 0)"`
+  - `tuh_msc_umount_cb`: set `g_msc_mounted = false`; log `"USB MSC unmounted"`
+  - `UsbHost::is_msc_mounted()`: return `g_msc_mounted`
+
+**14.2 FatFs + diskio bridge**
+- [ ] Add FatFs sources (`ff.c`, `ffsystem.c`, `ffunicode.c`) — copy from tinyusb
+  `lib/fatfs/source/` or add as a separate ext entry; no git submodule needed if
+  already bundled in tinyusb
+- [ ] `diskio_tuh.cc`: implement `disk_read()` using `tuh_msc_read10()`; implement
+  `disk_status()` and `disk_initialize()` using `g_msc_mounted`; `disk_write()` returns
+  `RES_WRPRT` (read-only policy: we install from USB but do not write back)
+- [ ] `UsbInstallReader::read_file(path, buf, max_len, out_len)`:
+  `f_mount` (if not mounted), `f_open(path)`, `f_read`, `f_close`; return
+  `STORAGE_NOT_FOUND` if file absent, `STORAGE_IO_ERROR` on FatFs error
+- [ ] `UsbInstallReader::hash_file(path, digest[32])`: stream file through `sha256_ctx`;
+  same error mapping
+- [ ] `UsbInstallReader::file_exists(path)`: `f_stat`
+
+**14.3 Scanner logic**
+- [ ] `UsbInstallScanner::scan(kv, event_log, policy)`:
+  - return early if `!usb_host.is_msc_mounted()`
+  - `f_opendir("0:/JLPICART/INSTALL")` — return if dir absent (not an error)
+  - `f_readdir` loop: for each entry with `AM_DIR` attribute:
+    - build path `"0:/JLPICART/INSTALL/<name>/manifest.json"`
+    - construct `UsbInstallReader` rooted at `"0:/JLPICART/INSTALL/<name>/"` (prepend root
+      to any `path` argument passed to `read_file`/`hash_file`/`file_exists`)
+    - call `Installer::run(reader, kv, event_log, policy, result)`
+    - log `"install <name>: %s"` with result summary
+  - At most `INSTALL_SCAN_MAX_DIRS = 8` dirs per scan (guard against malformed media)
+- [ ] Skip re-install: before calling `Installer::run()`, read current `KV_COL_RECORD`;
+  if `collection_id` and `version` match `manifest.json` (quick pre-parse of only
+  those two fields), log `"already installed, skipping"` and continue
+
+**14.4 Main wiring**
+- [ ] Core 1 service loop: add `usb_host.poll()`:
+  ```cpp
+  while (true) {
+      g_api_win->service_once();
+      g_menu_mbx->tick();
+      g_usb_host->poll();   // drives tuh_task()
+      tight_loop_contents();
+  }
+  ```
+- [ ] `UsbHost` instance as `static` in `main()`, pointer in a file-scope global
+  `g_usb_host` (same pattern as `g_api_win`)
+- [ ] Step 12 in `main()`: replace the `log_info("collection install: USB host not integrated")` line with:
+  ```cpp
+  UsbInstallScanner usb_scanner(usb_host);
+  usb_scanner.scan(kv_store, event_log, policy_store);
+  ```
+  (blocking: runs once on boot; USB host poll loop handles future hot-plug in Core 1)
+- [ ] Remove `TODO(usb-host)` comment
+
+**14.5 Host tests (`test_usb_scanner.cc`)**
+- [ ] `UsbInstallScanner` with a mock `UsbHost` (always `is_msc_mounted() = true`) and
+  a mock filesystem adapter: verify `scan()` calls `Installer::run()` for each directory
+  in `JLPICART/INSTALL/`
+- [ ] Verify skip: second scan with same `collection_id`/`version` already in KvStore → no install
+- [ ] Verify `INSTALL_SCAN_MAX_DIRS = 8` limit: 9 directories → only 8 processed
+- [ ] Verify `is_msc_mounted() = false` → scan returns immediately without any install
+
+### Definition of done
+
+- [ ] Firmware compiles with tinyusb host MSC + FatFs enabled
+- [ ] Host tests pass for scanner logic
+- [ ] On hardware: USB stick with `/JLPICART/INSTALL/test/manifest.json` → device
+  installs collection; EVENT_LOG receipt present; ContentStore shows active collection
+  on next boot; ROM runs through the full pipeline
+
+---
+
+## Stage 15+ — Feature peripherals and services
 
 **Goal:** Implement concrete peripherals and services by following the same pattern.
 

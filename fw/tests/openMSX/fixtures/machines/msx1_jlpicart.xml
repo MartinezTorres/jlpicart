@@ -1,0 +1,108 @@
+<?xml version="1.0" ?>
+<!DOCTYPE msxconfig SYSTEM 'msxconfig2.dtd'>
+<msxconfig>
+
+  <!--
+    msx1_jlpicart — test fixture for JLPiCart Stage 12 mailbox tests.
+
+    MSX1 using C-BIOS (open-source, no proprietary ROM required).
+    TMS9918A VDP (NTSC), YM2149 PSG, 64 KB RAM, two external cartridge slots.
+
+    The JLPiCart menu page is loaded into slot 1 via the -cart argument
+    (menupage.rom — 16 KB image with header + mailbox + stub code).
+
+    C-BIOS ROMs must be available to openMSX:
+      cbios_main_msx1.rom  sha1: 2f997e8a57528518c82ab3693fdae243dbbcc508
+      cbios_logo_msx1.rom  sha1: 9fbbe400dbaf186aeba42e170d9424b032412c42
+    Typically installed at /usr/share/openmsx/systemroms/ (apt: cbios).
+  -->
+
+  <info>
+    <manufacturer>JLPiCart</manufacturer>
+    <code>msx1_jlpicart</code>
+    <release_year>2025</release_year>
+    <description>Test fixture: MSX1 with C-BIOS and JLPiCart menu page in slot 1. Used for Stage 12 mailbox protocol tests.</description>
+    <type>MSX</type>
+  </info>
+
+  <CassettePort/>
+
+  <devices>
+
+    <!-- Slot 0: C-BIOS Main ROM (32 KB) + Logo ROM (16 KB) -->
+    <primary slot="0">
+      <ROM id="C-BIOS Main ROM">
+        <mem base="0x0000" size="0x8000"/>
+        <rom>
+          <sha1>2f997e8a57528518c82ab3693fdae243dbbcc508</sha1>
+          <filename>cbios_main_msx1.rom</filename>
+        </rom>
+      </ROM>
+      <ROM id="C-BIOS Logo ROM">
+        <mem base="0x8000" size="0x4000"/>
+        <rom>
+          <sha1>9fbbe400dbaf186aeba42e170d9424b032412c42</sha1>
+          <filename>cbios_logo_msx1.rom</filename>
+        </rom>
+      </ROM>
+    </primary>
+
+    <!-- Slot 1: 16 KB RAM for the JLPiCart menu page stub.
+         The mailbox (0x4040) and data buffer (0x4100) must be writable by the
+         Z80 stub and readable by the TCL test via debug write/read.  A plain
+         ROM (-cart) is read-only in openMSX so writes to the mailbox are lost.
+         Using internal RAM lets run_test.sh pre-load menupage.rom via TCL debug
+         commands before powering on, making the full page writable. -->
+    <primary slot="1">
+      <RAM id="Stub Test RAM">
+        <mem base="0x4000" size="0x4000"/>
+      </RAM>
+    </primary>
+
+    <!-- Slot 2: external — second cartridge slot (unused in this test) -->
+    <primary external="true" slot="2"/>
+
+    <!-- Slot 3: 64 KB RAM -->
+    <primary slot="3">
+      <RAM id="Main RAM">
+        <mem base="0x0000" size="0x10000"/>
+      </RAM>
+    </primary>
+
+    <PPI id="ppi">
+      <io base="0xA8" num="4"/>
+      <sound>
+        <volume>16000</volume>
+      </sound>
+      <key_ghosting>false</key_ghosting>
+      <keyboard_type>int</keyboard_type>
+      <has_keypad>false</has_keypad>
+      <code_kana_locks>false</code_kana_locks>
+      <graph_locks>false</graph_locks>
+    </PPI>
+
+    <VDP id="VDP">
+      <!-- TMS9918A: VDP_DATA=0x98, VDP_CMD=0x99 -->
+      <io base="0x98" num="2" type="O"/>
+      <io base="0x98" num="2" type="I"/>
+      <version>TMS9918A</version>
+      <vram>16</vram>
+    </VDP>
+
+    <PSG id="PSG">
+      <!-- YM2149: PSG_REG=0xA0, PSG_WRITE=0xA1, PSG_READ=0xA2 -->
+      <type>YM2149</type>
+      <io base="0xA0" num="2" type="O"/>
+      <io base="0xA2" num="1" type="I"/>
+      <sound>
+        <volume>21000</volume>
+      </sound>
+    </PSG>
+
+    <PrinterPort id="Printer Port">
+      <io base="0x90" num="2"/>
+    </PrinterPort>
+
+  </devices>
+
+</msxconfig>

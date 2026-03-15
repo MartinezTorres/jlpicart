@@ -68,8 +68,8 @@ static void test_init_sets_header_fields()
     CHECK_EQ(hdr->header_len,  static_cast<uint16_t>(sizeof(MenuStubHeader)));
     CHECK_EQ(hdr->mailbox_ofs, MENU_MAILBOX_OFS);
     CHECK_EQ(hdr->data_ofs,    MENU_DATA_OFS);
-    CHECK_EQ(hdr->data_len,    MENU_DATA_LEN);
-    CHECK_EQ(hdr->stub_entry,  static_cast<uint16_t>(0x0100u));
+    CHECK_EQ(hdr->data_len,    MENU_USABLE_DATA_LEN);  // excludes stub code region
+    CHECK_EQ(hdr->stub_entry,  MENU_STUB_OFS);         // stub lives at top of page
     // host_caps and vdp_caps are 0 until the Z80 stub fills them in.
     CHECK_EQ(hdr->host_caps,   0u);
     CHECK_EQ(hdr->vdp_caps,    0u);

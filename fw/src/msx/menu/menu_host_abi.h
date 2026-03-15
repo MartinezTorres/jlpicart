@@ -17,11 +17,13 @@
 // Page layout constants (spec.md §8 "Fixed layout within the 16KB Menu Page")
 // ---------------------------------------------------------------------------
 
-static constexpr uint16_t MENU_PAGE_SIZE     = 0x4000u; // 16 KB
-static constexpr uint16_t MENU_HEADER_OFS    = 0x0000u; // MenuStubHeader
-static constexpr uint16_t MENU_MAILBOX_OFS   = 0x0040u; // MenuMailboxRegs
-static constexpr uint16_t MENU_DATA_OFS      = 0x0100u; // shared data buffer
-static constexpr uint16_t MENU_DATA_LEN      = MENU_PAGE_SIZE - MENU_DATA_OFS; // 0x3F00
+static constexpr uint16_t MENU_PAGE_SIZE       = 0x4000u; // 16 KB
+static constexpr uint16_t MENU_HEADER_OFS      = 0x0000u; // MenuStubHeader
+static constexpr uint16_t MENU_MAILBOX_OFS     = 0x0040u; // MenuMailboxRegs
+static constexpr uint16_t MENU_DATA_OFS        = 0x0100u; // shared data buffer (spec: MUST be 0x0100)
+static constexpr uint16_t MENU_STUB_OFS        = 0x3800u; // stub code at top of page (2 KB slot)
+static constexpr uint16_t MENU_DATA_LEN        = MENU_PAGE_SIZE - MENU_DATA_OFS; // 0x3F00 (full range)
+static constexpr uint16_t MENU_USABLE_DATA_LEN = MENU_STUB_OFS - MENU_DATA_OFS;  // 0x3700 (excl. stub)
 
 static constexpr uint8_t  MENU_ABI_MAJOR     = 1u;
 static constexpr uint8_t  MENU_ABI_MINOR     = 0u;

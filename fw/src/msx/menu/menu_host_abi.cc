@@ -1,23 +1,34 @@
 // menu_host_abi.cc — RP2350-side Menu Host ABI controller.
 //
 // Implements the RP2350 half of the command/response protocol.
-// The Z80 stub (fw/z80/menu_stub/) implements the other half.
+// The Z80 stub (fw/src/msx/menu/stub/) implements the other half.
 //
 // Spec reference: spec.md §8 (Menu Host ABI).
 
 #include "msx/menu/menu_host_abi.h"
+#include "msx/menu/menu_stub_bin.h"  // kMenuStubBin, kMenuStubBin_SIZE
 
 // ---------------------------------------------------------------------------
 // init
 // ---------------------------------------------------------------------------
 
-void MenuMailbox::init(uint8_t* page, uint16_t stub_entry)
+void MenuMailbox::init(uint8_t* page, uint16_t /*stub_entry_ignored*/)
 {
+    // stub_entry parameter is ignored: always use MENU_STUB_OFS so that stub
+    // code never overlaps the data exchange buffer (spec §8 design note).
+    static_assert(kMenuStubBin_SIZE <= 2048u,
+                  "menu stub exceeds 2 KB slot at MENU_STUB_OFS");
+
     memset(page, 0, MENU_PAGE_SIZE);
 
     hdr_  = reinterpret_cast<MenuStubHeader*>(page + MENU_HEADER_OFS);
     mbx_  = reinterpret_cast<MenuMailboxRegs*>(page + MENU_MAILBOX_OFS);
     data_ = page + MENU_DATA_OFS;
+
+    // Embed stub binary at the top of the page.
+    if (kMenuStubBin_SIZE > 0u) {
+        memcpy(page + MENU_STUB_OFS, kMenuStubBin, kMenuStubBin_SIZE);
+    }
 
     // Write MenuStubHeader.
     hdr_->sig[0]      = 'J'; hdr_->sig[1] = 'L';
@@ -27,9 +38,9 @@ void MenuMailbox::init(uint8_t* page, uint16_t stub_entry)
     hdr_->header_len  = sizeof(MenuStubHeader);
     hdr_->mailbox_ofs = MENU_MAILBOX_OFS;
     hdr_->data_ofs    = MENU_DATA_OFS;
-    hdr_->data_len    = MENU_DATA_LEN;
-    hdr_->stub_entry  = stub_entry;
-    // host_caps and vdp_caps are 0 until the Z80 stub fills them in.
+    hdr_->data_len    = MENU_USABLE_DATA_LEN;  // excludes stub code region
+    hdr_->stub_entry  = MENU_STUB_OFS;
+    // host_caps and vdp_caps are 0; Z80 stub fills them in after init.
 
     // Mailbox starts idle: cmd_seq == resp_seq == 0, no pending command.
     mbx_->cmd_seq  = 0;
@@ -54,8 +65,8 @@ bool MenuMailbox::send_command(uint16_t cmd_id,
         return false;
     }
 
-    if (in_len > MENU_DATA_LEN) {
-        return false; // would overflow the shared data buffer
+    if (in_len > MENU_USABLE_DATA_LEN) {
+        return false; // would overflow the usable data buffer (stub code lives at top)
     }
 
     // Write all command fields before advancing cmd_seq (spec §8 ordering rule).

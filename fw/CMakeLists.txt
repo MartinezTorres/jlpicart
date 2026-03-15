@@ -116,3 +116,48 @@ foreach(_src ${_srcs})
         message(FATAL_ERROR "old_src path found in target sources: ${_src}")
     endif()
 endforeach()
+
+# ---------------------------------------------------------------------------
+# Stage 11: Z80 menu stub build target
+#
+# Compiles fw/src/msx/menu/stub/ with SDCC and regenerates menu_stub_bin.h.
+# Requires SDCC: run  bash fw/tools/get_sdcc.sh  first.
+#
+# Usage:  cmake --build <build_dir> --target build_menu_stub
+# ---------------------------------------------------------------------------
+
+set(STUB_DIR    "${CMAKE_CURRENT_LIST_DIR}/src/msx/menu/stub")
+set(STUB_BIN    "${STUB_DIR}/stub.bin")
+set(STUB_BIN_H  "${CMAKE_CURRENT_LIST_DIR}/src/msx/menu/menu_stub_bin.h")
+set(SDCC_BIN    "${CMAKE_CURRENT_LIST_DIR}/tools/sdcc/bin/sdcc")
+
+if(EXISTS "${SDCC_BIN}")
+    add_custom_command(
+        OUTPUT  "${STUB_BIN}"
+        COMMAND make -C "${STUB_DIR}" SDCC="${SDCC_BIN}" stub.bin
+        DEPENDS "${STUB_DIR}/stub.c"
+                "${STUB_DIR}/crt0.s"
+                "${STUB_DIR}/stub_bios.h"
+        COMMENT "Building Z80 menu stub with SDCC"
+    )
+    add_custom_command(
+        OUTPUT  "${STUB_BIN_H}"
+        COMMAND ${CMAKE_COMMAND} -E env
+                python3 "${CMAKE_CURRENT_LIST_DIR}/tools/bin_to_c_array.py"
+                        "${STUB_BIN}" kMenuStubBin > "${STUB_BIN_H}"
+        DEPENDS "${STUB_BIN}"
+        COMMENT "Generating menu_stub_bin.h from stub.bin"
+    )
+    add_custom_target(build_menu_stub
+        DEPENDS "${STUB_BIN_H}"
+        COMMENT "Z80 menu stub built and embedded"
+    )
+    message(STATUS "SDCC found — build_menu_stub target available")
+else()
+    add_custom_target(build_menu_stub
+        COMMAND ${CMAKE_COMMAND} -E echo
+            "SDCC not found at ${SDCC_BIN} — run: bash fw/tools/get_sdcc.sh"
+        COMMENT "SDCC not installed; stub will be placeholder"
+    )
+    message(STATUS "SDCC not found at ${SDCC_BIN} — stub is placeholder. Run: bash fw/tools/get_sdcc.sh")
+endif()

@@ -1,0 +1,18 @@
+# fw/tools/lock.yml — pinned external tool versions
+# Run the corresponding get_*.sh / build_*.sh scripts to set up tools locally.
+# SHA256 fields are filled on first download by get_sdcc.sh.
+
+sdcc:
+  version: "4.4.0"
+  platform: linux-amd64
+  url: "https://sourceforge.net/projects/sdcc/files/sdcc-linux-amd64/4.4.0/sdcc-4.4.0-amd64-unknown-linux2.5.tar.bz2/download"
+  # Fill after first download: run get_sdcc.sh and paste the printed sha256 here.
+  sha256: ""
+
+openmsx:
+  # Pinned to RELEASE_21_0 (commit cb61db762aba16752ff649990bf85e40627777af).
+  # Submodule at: third_party/openMSX
+  # Build with: bash fw/tools/build_openmsx.sh
+  # Binary installed at: fw/tools/openmsx/bin/openmsx
+  tag: "RELEASE_21_0"
+  commit: "cb61db762aba16752ff649990bf85e40627777af"

@@ -3,3 +3,21 @@ discard
 build
 roms
 fw/bin_data/disabled/esp32-at.bin
+build_host
+
+# Z80 stub build artifacts (generated; not tracked)
+src/msx/menu/stub/stub.ihx
+src/msx/menu/stub/stub.bin
+src/msx/menu/stub/stub.asm
+src/msx/menu/stub/stub.lst
+src/msx/menu/stub/stub.map
+src/msx/menu/stub/stub.noi
+src/msx/menu/stub/crt0.asm
+src/msx/menu/stub/crt0.lst
+src/msx/menu/stub/menupage.rom
+
+# SDCC toolchain (downloaded by tools/get_sdcc.sh; not tracked)
+tools/sdcc/
+
+# openMSX binary (built by tools/build_openmsx.sh; not tracked)
+tools/openmsx/

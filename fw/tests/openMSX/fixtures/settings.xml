@@ -1,0 +1,7 @@
+<!DOCTYPE settings SYSTEM 'settings.dtd'>
+<settings>
+  <settings>
+    <setting id="renderer">SDL</setting>
+  </settings>
+  <bindings/>
+</settings>
