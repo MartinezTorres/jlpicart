@@ -16,6 +16,8 @@
 #include "spine/policy_store.h"
 #include <cstddef>
 
+class FlashDevice;  // forward declaration
+
 static constexpr size_t INSTALL_SCAN_MAX_DIRS = 8;
 
 // ---------------------------------------------------------------------------
@@ -58,9 +60,12 @@ public:
     // Testable entry point: inject any InstallDirSource.
     // Iterates over min(dirs.count(), INSTALL_SCAN_MAX_DIRS) directories.
     // For each: quick skip if already installed, else Installer::run().
+    // If flash is non-null, payload ROM data is copied to CONTENT_DATA flash
+    // during install (erase + write).  Pass nullptr to skip ROM writing.
     void run_scan(InstallDirSource& dirs,
                   KvStore& kv, AppendLog& event_log,
-                  const PolicyStore& policy);
+                  const PolicyStore& policy,
+                  FlashDevice* flash = nullptr);
 
 private:
     UsbHost& host_;

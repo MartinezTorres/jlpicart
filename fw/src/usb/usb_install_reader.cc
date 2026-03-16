@@ -4,6 +4,8 @@
 
 #include "usb/usb_install_reader.h"
 #include "diag/diag.h"
+#include "storage/flash_device.h"
+#include "storage/flash_layout.h"
 #include <cstring>
 #include <cstdio>
 
@@ -83,6 +85,49 @@ bool UsbInstallReader::file_exists(const char* path) {
 
     FILINFO info;
     return f_stat(fpath, &info) == FR_OK;
+}
+
+DiagStatus UsbInstallReader::copy_to_flash(const char* path,
+                                             FlashDevice& flash,
+                                             uint32_t flash_offset,
+                                             size_t* out_size) {
+    char fpath[ROOT_MAX + 256];
+    full_path(fpath, sizeof(fpath), path);
+
+    FIL fil;
+    if (f_open(&fil, fpath, FA_READ) != FR_OK) {
+        *out_size = 0;
+        return diag_status(DiagCode::STORAGE_NOT_FOUND);
+    }
+
+    uint8_t sector_buf[FLASH_SECTOR_SIZE];
+    uint32_t offset = flash_offset;
+    size_t total = 0;
+
+    for (;;) {
+        UINT bytes_read = 0;
+        FRESULT res = f_read(&fil, sector_buf, sizeof(sector_buf), &bytes_read);
+        if (res != FR_OK) {
+            f_close(&fil);
+            *out_size = total;
+            return diag_status(DiagCode::STORAGE_IO_ERROR);
+        }
+        if (bytes_read == 0) break;
+
+        DiagStatus s = flash.erase(offset, 1u);
+        if (!s.ok()) { f_close(&fil); *out_size = total; return s; }
+
+        s = flash.write(offset, sector_buf, bytes_read);
+        if (!s.ok()) { f_close(&fil); *out_size = total; return s; }
+
+        offset += FLASH_SECTOR_SIZE;
+        total  += bytes_read;
+        if (bytes_read < sizeof(sector_buf)) break;
+    }
+
+    f_close(&fil);
+    *out_size = total;
+    return diag_ok();
 }
 
 #endif // JLPICART_HOST_TEST

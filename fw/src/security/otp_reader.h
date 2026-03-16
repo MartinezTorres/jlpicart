@@ -59,6 +59,12 @@ namespace otp_offsets {
 
     // CRIT0 row 0x038 (not directly used by SecurityPosture, reserved)
     static constexpr uint32_t CRIT0 = 0x038u * 3u;
+
+    // Device secret seed — 32 bytes starting at row 0x100 (user OTP page 0).
+    // Written once by the provisioning tool; never read after SMK derivation.
+    // spec.md §10: "OTP device secret seed", doc/security/key-reference.md §OTP.
+    static constexpr uint32_t DEVICE_SECRET     = 0x100u * 3u;
+    static constexpr size_t   DEVICE_SECRET_LEN = 32u;
 }
 
 // ---------------------------------------------------------------------------

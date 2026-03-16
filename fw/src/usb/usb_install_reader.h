@@ -28,6 +28,11 @@ public:
 
     bool file_exists(const char* path) override;
 
+    // Stream a payload file to flash in FLASH_SECTOR_SIZE chunks.
+    // Erases one sector before each write chunk.
+    DiagStatus copy_to_flash(const char* path, FlashDevice& flash,
+                              uint32_t flash_offset, size_t* out_size) override;
+
 private:
     // Full FatFs path = root_ + path.  root_ is always <= 64 chars.
     static constexpr size_t ROOT_MAX  = 80;

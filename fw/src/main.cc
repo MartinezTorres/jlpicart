@@ -44,6 +44,7 @@
 #include "storage/save_store.h"
 #include "stats/stats_store.h"
 #include "identity/device_identity.h"
+#include "crypto/smk.h"
 #include "usb/usb_host.h"
 #include "usb/usb_install_scanner.h"
 #include "storage/flash_device.h"
@@ -195,10 +196,38 @@ int main() {
     static StatsStore stats_store;
     stats_store.init(saves_kv, profile_store);
 
-    // 2f. Init Device Identity Key (Stage 22).
+    // 2f. Init Device Identity Key (Stage 22 / Stage 25 SMK wrap).
+    //
+    // On provisioned units the private key is wrapped under a key derived from
+    // the OTP device secret via HKDF-SHA256 (spec §10, key-reference.md §SMK).
+    // On development / unprovisioned units smk_derive(nullptr,...) uses an
+    // all-zeros IKM (effectively unencrypted; flagged in posture as such).
+    // The SMK and OTP secret are zeroed from the stack immediately after use.
     static DeviceIdentity device_identity;
     {
-        DiagStatus s = device_identity.init_or_load(kv_store);
+        uint8_t smk[SMK_LEN] = {};
+        uint8_t dik_wrap[SMK_NS_KEY_LEN] = {};
+
+        if (posture.otp_device_secret_present) {
+            uint8_t otp_sec[otp_offsets::DEVICE_SECRET_LEN] = {};
+            otp.read_bytes(otp_offsets::DEVICE_SECRET,
+                           otp_sec, sizeof(otp_sec));
+            smk_derive(otp_sec, smk);
+            // Zero the raw secret immediately — SMK is all we need going forward.
+            volatile uint8_t* vp = otp_sec;
+            for (size_t i = 0; i < sizeof(otp_sec); ++i) vp[i] = 0u;
+        } else {
+            smk_derive(nullptr, smk);
+        }
+        smk_derive_ns_key(smk, "dik.priv", dik_wrap);
+        volatile uint8_t* vs = smk;
+        for (size_t i = 0; i < sizeof(smk); ++i) vs[i] = 0u;
+
+        DiagStatus s = device_identity.init_or_load(kv_store, dik_wrap);
+
+        volatile uint8_t* vd = dik_wrap;
+        for (size_t i = 0; i < sizeof(dik_wrap); ++i) vd[i] = 0u;
+
         if (s.ok()) {
             log_info(device_identity.is_provisioned()
                      ? "DIK ready (provisioned)"

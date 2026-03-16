@@ -238,6 +238,7 @@ add_host_test(test_collections
     ${SRC_POL_VERIFY}
     ${SRC_POL_STORE}
     ${SRC_POSTURE}
+    ${SRC_LOG}
 )
 
 # ---------------------------------------------------------------------------
@@ -545,6 +546,29 @@ add_host_test(test_psg
 )
 
 # ---------------------------------------------------------------------------
+# Stage 28 tests
+# ---------------------------------------------------------------------------
+
+add_host_test(test_rom_loading
+    host/test_rom_loading.cc
+    ${SRC_INSTALLER}
+    ${SRC_RECEIPTS}
+    ${SRC_CONTENT_STORE}
+    ${SRC_MAPPING_PLAN}
+    ${SRC_MAPPERS}
+    ${SRC_MANIFEST_PARSER}
+    ${SRC_KV_STORE}
+    ${SRC_APPEND_LOG}
+    ${SRC_FLASH_DEVICE}
+    ${SRC_DIAG}
+    ${SRC_SHA256}
+    ${SRC_POL_VERIFY}
+    ${SRC_POL_STORE}
+    ${SRC_POSTURE}
+    ${SRC_LOG}
+)
+
+# ---------------------------------------------------------------------------
 # Stage 10 tests
 # ---------------------------------------------------------------------------
 
@@ -564,4 +588,5 @@ add_host_test(test_content_store
     ${SRC_POL_VERIFY}
     ${SRC_POL_STORE}
     ${SRC_POSTURE}
+    ${SRC_LOG}
 )

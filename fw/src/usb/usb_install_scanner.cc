@@ -4,6 +4,7 @@
 #include "content/collection_format.h"
 #include "content/manifest.h"
 #include "content/manifest_parser.h"
+#include "storage/flash_device.h"
 #include "log/log.h"
 #include <cstdio>
 #include <cstring>
@@ -104,7 +105,8 @@ bool UsbInstallScanner::already_installed(KvStore& kv,
 
 void UsbInstallScanner::run_scan(InstallDirSource& dirs,
                                   KvStore& kv, AppendLog& event_log,
-                                  const PolicyStore& policy) {
+                                  const PolicyStore& policy,
+                                  FlashDevice* flash) {
     // Policy gate: USB collection install must be explicitly permitted.
     if (!(policy.info().flags & POLICY_ALLOW_USB_COLLECTION_INSTALL)) {
         log_info("USB install: denied by policy (POLICY_ALLOW_USB_COLLECTION_INSTALL not set)");
@@ -152,7 +154,7 @@ void UsbInstallScanner::run_scan(InstallDirSource& dirs,
 
         Installer installer;
         InstallResult result = {};
-        installer.run(reader, kv, event_log, policy, result);
+        installer.run(reader, kv, event_log, policy, result, flash);
 
         // Log result — message is intentionally brief to fit within the 128-byte
         // log line limit (name ≤ 32, collection_id ≤ 63, version ≤ 31).
@@ -180,7 +182,7 @@ void UsbInstallScanner::scan(KvStore& kv, AppendLog& event_log,
 
 #ifndef JLPICART_HOST_TEST
     FatFsInstallDirSource dirs;
-    run_scan(dirs, kv, event_log, policy);
+    run_scan(dirs, kv, event_log, policy, &FlashDevice::hardware());
 #else
     (void)kv; (void)event_log; (void)policy;
 #endif

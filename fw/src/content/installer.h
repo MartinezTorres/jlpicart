@@ -19,6 +19,8 @@
 #include <cstdint>
 #include <cstddef>
 
+class FlashDevice;  // forward declaration — full type in installer.cc
+
 // ---------------------------------------------------------------------------
 // InstallReader — abstract file source for a single Install Intent directory
 // ---------------------------------------------------------------------------
@@ -39,6 +41,18 @@ public:
                                   uint8_t digest[SHA256_DIGEST_SIZE]) = 0;
 
     virtual bool file_exists(const char* path) = 0;
+
+    // Stream a payload file directly into flash, erasing sectors as needed.
+    // flash_offset: absolute flash offset (from flash start, not XIP base).
+    // Writes the actual byte count of the file to *out_size.
+    // Default implementation: no-op (returns success with *out_size=0).
+    // Override in USB/filesystem-backed readers to enable ROM write-through.
+    virtual DiagStatus copy_to_flash(const char* path, FlashDevice& flash,
+                                      uint32_t flash_offset, size_t* out_size) {
+        (void)path; (void)flash; (void)flash_offset;
+        *out_size = 0;
+        return DiagStatus::success();
+    }
 };
 
 // ---------------------------------------------------------------------------
@@ -72,9 +86,20 @@ public:
     //   An InstallReceiptData record is appended to event_log regardless of
     //   success or failure.  A receipt write failure is silently ignored
     //   (spec §11.1: "receipts MUST NOT be required to boot").
+    // Run one install attempt from the given reader.
+    //
+    // If flash is non-null, payload ROM files are streamed from the reader
+    // into CONTENT_DATA flash during the install (erase + write per-sector).
+    // PayloadRecord.data_size is set to the actual size written, enabling
+    // immediate bus wiring at next boot.  If flash is null or copy fails,
+    // data_size is left at 0 (deferred ROM loading, bus wiring skipped).
+    //
+    // Power-loss safety: ROM data is written before the atomic KvStore commit,
+    // so a power failure during ROM write leaves no visible collection.
     DiagStatus run(InstallReader& reader,
                    KvStore& kv,
                    AppendLog& event_log,
                    const PolicyStore& policy,
-                   InstallResult& result_out);
+                   InstallResult& result_out,
+                   FlashDevice* flash = nullptr);
 };

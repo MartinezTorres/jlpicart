@@ -23,7 +23,9 @@
 #include "content/receipts.h"
 #include "crypto/sha256.h"
 #include "spine/policy_store.h"
+#include "storage/flash_device.h"
 #include "storage/flash_layout.h"
+#include "log/log.h"
 #include <cstring>
 #include <cstdio>
 
@@ -87,7 +89,8 @@ DiagStatus Installer::run(InstallReader& reader,
                            KvStore& kv,
                            AppendLog& event_log,
                            const PolicyStore& policy,
-                           InstallResult& result_out)
+                           InstallResult& result_out,
+                           FlashDevice* flash)
 {
     result_out = {};
     result_out.installed = false;
@@ -203,6 +206,62 @@ DiagStatus Installer::run(InstallReader& reader,
     }
 
     // ------------------------------------------------------------------
+    // 2b. Stream payload ROM files into CONTENT_DATA flash.
+    //
+    //     This phase runs BEFORE the KvStore atomic commit.  If power is
+    //     lost here, no collection becomes visible (KvStore unchanged).
+    //     We record the flash offset and actual size for each payload and
+    //     use them in step 3b when writing PayloadRecords.
+    //
+    //     If flash is null, or a payload's path is empty, or copy_to_flash
+    //     returns 0 bytes, data_size is left at 0 (bus wiring deferred).
+    // ------------------------------------------------------------------
+
+    struct PayloadFlashInfo {
+        uint32_t flash_offset;
+        uint32_t data_size;
+    };
+    // Default flash_offset to FLASH_CONTENT_DATA_OFS for every payload slot.
+    // This matches the placeholder written before Stage 28 and keeps
+    // backwards-compatibility with test suites that pass flash=nullptr.
+    PayloadFlashInfo pfi[MANIFEST_MAX_PAYLOADS] = {};
+    for (size_t i = 0; i < MANIFEST_MAX_PAYLOADS; ++i)
+        pfi[i].flash_offset = FLASH_CONTENT_DATA_OFS;
+
+    if (flash) {
+        uint32_t write_ptr = FLASH_CONTENT_DATA_OFS;
+        for (uint8_t i = 0; i < manifest.payload_count; ++i) {
+            const PayloadEntry& pe = manifest.payloads[i];
+            pfi[i].flash_offset = write_ptr;  // actual write pointer
+
+            if (pe.path[0] == '\0') continue;
+
+            size_t rom_size = 0;
+            DiagStatus s = reader.copy_to_flash(pe.path, *flash,
+                                                 write_ptr, &rom_size);
+            if (s.ok() && rom_size > 0) {
+                pfi[i].data_size = static_cast<uint32_t>(rom_size);
+                char msg[96];
+                snprintf(msg, sizeof(msg),
+                         "installer: payload[%u] %.32s @ 0x%08X (%zu B)",
+                         i, pe.path, write_ptr, rom_size);
+                log_info(msg);
+                // Advance write pointer sector-aligned.
+                uint32_t sectors =
+                    (static_cast<uint32_t>(rom_size) + FLASH_SECTOR_SIZE - 1u)
+                    / FLASH_SECTOR_SIZE;
+                write_ptr += sectors * FLASH_SECTOR_SIZE;
+            } else {
+                char msg[96];
+                snprintf(msg, sizeof(msg),
+                         "installer: payload[%u] %.32s: skip (%s)",
+                         i, pe.path, s.ok() ? "empty" : "error");
+                log_info(msg);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
     // 3. Atomic KvStore install.
     //
     //    Step a: mark "pending" (old collection becomes inaccessible).
@@ -274,8 +333,8 @@ DiagStatus Installer::run(InstallReader& reader,
         memcpy(pr.payload_id,  pe.payload_id,  sizeof(pr.payload_id));
         memcpy(pr.mapper_type, pe.mapper_type, sizeof(pr.mapper_type));
         pr.subslot           = pe.subslot;
-        pr.data_flash_offset = FLASH_CONTENT_DATA_OFS;
-        pr.data_size         = 0;  // ROM not yet written; populate_flash.py sets this
+        pr.data_flash_offset = pfi[i].flash_offset;
+        pr.data_size         = pfi[i].data_size;
 
         // Build "pl.<payload_id>".  payload_id must be ≤ 45 chars to fit in
         // KV_MAX_KEY_LEN (48).  Silently skip any record that exceeds this.
