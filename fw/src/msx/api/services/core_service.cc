@@ -1,14 +1,19 @@
 // core_service.cc — System service (0x00) implementation.
 //
 // Spec reference: spec.md §5.1 "System service (0x00)".
-// Methods implemented in this stage: GET_API_INFO (0x00), GET_CAPS (0x02),
-// GET_SECURITY_INFO (0x05), GET_POLICY_FLAGS (0x06).
-// Stubbed with E_UNSUPPORTED: GET_DEVICE_ID (0x01), GET_RANDOM (0x03),
-//   RESET_TO_MENU (0x04) — full implementations in later stages.
+// Methods implemented: GET_API_INFO (0x00), GET_CAPS (0x02),
+//   GET_RANDOM (0x03), RESET_TO_MENU (0x04),
+//   GET_SECURITY_INFO (0x05), GET_POLICY_FLAGS (0x06).
+// Stubbed with E_UNSUPPORTED: GET_DEVICE_ID (0x01) — needs DIK (Stage 22).
 
 #include "msx/api/services/core_service.h"
 #include "msx/api/api_window.h"
 #include <cstring>
+
+#ifndef JLPICART_HOST_TEST
+// RP2350 TRNG: rosc random bit register (available before dedicated TRNG peripheral).
+#  include "hardware/structs/rosc.h"
+#endif
 
 // ---------------------------------------------------------------------------
 // posture_to_props
@@ -99,6 +104,89 @@ static void handle_get_caps(const MsgHeader& req, ApiWindow& win,
 }
 
 // ---------------------------------------------------------------------------
+// 0x03 GET_RANDOM
+// ---------------------------------------------------------------------------
+//
+// Request payload: u16 nbytes (number of random bytes wanted).
+// Response: scratch_len = nbytes, payload_len = 0.
+// The random bytes are placed in the c2h scratch buffer.
+//
+// On hardware: reads nbytes bytes from the RP2350 ROSC random bit register.
+// In host tests: fills with a deterministic counter (0x01, 0x02, …) so tests
+// can verify that scratch_len matches and bytes are non-zero.
+
+static void handle_get_random(const MsgHeader& req,
+                               const uint8_t* payload, uint16_t payload_len,
+                               ApiWindow& win)
+{
+    if (payload_len < 2u) {
+        win.write_response(req.seq, req.service, req.method,
+                           API_E_BAD_REQ, nullptr, 0);
+        return;
+    }
+
+    uint16_t nbytes = static_cast<uint16_t>(payload[0] | (payload[1] << 8u));
+
+    // Cap at c2h scratch length (API_C2H_SCRATCH_LEN = 1024).
+    if (nbytes > API_C2H_SCRATCH_LEN) {
+        nbytes = static_cast<uint16_t>(API_C2H_SCRATCH_LEN);
+    }
+
+    // Fill the c2h scratch buffer with random bytes.
+    uint8_t* scratch = win.buf() + API_C2H_SCRATCH_OFS;
+
+#ifndef JLPICART_HOST_TEST
+    for (uint16_t i = 0; i < nbytes; ++i) {
+        // Each read of randombit gives one random bit; accumulate 8 bits per byte.
+        uint8_t byte = 0;
+        for (int b = 0; b < 8; ++b) {
+            byte = static_cast<uint8_t>((byte << 1u)
+                   | (rosc_hw->randombit & 1u));
+        }
+        scratch[i] = byte;
+    }
+#else
+    // Host stub: deterministic counter so tests can verify non-zero output.
+    for (uint16_t i = 0; i < nbytes; ++i) {
+        scratch[i] = static_cast<uint8_t>((i + 1u) & 0xFFu);
+    }
+#endif
+
+    // Build response header with scratch_ofs pointing to c2h scratch.
+    MsgHeader resp = {};
+    resp.seq         = req.seq;
+    resp.service     = req.service;
+    resp.method      = req.method;
+    resp.status      = API_OK;
+    resp.payload_len = 0;
+    resp.scratch_ofs = 0u; // offset within c2h scratch (start)
+    resp.scratch_len = nbytes;
+    resp.reserved    = 0;
+
+    uint8_t rsp_buf[sizeof(MsgHeader)];
+    memcpy(rsp_buf, &resp, sizeof(MsgHeader));
+    win.ring_push_msg(API_RSP_RING_OFS, rsp_buf, sizeof(MsgHeader));
+
+    // Notify Z80 via cart_event doorbell.
+    ApiRegs* regs = reinterpret_cast<ApiRegs*>(win.buf() + API_REGS_OFS);
+    regs->cart_event = static_cast<uint8_t>(regs->cart_event + 1u);
+}
+
+// ---------------------------------------------------------------------------
+// 0x04 RESET_TO_MENU
+// ---------------------------------------------------------------------------
+
+static void handle_reset_to_menu(const MsgHeader& req, ApiWindow& win,
+                                  void (*reset_menu_fn)())
+{
+    // Respond OK first, then invoke the callback.
+    win.write_response(req.seq, req.service, req.method, API_OK, nullptr, 0);
+    if (reset_menu_fn) {
+        reset_menu_fn();
+    }
+}
+
+// ---------------------------------------------------------------------------
 // 0x05 GET_SECURITY_INFO
 // ---------------------------------------------------------------------------
 
@@ -145,45 +233,54 @@ void core_service_handle(const MsgHeader&          req,
                          ApiWindow&                win,
                          const SecurityPosture&    posture,
                          const PolicyStore&        policy_store,
-                         const CapabilityRegistry& registry)
+                         const CapabilityRegistry& registry,
+                         void                    (*reset_menu_fn)())
 {
-    // Suppress unused-parameter warning for methods not yet reading payload.
-    (void)payload;
-    (void)payload_len;
-
     switch (req.method) {
         case SYS_GET_API_INFO:
+            (void)payload;
+            (void)payload_len;
             handle_get_api_info(req, win, posture);
             break;
 
         case SYS_GET_DEVICE_ID:
-            // Stage 6: requires OTP device secret for stable IDs.
+            // Stage 22: requires Device Identity Key (DIK).
+            (void)payload;
+            (void)payload_len;
             send_error(win, req, API_E_UNSUPPORTED);
             break;
 
         case SYS_GET_CAPS:
+            (void)payload;
+            (void)payload_len;
             handle_get_caps(req, win, registry);
             break;
 
         case SYS_GET_RANDOM:
-            // Stage 5: requires TRNG access.
-            send_error(win, req, API_E_UNSUPPORTED);
+            handle_get_random(req, payload, payload_len, win);
             break;
 
         case SYS_RESET_TO_MENU:
-            // Stage 5: requires Menu ABI.
-            send_error(win, req, API_E_UNSUPPORTED);
+            (void)payload;
+            (void)payload_len;
+            handle_reset_to_menu(req, win, reset_menu_fn);
             break;
 
         case SYS_GET_SECURITY_INFO:
+            (void)payload;
+            (void)payload_len;
             handle_get_security_info(req, win, posture);
             break;
 
         case SYS_GET_POLICY_FLAGS:
+            (void)payload;
+            (void)payload_len;
             handle_get_policy_flags(req, win, policy_store);
             break;
 
         default:
+            (void)payload;
+            (void)payload_len;
             send_error(win, req, API_E_UNSUPPORTED);
             break;
     }

@@ -57,12 +57,23 @@ add_executable(jlpicart
     src/drivers/driver_descriptor_table.cc
     src/spine/capability_registry.cc
 
-    # API window (Stage 4)
+    # API window (Stage 4) + Identity service (Stage 15)
     src/msx/api/api_window.cc
     src/msx/api/services/core_service.cc
+    src/msx/api/services/identity_service.cc
 
     # Menu Host ABI (Stage 5)
     src/msx/menu/menu_host_abi.cc
+
+    # Menu Application (Stage 16)
+    src/menu/menu_app.cc
+
+    # System Settings (Stage 17)
+    src/settings/system_settings_store.cc
+
+    # Save store and Storage service (Stage 19)
+    src/storage/save_store.cc
+    src/msx/api/services/storage_service.cc
 
     # Storage substrate (Stage 6)
     src/storage/flash_device.cc
@@ -95,6 +106,9 @@ add_executable(jlpicart
 
     # Peripheral bus wiring (Stage 9 + Stage 13)
     src/peripherals/peripheral_manager.cc
+
+    # User Profiles (Stage 15)
+    src/profiles/profile_store.cc
 
     # USB host (Stage 14)
     src/usb/usb_host.cc

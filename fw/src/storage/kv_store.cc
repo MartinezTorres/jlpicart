@@ -284,3 +284,41 @@ uint32_t KvStore::bytes_free() const
     if (!initialized_ || write_ptr_ >= part_size_) return 0;
     return part_size_ - write_ptr_;
 }
+
+// ---------------------------------------------------------------------------
+// del_prefix
+// ---------------------------------------------------------------------------
+
+DiagStatus KvStore::del_prefix(const char* prefix)
+{
+    if (!initialized_) return DiagStatus::error(DiagCode::STORAGE_CORRUPT);
+
+    size_t plen = strlen(prefix);
+    if (plen == 0) return DiagStatus::success(); // safety: don't delete everything
+
+    DiagStatus last = DiagStatus::success();
+
+    // Iteratively find and delete one matching key at a time.  Restarting the
+    // scan after each deletion is O(n²) but n ≤ KV_MAX_ENTRIES (64), which is
+    // acceptable.  This avoids mutating the index while iterating over it.
+    bool found = true;
+    while (found) {
+        found = false;
+        for (size_t i = 0; i < KV_MAX_ENTRIES; ++i) {
+            if (!index_[i].used) continue;
+            if (index_[i].key_len >= static_cast<uint8_t>(plen)
+                && memcmp(index_[i].key, prefix, plen) == 0) {
+                // Copy key to a NUL-terminated buffer for del().
+                char key_buf[KV_MAX_KEY_LEN + 1];
+                memcpy(key_buf, index_[i].key, index_[i].key_len);
+                key_buf[index_[i].key_len] = '\0';
+
+                DiagStatus s = del(key_buf);
+                if (!s.ok()) last = s;
+                found = true;
+                break; // restart scan after index mutation
+            }
+        }
+    }
+    return last;
+}

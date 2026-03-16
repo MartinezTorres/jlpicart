@@ -186,6 +186,11 @@ public:
     uint16_t last_status()  const { return last_status_; }
     uint16_t last_out_len() const { return last_out_len_; }
 
+    // Non-zero once the Z80 stub has completed its own initialisation.
+    // The stub writes host_caps to the header before writing resp_seq=cmd_seq
+    // at startup (spec §8), so any non-zero value means the stub is ready.
+    uint32_t stub_host_caps() const { return initialized_ ? hdr_->host_caps : 0u; }
+
     // Shared data buffer — valid read after tick() returns true.
     const uint8_t* data_buf()      const { return data_; }
     uint16_t       data_capacity() const { return MENU_DATA_LEN; }

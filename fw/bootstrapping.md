@@ -1189,7 +1189,742 @@ Spec reference: spec.md §11.1 (USB provisioning media layout, acceptance rules,
 
 ---
 
-## Stage 15+ — Feature peripherals and services
+## Stage 15 — User Profiles & Identity
+
+**Goal:** Persistent per-user profiles on the cartridge, plus the Identity API service
+(0x03) that lets MSX software enumerate profiles and switch the active one.
+
+Spec references: §4.5 (User Profiles), §6.2 (Profile Overrides schema), §7.1 (Identity
+service).  SaveStore flash partition is reserved here but its API surface is deferred to
+a later stage.
+
+### Files added
+
+- `fw/src/profiles/profile_format.h` — `ProfileRecord`, `ProfileIndex`, KV key constants
+- `fw/src/profiles/profile_store.h` — `ProfileStore` CRUD interface
+- `fw/src/profiles/profile_store.cc` — backed by a `KvStore` in PROFILES_KV partition
+- `fw/src/msx/api/services/identity_service.h` — method IDs + dispatch prototype
+- `fw/src/msx/api/services/identity_service.cc` — LIST/SET/GET_ACTIVE_PROFILE handlers
+- `fw/tests/host/test_profiles.cc` — host tests
+
+### Files modified
+
+- `fw/src/storage/flash_layout.h` — add `FLASH_PROFILES_KV_*` and `FLASH_SAVES_KV_*`
+  (carved from CONTENT_INDEX reserved space; CONTENT_INDEX shrinks from 3 MB to 2 MB)
+- `fw/src/msx/api/api_types.h` — add Identity method IDs; add `IDN_ProfileListEntry`,
+  `IDN_ActiveProfileResp` packed structs; bump `API_FEATURES_STAGE15`
+- `fw/src/msx/api/api_window.h` — add `ProfileStore* profile_store_` member and
+  `bind_profile_store()` method
+- `fw/src/msx/api/api_window.cc` — dispatch `SVC_IDENTITY`; set `API_FEATURE_IDENTITY`
+  in `feature_bits` when `bind_profile_store()` is called
+- `fw/src/main.cc` — init `ProfileStore` from `PROFILES_KV`; call
+  `api_win.bind_profile_store()`
+- `fw/CMakeLists.txt` — add `src/profiles/profile_store.cc`
+- `fw/tests/CMakeLists.txt` — add `test_profiles` target
+
+### Checklist
+
+**15.1 Flash layout**
+- [ ] In `flash_layout.h`:
+  - Add `FLASH_PROFILES_KV_OFS = 0x300000`, `FLASH_PROFILES_KV_SIZE = 0x080000` (512 KB)
+  - Add `FLASH_SAVES_KV_OFS = 0x380000`, `FLASH_SAVES_KV_SIZE = 0x080000` (512 KB)
+  - Adjust `FLASH_CONTENT_INDEX_OFS = 0x400000`, `FLASH_CONTENT_INDEX_SIZE = 0x200000` (2 MB,
+    down from 3 MB)
+  - Update `static_assert` chain to keep the contiguity guarantees intact
+
+**15.2 ProfileRecord / ProfileIndex**
+- [ ] `profile_format.h`:
+  - `PROF_MAX_PROFILES = 8`, `PROF_NAME_MAX = 32`, `PROF_LANG_MAX = 8`
+  - `PROF_ID_NONE = 0x0000`, `PROF_ID_GUEST = 0xFFFF`
+  - `KV_PROF_INDEX = "prof.index"` (stores serialized `ProfileIndex`)
+  - `KV_PROF_ACTIVE = "prof.active"` (stores `uint16_t profile_id`)
+  - `ProfileRecord` (44 bytes packed): `profile_id u16`, `name[32]`, `lang[8]`, `flags u8`,
+    `_pad u8`
+  - `ProfileIndex`: `count u8`, `_pad u8`, `entries[PROF_MAX_PROFILES]`
+    — sizeof = 354 bytes ≤ KV_MAX_VAL_LEN (512)
+
+**15.3 ProfileStore**
+- [ ] `ProfileStore::init(dev, part_ofs, part_size)` — calls `kv_.init()`; loads `active_id_`
+  from `KV_PROF_ACTIVE` (default `PROF_ID_NONE` if absent)
+- [ ] `ProfileStore::list(buf, max)` — reads `KV_PROF_INDEX`, fills `buf[0..n-1]`; returns count
+- [ ] `ProfileStore::count()` — same read, just returns count
+- [ ] `ProfileStore::create(name, lang, id_out)` — load index; allocate next unused ID (1-based,
+  sequential scan); append entry; save index; return STORAGE_FULL if count == PROF_MAX_PROFILES
+- [ ] `ProfileStore::get(profile_id, out)` — scan index; return STORAGE_NOT_FOUND if absent
+- [ ] `ProfileStore::remove(profile_id)` — remove from index; if removed == active_id_, set
+  active_id_ to PROF_ID_NONE and save KV_PROF_ACTIVE
+- [ ] `ProfileStore::set_active(profile_id)` — verify ID exists (or PROF_ID_NONE); write
+  KV_PROF_ACTIVE; update active_id_
+- [ ] `ProfileStore::active()` — return cached active_id_
+
+**15.4 Identity API service (0x03)**
+- [ ] In `api_types.h`: add Identity method IDs (`IDN_LIST_PROFILES = 0x00`,
+  `IDN_SET_ACTIVE_PROFILE = 0x01`, `IDN_GET_ACTIVE_PROFILE = 0x02`,
+  `IDN_GUEST_BEGIN = 0x03`, `IDN_GUEST_END = 0x04`); add
+  `IDN_ActiveProfileResp { u16 profile_id, u8 flags }` (3 bytes packed)
+- [ ] `identity_service_handle(req, payload, payload_len, win, ps)`:
+  - `IDN_LIST_PROFILES`: encode `{u16 count, {u16 id, u8 name_len, name_bytes…}...}` inline
+    (profile names capped at `PROF_API_NAME_MAX = 16` to fit in API_MAX_MSG)
+  - `IDN_SET_ACTIVE_PROFILE`: parse `{u16 profile_id}`; call `ps.set_active()`; respond OK
+    or API_E_NOT_FOUND / API_E_INTERNAL on error
+  - `IDN_GET_ACTIVE_PROFILE`: respond `IDN_ActiveProfileResp`
+  - `IDN_GUEST_BEGIN` / `IDN_GUEST_END`: respond OK (stub)
+  - unknown method: API_E_UNSUPPORTED
+
+**15.5 ApiWindow wiring**
+- [ ] Add `ProfileStore* profile_store_ = nullptr` to `ApiWindow`
+- [ ] Add `void ApiWindow::bind_profile_store(ProfileStore& ps)`: stores pointer; ORs
+  `API_FEATURE_IDENTITY` into `header().feature_bits`
+- [ ] In `service_once()`: add `case SVC_IDENTITY:` — calls
+  `identity_service_handle(…, *profile_store_)` if non-null, else API_E_UNSUPPORTED
+
+**15.6 Main wiring**
+- [ ] Declare `static ProfileStore profile_store` in `main()`
+- [ ] After storage init: `profile_store.init(flash, FLASH_PROFILES_KV_OFS, FLASH_PROFILES_KV_SIZE)`
+- [ ] After `api_win.init()`: `api_win.bind_profile_store(profile_store)`
+- [ ] Log `"PROFILES_KV ready"` or `"PROFILES_KV init failed"` (mirrors KV/log pattern)
+
+**15.7 Host tests (`test_profiles.cc`)**
+- [ ] `test_profile_create_list`: create 3 profiles, list returns 3, IDs are distinct
+- [ ] `test_profile_get`: get by known ID returns correct name
+- [ ] `test_profile_active`: set_active/active round-trip; PROF_ID_NONE on fresh store
+- [ ] `test_profile_remove`: remove profile; list shrinks; removing active resets to PROF_ID_NONE
+- [ ] `test_profile_full`: create PROF_MAX_PROFILES profiles; 9th create returns STORAGE_FULL
+- [ ] `test_identity_list`: identity service LIST_PROFILES encodes correct count and first name
+- [ ] `test_identity_set_get_active`: SET then GET round-trip via API
+
+### Definition of done
+
+- [ ] All host tests pass
+- [ ] `test_allocator` (pre-existing) still passes (flash_layout.h change must not break it)
+- [ ] API identity service advertised in `feature_bits` when ProfileStore bound
+- [ ] On hardware: profiles survive power cycle (persisted in PROFILES_KV)
+
+---
+
+## Stage 16 — Menu Application
+
+**Goal:** Implement the RP2350-side `MenuApp` state machine that drives the Z80 stub via
+`MenuMailbox` to display a navigable cartridge UI.  This is the "spine of the application"
+and must be complete before any peripheral stages.
+
+### Files added
+
+- `fw/src/menu/input_decoder.h`  — MSX keyboard/joystick active-low decode helpers
+- `fw/src/menu/menu_app.h`       — `MenuApp` class declaration
+- `fw/src/menu/menu_app.cc`      — state machine implementation
+- `fw/tests/host/test_menu_app.cc` — host tests
+
+### Files modified
+
+- `fw/src/msx/menu/menu_host_abi.h` — add `stub_host_caps()` accessor
+- `fw/src/main.cc`                  — `MenuApp` init; Core 1 loop calls `menu_app.tick()`
+- `fw/CMakeLists.txt`               — add `menu_app.cc` to firmware target
+- `fw/tests/CMakeLists.txt`         — add `test_menu_app` target
+
+### 16.1 input_decoder.h
+
+- [ ] `key_pressed(snap, row, bit)` — active-low test (0 = pressed)
+- [ ] `key_return`, `key_esc`, `key_up`, `key_down`, `key_left`, `key_right` — row/bit per MSX
+  matrix (row 7 bit7=RETURN bit2=ESC; row 8 bit5=UP bit6=DOWN bit4=LEFT bit7=RIGHT)
+- [ ] `joy1_up`, `joy1_down`, `joy1_trig` — PSG R14 bits 0,1,4 (active-low, 0=pressed)
+
+### 16.2 MenuMailbox change
+
+- [ ] Add `uint32_t stub_host_caps() const` to `MenuMailbox` — returns `hdr_->host_caps` (0 if
+  not yet initialised); the Z80 stub writes this before writing `resp_seq = cmd_seq` at init,
+  so non-zero means stub is ready to receive commands
+
+### 16.3 MenuApp screens and step model
+
+Six screens: `BOOT`, `BOOT_INFO`, `MAIN`, `COLLECTIONS`, `PROFILES`, `SETTINGS`.
+
+- `tick()`: if a command is pending, call `mbx_->tick()`; return if still waiting; then dispatch
+  to the current screen handler.  Each handler issues at most one command and advances `step_`.
+- `step_` tracks position within the current screen's render+input sequence.
+- `switch_screen(s)` sets `screen_`, `step_=0`, `cursor_=0`.
+
+Screen step sequences:
+
+| Screen      | Steps |
+|-------------|-------|
+| BOOT        | 0: poll `stub_host_caps()`; no commands |
+| BOOT_INFO   | 0: send GET_HOST_INFO; 1: parse response → load data → switch to MAIN |
+| MAIN        | 0:SET_MODE 1:CLEAR 2:header 3:game-info 4..6:items 7:footer 8:READ_INPUT 9:process |
+| COLLECTIONS | 0:CLEAR 1:header 2..4:info 5:Back 6:footer 7:READ_INPUT 8:process |
+| PROFILES    | 0:CLEAR 1:header 2+i:profile i (variable) base:New base+1:Back base+2:footer base+3:READ_INPUT base+4:process |
+| SETTINGS    | 0:CLEAR 1:header 2:content 3:Back 4:footer 5:READ_INPUT 6:process |
+
+- [ ] `MenuApp::init(mbx, kv, ps)` — store references; set BOOT screen
+- [ ] `MenuApp::tick()` — pending check then screen dispatch
+- [ ] `tick_boot()` — poll `stub_host_caps()`, switch to BOOT_INFO when non-zero
+- [ ] `tick_boot_info()` — send GET_HOST_INFO; on response parse HostInfo, call
+  `load_collection_data()` and `load_profile_data()`, switch to MAIN
+- [ ] `tick_main()` — renders collection status + 3 items (Collections/Profiles/Settings) + footer
+  + READ_INPUT; processes navigation and RETURN-to-select
+- [ ] `tick_collections()` — renders collection title/version/publisher or "no collection";
+  any key returns to MAIN
+- [ ] `tick_profiles()` — lists profiles (active marked `*`), "New Profile...", "Back";
+  RETURN on profile sets it active; RETURN on New Profile auto-creates "Profile N";
+  RETURN on Back or ESC returns to MAIN
+- [ ] `tick_settings()` — stub "(no settings configured)", any key returns to MAIN
+- [ ] `load_collection_data()` — constructs `ContentStore(*kv_)` locally, reads `has_collection_`
+  and `col_record_`
+- [ ] `load_profile_data()` — calls `ps_->list()` and `ps_->active()`
+- [ ] `put_text(col, row, text)` — packages `MENU_CMD_PUT_TEXT` with `arg0 = col|(row<<8)`
+
+### 16.4 Main wiring
+
+- [ ] Add `static MenuApp menu_app;` after `MenuMailbox` declaration
+- [ ] After `menu_mbx.init(...)`: `menu_app.init(menu_mbx, kv_store, profile_store);`
+- [ ] Core 1 loop: replace `g_menu_mbx->tick()` with `g_menu_app->tick()`
+- [ ] Host test loop: replace `menu_mbx.tick()` with `menu_app.tick()`
+
+### 16.5 Host tests (`test_menu_app.cc`)
+
+- [ ] `test_menu_boot_to_boot_info` — no cmd until host_caps set; GET_HOST_INFO sent after
+- [ ] `test_menu_boot_info_to_main` — after GET_HOST_INFO ack, SET_MODE sent (MAIN starts)
+- [ ] `test_menu_main_renders` — full MAIN render sequence: SET_MODE, CLEAR, 5 PUT_TEXT,
+  READ_INPUT in order
+- [ ] `test_menu_main_navigation` — DOWN input changes cursor, triggers re-render from step 0
+- [ ] `test_menu_main_select_profiles` — RETURN on item 1 sends CLEAR (PROFILES screen started)
+- [ ] `test_menu_profiles_renders` — PROFILES: CLEAR, header, profile items, New, Back in order
+
+### Definition of done
+
+- [ ] All host tests pass (`ctest` green)
+- [ ] Pre-existing tests unaffected
+- [ ] On hardware: menu boots, navigates between screens, profiles accessible from Profiles screen
+
+---
+
+## Stage 17 — System Settings
+
+**Goal:** Persistent, typed System Settings backed by the existing `FLASH_SYSTEM_KV_OFS`
+partition.  All downstream features (WiFi, language, source priority, user overrides) have
+nowhere to read defaults from until this store exists.  The Menu Settings screen changes
+from a placeholder to a live display of current values.
+
+Spec references: §4.5 "System Configuration", §5.3 "Persistence contract (v1)",
+§6.2 "System Settings schema (jlpicart.system.v1)".
+
+### Files added
+
+- `fw/src/settings/system_settings.h`       — `SystemSettings` packed struct + KV key constants
+- `fw/src/settings/system_settings_store.h` — `SystemSettingsStore` load/save interface
+- `fw/src/settings/system_settings_store.cc`— implementation over the existing `KvStore`
+- `fw/tests/host/test_system_settings.cc`   — host tests
+
+### Files modified
+
+- `fw/src/main.cc`       — declare `SystemSettingsStore settings_store`; init from `kv_store`;
+  pass reference to `MenuApp`
+- `fw/src/menu/menu_app.h/cc` — accept `SystemSettingsStore&`; replace
+  `"(no settings configured)"` stub with a live read-only summary render
+- `fw/CMakeLists.txt`          — add `system_settings_store.cc`
+- `fw/tests/CMakeLists.txt`    — add `test_system_settings` target
+
+### Checklist
+
+**17.1 SystemSettings struct**
+- [ ] `system_settings.h`:
+  - `KV_SYS_SETTINGS = "sys.settings"` — single blob key for the whole struct
+  - `SYS_VIDEO_AUTO=0`, `SYS_VIDEO_CRT=1`, `SYS_VIDEO_VGA=2`
+  - `SYS_SRC_FLASH=0`, `SYS_SRC_USB=1`, `SYS_SRC_OPTICAL=2`, `SYS_SRC_NETWORK=3`
+  - `SystemSettings` struct (power-of-two padded, ≤ KV max value size):
+    - `char wifi_ssid[64]` — NUL-terminated; empty = no credentials
+    - `char wifi_pass[64]` — NUL-terminated
+    - `char language[8]`  — BCP-47 tag, default `"en"`
+    - `uint8_t video_mode`        — `SYS_VIDEO_*`
+    - `uint8_t network_enabled`   — 1=on (default), 0=globally disabled
+    - `uint8_t guest_allowed`     — 1=on (default)
+    - `uint8_t source_priority[4]`— ordered `SYS_SRC_*` values; default flash,usb,optical,network
+    - `uint8_t reserved[46]`      — MUST be zero; pads struct to 192 bytes
+
+**17.2 SystemSettingsStore**
+- [ ] `SystemSettingsStore::init(kv)` — store reference; call `load()` into cached `settings_`
+- [ ] `SystemSettingsStore::load()` — read `KV_SYS_SETTINGS`; on missing/corrupt apply
+  `defaults()` and return `DIAG_NOT_FOUND` (not an error for callers)
+- [ ] `SystemSettingsStore::save()` — write `KV_SYS_SETTINGS` atomically; return DiagStatus
+- [ ] `SystemSettingsStore::get()` — return const ref to cached `settings_`
+- [ ] `SystemSettingsStore::set(settings)` — update cache and call `save()`
+- [ ] `SystemSettingsStore::defaults()` — return a `SystemSettings` with the canonical
+  defaults listed above; used when the KV key is absent
+
+**17.3 Main wiring**
+- [ ] Declare `SystemSettingsStore settings_store` after `kv_store` init in `main()`
+- [ ] Call `settings_store.init(kv_store)` immediately after; log init result
+- [ ] Pass `settings_store` reference to `menu_app.init(...)` (extend signature)
+
+**17.4 Menu Settings screen**
+- [ ] Extend `MenuApp::init` to accept `SystemSettingsStore&`; store as `ss_`
+- [ ] In `tick_settings()`: instead of the placeholder string, render:
+  - row 2: `"  WiFi: <ssid or \"(none)\">"`
+  - row 3: `"  Lang: <language>"`
+  - row 4: `"  Video: <auto|crt|vga>"`
+  - row 5: `"  Net: <on|off>"`
+  - (read-only display; edit UI is a later feature stage)
+- [ ] Keep the "Back → MAIN on any key" behavior
+
+**17.5 Factory reset operations**
+
+Spec §5.3 and §10 (Privacy) both MUST a "delete local data" operation.
+
+- [ ] `SystemSettingsStore::wipe_user_data(kv_saves, kv_profiles)` — deletes all keys with
+  prefix `"sav."` from the saves KV and all `"prof.*"` keys from the profiles KV;
+  does NOT touch the collection index (SYSTEM_KV), installed collections, or EVENT_LOG
+- [ ] `SystemSettingsStore::full_wipe(kv_saves, kv_profiles)` — same as above, plus erases
+  `KV_SYS_SETTINGS` itself (restoring defaults on next boot)
+- [ ] Both operations MUST NOT touch `FLASH_CONTENT_INDEX_OFS` (permanently installed Collections
+  are preserved in a user data wipe unless the user explicitly selects "full wipe")
+- [ ] Menu Settings screen gains a "Wipe user data" option that calls `wipe_user_data()`
+  (confirmation prompt via two-key sequence to prevent accidents)
+
+**17.6 Host tests (`test_system_settings.cc`)**
+- [ ] `test_settings_defaults`: fresh store returns canonical defaults; `wifi_ssid` empty,
+  `language=="en"`, `network_enabled==1`
+- [ ] `test_settings_roundtrip`: set custom values, save, reload from same flash → same values
+- [ ] `test_settings_missing_key`: KV absent → `load()` returns `DIAG_NOT_FOUND`; get() returns
+  defaults; no crash
+- [ ] `test_settings_corrupt`: write garbage to `KV_SYS_SETTINGS`; reload → defaults applied
+- [ ] `test_wipe_user_data`: write a profile and save blob; call `wipe_user_data()`; verify
+  profile KV is empty, save KV is empty, system settings still present
+- [ ] `test_full_wipe`: call `full_wipe()`; system settings revert to defaults on next load
+
+### Definition of done
+
+- [ ] All host tests pass
+- [ ] `test_menu_app` (pre-existing) still passes after `MenuApp::init` signature change
+- [ ] On hardware: settings survive power cycle; Menu Settings screen shows live values
+
+---
+
+## Stage 18 — RESET_TO_MENU
+
+**Goal:** System service method `0x04 RESET_TO_MENU` returns a real response and causes
+`MenuApp` to return to the MAIN screen.  This is now unblocked by Stage 16: the Menu ABI
+is complete.  It is also the cheapest remaining spine item.
+
+Spec references: §7.2 System service method `0x04 RESET_TO_MENU`.
+
+### Files modified
+
+- `fw/src/menu/menu_app.h`                     — add `request_reset_to_menu()` + `reset_requested_` flag
+- `fw/src/menu/menu_app.cc`                    — check flag at top of `tick()`; call
+  `switch_screen(Screen::MAIN)` and clear flag
+- `fw/src/msx/api/api_window.h`                — add `set_reset_menu_fn(void(*)())` to register
+  a reset callback
+- `fw/src/msx/api/api_window.cc`               — store callback; pass to core service dispatch
+- `fw/src/msx/api/services/core_service.h`     — add `reset_menu_fn_` callback parameter
+- `fw/src/msx/api/services/core_service.cc`    — `SYS_RESET_TO_MENU`: respond OK then invoke
+  callback if non-null (replaces `API_E_UNSUPPORTED`)
+- `fw/src/main.cc`                             — after `menu_app.init(...)`:
+  `api_win.set_reset_menu_fn([]{ menu_app.request_reset_to_menu(); })`
+
+### Checklist
+
+**18.1 MenuApp reset flag**
+- [ ] Add `bool reset_requested_ = false` to `MenuApp`
+- [ ] `request_reset_to_menu()`: set `reset_requested_ = true`
+- [ ] In `tick()`, before the pending-command check: if `reset_requested_`, call
+  `switch_screen(Screen::MAIN)` and clear `reset_requested_`; then continue normally
+
+**18.2 GET_RANDOM**
+
+The RP2350 provides hardware TRNG via `rosc_hw->randombit` (or the dedicated TRNG peripheral
+in RP2350 A2+).  The "Stage 5: requires TRNG access" stub comment is obsolete.
+
+- [ ] Add `handle_get_random(req, win)` to `core_service.cc`:
+  - parse `u16 nbytes` from request payload; cap at `c2h_scratch_len`
+  - fill `nbytes` bytes into the response scratch using RP2350 TRNG
+    (guard with `#ifndef JLPICART_HOST_TEST`; in host test return a counter-based stub)
+  - respond with `scratch_len = nbytes`, `payload_len = 0`
+- [ ] Remove the `API_E_UNSUPPORTED` return from `SYS_GET_RANDOM`
+
+**18.3 CoreService wiring (RESET_TO_MENU)**
+- [ ] Add `void (*reset_menu_fn_)() = nullptr` to `CoreService`
+- [ ] Add `set_reset_menu_fn(void(*)())` setter
+- [ ] In `SYS_RESET_TO_MENU` handler: respond `OK` first; then call `reset_menu_fn_()` if
+  non-null; remove the `API_E_UNSUPPORTED` return
+
+**18.4 ApiWindow wiring**
+- [ ] Propagate the callback from `ApiWindow::set_reset_menu_fn()` down to `CoreService`
+
+**18.5 Main wiring**
+- [ ] After `menu_app.init(...)` and `api_win.init(...)`:
+  call `api_win.set_reset_menu_fn([]{ g_menu_app->request_reset_to_menu(); })` using the
+  existing `g_menu_app` static pointer pattern
+
+**18.6 Host tests**
+- [ ] Add `test_reset_to_menu` in `test_menu_app.cc` (or a new `test_core_service.cc`):
+  - Boot to MAIN; simulate game calling `SYS_RESET_TO_MENU` via API; verify MenuApp returns
+    to MAIN screen (first command after reset is `MENU_CMD_SET_MODE`)
+  - If called during BOOT screen (before menu is up): verify response is OK and no crash
+- [ ] Add `test_get_random`: call `SYS_GET_RANDOM` with `nbytes=16`; verify response OK and
+  `scratch_len==16`; in host test, verify stub fills bytes (non-zero or deterministic counter)
+
+### Definition of done
+
+- [ ] Host tests pass; `RESET_TO_MENU` returns OK (not `API_E_UNSUPPORTED`)
+- [ ] `GET_RANDOM` returns OK with requested byte count (not `API_E_UNSUPPORTED`)
+- [ ] `MenuApp` returns to MAIN screen after the API call is processed
+
+---
+
+## Stage 19 — Storage service (0x01)
+
+**Goal:** Save blob CRUD API backed by `FLASH_SAVES_KV_OFS` (already partitioned).
+This satisfies the spec conformance requirement: "a conforming implementation MUST implement
+at least one of Storage or UserStats" (§7.2).
+
+Spec references: §7.2 Storage service (0x01): `LIST_BLOBS`, `READ_BLOB`,
+`WRITE_BLOB_BEGIN/CHUNK/COMMIT`, `DELETE_BLOB`.
+
+### Files added
+
+- `fw/src/storage/save_store.h`  — blob CRUD interface over a `KvStore`
+- `fw/src/storage/save_store.cc` — implementation; blob keys use scheme `"sav.<profile_id>.<blob_id>"`
+- `fw/src/msx/api/services/storage_service.h` — method IDs + dispatch prototype
+- `fw/src/msx/api/services/storage_service.cc`— handlers for all Storage methods
+- `fw/tests/host/test_save_store.cc`          — host tests
+
+### Files modified
+
+- `fw/src/msx/api/api_types.h`   — add Storage method IDs + request/response structs;
+  add `API_FEATURES_STAGE19 = API_FEATURE_SYSTEM | API_FEATURE_IDENTITY | API_FEATURE_STORAGE`
+- `fw/src/msx/api/api_window.h`  — add `SaveStore* save_store_` + `bind_save_store()` method
+- `fw/src/msx/api/api_window.cc` — dispatch `SVC_STORAGE`; set `API_FEATURE_STORAGE` in
+  `feature_bits` when `bind_save_store()` is called
+- `fw/src/main.cc`               — declare `static KvStore saves_kv`; init from
+  `FLASH_SAVES_KV_OFS/SIZE`; declare `static SaveStore save_store`; init;
+  call `api_win.bind_save_store(save_store)`
+- `fw/CMakeLists.txt`            — add `save_store.cc`, `storage_service.cc`
+- `fw/tests/CMakeLists.txt`      — add `test_save_store` target
+
+### Checklist
+
+**19.1 SaveStore**
+- [ ] `SaveStore::init(kv, profile_store)` — store references
+- [ ] Blob key scheme: `snprintf(key, "sav.%04x.%04x", profile_id, blob_id)` — unique per
+  profile+blob; fits in KV key limit
+- [ ] `SaveStore::list(profile_id, kind, out, max_out)` — scan keys matching
+  `"sav.<profile_id>."` prefix; populate `out[]` with `{blob_id, size, max_bytes, flags}`
+- [ ] `SaveStore::read(profile_id, blob_id, offset, buf, len)` — read blob bytes;
+  return `DIAG_NOT_FOUND` if absent
+- [ ] `SaveStore::write_begin(profile_id, blob_id, total_len, flags, handle_out)` —
+  allocate a write handle (simple index into a small table of in-progress writes); return
+  `DIAG_FULL` if table full
+- [ ] `SaveStore::write_chunk(handle, offset, buf, len)` — accumulate into a staging buffer
+- [ ] `SaveStore::write_commit(handle)` — write staged bytes to KV atomically; release handle
+- [ ] `SaveStore::delete_blob(profile_id, blob_id)` — delete key; return `DIAG_NOT_FOUND` if absent
+- [ ] Max concurrent in-progress writes: `SAVE_WRITE_HANDLES = 4`
+
+**19.2 Storage API service**
+- [ ] Add Storage method IDs to `api_types.h`:
+  `STG_LIST_BLOBS=0x00`, `STG_READ_BLOB=0x01`, `STG_WRITE_BLOB_BEGIN=0x02`,
+  `STG_WRITE_BLOB_CHUNK=0x03`, `STG_WRITE_BLOB_COMMIT=0x04`, `STG_DELETE_BLOB=0x05`
+- [ ] `storage_service_handle(req, payload, len, win, save_store)`:
+  - `STG_LIST_BLOBS`: parse `{u8 blob_kind}`; call `save_store.list()`; encode response
+  - `STG_READ_BLOB`: parse `{u16 blob_id, u32 offset, u16 len}`; read into response scratch
+  - `STG_WRITE_BLOB_BEGIN`: parse `{u16 blob_id, u32 total_len, u16 flags}`; respond with
+    `{u16 handle, u16 chunk_hint}` (chunk_hint = scratch buffer size)
+  - `STG_WRITE_BLOB_CHUNK`: parse `{u16 handle, u32 offset, u16 len}`; data from request
+    scratch; respond OK
+  - `STG_WRITE_BLOB_COMMIT`: parse `{u16 handle}`; commit; respond OK or error
+  - `STG_DELETE_BLOB`: parse `{u16 blob_id}`; delete; respond OK or `E_NOT_FOUND`
+
+**19.3 ApiWindow wiring**
+- [ ] `bind_save_store(SaveStore&)`: store pointer; OR `API_FEATURE_STORAGE` into
+  `header().feature_bits`
+- [ ] In `service_once()`: `case SVC_STORAGE:` → call `storage_service_handle` if non-null,
+  else `E_UNSUPPORTED`
+
+**19.4 Main wiring**
+- [ ] Declare and init `static KvStore saves_kv` from `FLASH_SAVES_KV_OFS`/`SIZE` after
+  PROFILES_KV init; log result
+- [ ] Declare `static SaveStore save_store`; call `save_store.init(saves_kv, profile_store)`
+- [ ] After `api_win.init(...)`: call `api_win.bind_save_store(save_store)`
+
+**19.5 Host tests (`test_save_store.cc`)**
+- [ ] `test_save_write_read`: write blob, read back exact bytes; round-trip integrity
+- [ ] `test_save_list`: write two blobs for same profile; list returns both; sizes correct
+- [ ] `test_save_delete`: write blob, delete, list returns 0; read returns `DIAG_NOT_FOUND`
+- [ ] `test_save_profile_isolation`: blob written under profile A not visible under profile B
+- [ ] `test_save_concurrent_writes`: open `SAVE_WRITE_HANDLES` simultaneous writes; all commit
+  successfully; (SAVE_WRITE_HANDLES + 1)th open returns `DIAG_FULL`
+- [ ] `test_storage_api_roundtrip`: call `STG_WRITE_BLOB_BEGIN/CHUNK/COMMIT` + `STG_READ_BLOB`
+  via the API framing; verify round-trip
+
+### Definition of done
+
+- [ ] All host tests pass
+- [ ] `API_FEATURE_STORAGE` bit set in `feature_bits` when save store is bound
+- [ ] Platform is now spec-conformant (System + Identity + Storage all active)
+- [ ] On hardware: save blob persists across power cycle
+
+---
+
+## Stage 20 — Boot mode enforcement
+
+**Goal:** `CollectionRecord::boot_mode` (parsed since Stage 7 and stored since Stage 9) is
+actually respected at runtime.  A `direct`-boot collection bypasses MAIN and transitions
+directly to a LAUNCH screen.  A `menu_first` collection (or no collection) boots to MAIN
+as today.
+
+This stage implements the Preflight→Activation part of §5.2 for the common case
+(ROM already in flash).  Full staging (cache fill, WAIT-line handoff) is deferred.
+
+Spec references: §4.5 "Collections and Payloads" (boot mode), §5.2 "Launch workflow contract (v1)".
+
+### Files added
+
+- `fw/src/menu/launch_screen.h`  — `tick_launch()` step table declaration (kept in `menu_app.cc`)
+- `fw/tests/host/test_boot_mode.cc` — host tests
+
+### Files modified
+
+- `fw/src/menu/menu_app.h`   — add `Screen::LAUNCH`; add `launch_payload_id_[64]` field
+- `fw/src/menu/menu_app.cc`  — `tick_boot_info()`: check `boot_mode`; `switch_screen(LAUNCH)`
+  if direct; add `tick_launch()` handler
+- `fw/src/msx/api/api_window.h` — add `active_payload_id_[64]` field + `set_active_payload()` setter
+- `fw/tests/CMakeLists.txt`  — add `test_boot_mode` target
+
+### Checklist
+
+**20.1 LAUNCH screen**
+- [ ] Add `Screen::LAUNCH` to the `Screen` enum in `menu_app.h`
+- [ ] `tick_launch()` step sequence:
+  - step 0: `MENU_CMD_CLEAR`
+  - step 1: `PUT_TEXT 0,0 "  Launching <title>..."`
+  - step 2: `PUT_TEXT 0,2 "  (press any key to cancel)"` — stub; real WAIT-line handoff is later
+  - step 3: `MENU_CMD_READ_INPUT`
+  - step 4: process — any key cancels and returns to MAIN; otherwise loop back to step 3
+    (payload remains active on bus; this is a placeholder until Core 0 handoff is staged)
+
+**20.2 Boot mode check in tick_boot_info()**
+- [ ] After `load_collection_data()`: if `has_collection_` and `col_record_.boot_mode == 1u`
+  (direct), copy `col_record_.title` to `launch_title_` and call `switch_screen(Screen::LAUNCH)`
+- [ ] Otherwise: `switch_screen(Screen::MAIN)` as before
+
+**20.3 Active payload context in ApiWindow**
+
+Stage 21 (UserStats) keys stats per `profile_id + payload_id`.  `ApiWindow` needs to know
+which payload is currently active so service handlers can use the correct key.
+
+- [ ] Add `char active_payload_id_[64]` to `ApiWindow`; default to empty string
+- [ ] Add `void ApiWindow::set_active_payload(const char* payload_id)` setter
+- [ ] In `tick_launch()` step 0 (CLEAR), call `api_win_->set_active_payload(launch_payload_id_)`
+  to register the active payload; MenuApp receives an `ApiWindow*` via `init()` for this
+- [ ] When transitioning from LAUNCH back to MAIN (cancel or collection done), call
+  `api_win_->set_active_payload("")` to clear the active payload
+
+**20.4 MAIN → LAUNCH path**
+- [ ] When the user selects a collection from the Collections screen (future: payload selection
+  within a collection), the selection also triggers `switch_screen(Screen::LAUNCH)`
+- [ ] For now, the Collections screen "Back" still returns to MAIN (no payload selection UI yet)
+
+**20.5 Host tests (`test_boot_mode.cc`)**
+- [ ] `test_direct_boot`: create a collection with `boot_mode=1`; after GET_HOST_INFO ack,
+  verify MenuApp transitions to LAUNCH screen (first command is `MENU_CMD_CLEAR`, not
+  `MENU_CMD_SET_MODE`)
+- [ ] `test_menu_first_boot`: collection with `boot_mode=0`; after GET_HOST_INFO ack, verify
+  MenuApp transitions to MAIN (first command is `MENU_CMD_SET_MODE`)
+- [ ] `test_no_collection_boot`: no collection in KV; verify MAIN regardless
+
+### Definition of done
+
+- [ ] Host tests pass
+- [ ] On hardware: a direct-boot collection shows the LAUNCH screen on power-on, not MAIN
+
+---
+
+## Stage 21 — UserStats service (0x04)
+
+**Goal:** Per-user, per-payload stats, achievements, and leaderboard submissions.  Offline
+persistence is the baseline (network sync is additive, not required here).  Together with
+Stage 19, this provides the full API conformance profile.
+
+Spec references: §7.2 UserStats service (0x04), §7.3 "Stats, achievements, and leaderboards
+contract (v1)".
+
+### Files added
+
+- `fw/src/stats/stats_store.h`   — stat/achievement/leaderboard persistence interface
+- `fw/src/stats/stats_store.cc`  — backed by a `KvStore` slice in `FLASH_SAVES_KV_OFS`
+  (separate key namespace `"st.*"` from save blobs `"sav.*"`)
+- `fw/src/msx/api/services/userstats_service.h` — method IDs + dispatch prototype
+- `fw/src/msx/api/services/userstats_service.cc`— handlers for all UserStats methods
+- `fw/tests/host/test_stats_store.cc`           — host tests
+
+### Files modified
+
+- `fw/src/msx/api/api_types.h`   — add UserStats method IDs + structs;
+  add `API_FEATURE_USERSTATS` to feature bitmap
+- `fw/src/msx/api/api_window.h`  — add `StatsStore*` + `bind_stats_store()` method
+- `fw/src/msx/api/api_window.cc` — dispatch `SVC_USERSTATS`; set `API_FEATURE_USERSTATS`
+  in `feature_bits` when `bind_stats_store()` is called
+- `fw/src/main.cc`               — declare `static StatsStore stats_store`; init from
+  `saves_kv` (same partition, distinct key prefix); call `api_win.bind_stats_store()`
+- `fw/CMakeLists.txt`            — add `stats_store.cc`, `userstats_service.cc`
+- `fw/tests/CMakeLists.txt`      — add `test_stats_store` target
+
+### Checklist
+
+**21.1 StatsStore**
+- [ ] Key scheme:
+  - stat:        `"st.<profile_id>.<payload_id>.s.<stat_id>"`   → `int32_t` value
+  - achievement: `"st.<profile_id>.<payload_id>.a.<ach_id>"`    → `uint8_t` (0/1)
+  - leaderboard entry: `"st.<profile_id>.<payload_id>.l.<lb_id>"` → packed `{u32 score, u32 ts}`
+- [ ] `StatsStore::init(kv, profile_store)` — store references
+- [ ] `StatsStore::stat_get(profile_id, payload_id, stat_id, out_value)` — read key;
+  return 0 if absent (not an error)
+- [ ] `StatsStore::stat_set(profile_id, payload_id, stat_id, value, op)` — op 0=set, 1=add,
+  2=max; read-modify-write atomically via KV write; return DiagStatus
+- [ ] `StatsStore::ach_unlock(profile_id, payload_id, ach_id)` — write `1` to ach key;
+  idempotent (already-unlocked is OK)
+- [ ] `StatsStore::leader_begin(profile_id, payload_id, lb_id, token_out, token_len)` —
+  generate a 16-byte nonce token (from `TRNG` or counter; store it in a small table);
+  return token bytes
+- [ ] `StatsStore::leader_submit(handle, score, proof_kind, proof_buf, proof_len)` —
+  validate token is known; write leaderboard entry (local only for now); mark token used
+
+**21.2 UserStats API service**
+- [ ] Add UserStats method IDs to `api_types.h`:
+  `UST_STAT_GET=0x00`, `UST_STAT_SET=0x01`, `UST_ACH_UNLOCK=0x02`,
+  `UST_LEADER_RUN_BEGIN=0x03`, `UST_LEADER_SUBMIT=0x04`
+- [ ] `userstats_service_handle(req, payload, len, win, stats_store)`:
+  - `UST_STAT_GET`: parse `{u16 stat_id}`; respond `{s32 value}`
+  - `UST_STAT_SET`: parse `{u16 stat_id, s32 value, u8 op}`; respond OK
+  - `UST_ACH_UNLOCK`: parse `{u16 ach_id}`; respond OK
+  - `UST_LEADER_RUN_BEGIN`: parse `{u16 lb_id}`; respond token in scratch
+  - `UST_LEADER_SUBMIT`: parse `LeaderSubmitReq` (see §7.2); respond OK or error
+  - active profile from `profile_store.active()`; active payload ID from a
+    per-request context parameter (set by ApiWindow from a future `active_payload_id_` field)
+  - unknown method: `E_UNSUPPORTED`
+
+**21.3 ApiWindow wiring**
+- [ ] `bind_stats_store(StatsStore&)`: store pointer; OR `API_FEATURE_USERSTATS` into
+  `header().feature_bits`
+- [ ] In `service_once()`: `case SVC_USERSTATS:` → call handler if non-null
+
+**21.4 Main wiring**
+- [ ] `static StatsStore stats_store`; `stats_store.init(saves_kv, profile_store)` (reuses
+  `saves_kv` initialized in Stage 19)
+- [ ] `api_win.bind_stats_store(stats_store)` after `api_win.init()`
+
+**21.5 Host tests (`test_stats_store.cc`)**
+- [ ] `test_stat_set_get`: set stat 1 = 42; get returns 42; absent stat returns 0
+- [ ] `test_stat_add`: set 10, add 5 → 15; add negative → 10
+- [ ] `test_stat_max`: set 10, max(8) → stays 10; max(20) → 20
+- [ ] `test_ach_unlock`: unlock ach; re-unlock is idempotent; get returns 1
+- [ ] `test_leaderboard_submit`: begin run → token; submit with score; local entry written
+- [ ] `test_stats_profile_isolation`: stat written under profile A not visible under profile B
+
+### Definition of done
+
+- [ ] All host tests pass
+- [ ] `API_FEATURE_USERSTATS` bit set in `feature_bits` when stats store is bound
+- [ ] Platform is fully spec-conformant: System + Identity + Storage + UserStats all active
+- [ ] On hardware: stat survives power cycle; achievement unlock persists
+
+---
+
+## Stage 22 — Device Identity Key (DIK) and GET_DEVICE_ID
+
+**Goal:** Establish a stable, device-unique identity so that (a) `GET_DEVICE_ID` returns a
+real ID, and (b) Stage 21 leaderboard submissions can be signed with the device key.  The
+spec (§10, §11) is explicit: "During initialization, the device MUST establish a Device
+Identity Key (DIK).  The private key MUST never leave the device."
+
+Without this stage, Stage 21 is locally functional but non-conformant on the anti-cheat
+contract (submissions cannot be signed), and online service integration is impossible.
+
+Spec references: §10 "Key hierarchy and roles (DIK)", §11.1 "Initialization and provisioning",
+§7.2 System service method `0x01 GET_DEVICE_ID`.
+
+### Design constraints
+
+- DIK MUST be an asymmetric keypair (ed25519 or P-256 recommended).
+- Private key MUST be stored encrypted under a key derived from the RP2350 OTP device secret
+  seed (SMK derivation per §10 "Storage encryption contract").
+- Public key MAY be exposed via `GET_DEVICE_ID` (scope=device, policy permitting).
+- If no OTP device secret exists (development unit without provisioned secret), the DIK is
+  derived from a flash-stored random seed (clearly flagged as "unprovisioned" in posture).
+- DIK generation MUST be idempotent: generated once on first boot, then reloaded from flash.
+
+### Files added
+
+- `fw/src/identity/device_identity.h`  — `DeviceIdentity` class: keygen, load/save, sign, public key
+- `fw/src/identity/device_identity.cc` — implementation; uses RP2350 TRNG for keygen;
+  derives storage key from OTP secret via HKDF-SHA256 (or stores plaintext on unprovisioned units
+  with a flag); ed25519 via a small bundled implementation or RP2350 hardware acceleration
+- `fw/tests/host/test_device_identity.cc` — host tests
+
+### Files modified
+
+- `fw/src/msx/api/services/core_service.h/cc` — accept `DeviceIdentity&`;
+  implement `SYS_GET_DEVICE_ID`: return 16-byte scoped ID (HKDF of DIK public key + scope label)
+- `fw/src/msx/api/api_window.h/cc`  — pass `DeviceIdentity&` to core service
+- `fw/src/main.cc`                  — declare `static DeviceIdentity device_identity`;
+  call `device_identity.init_or_load(flash, FLASH_SYSTEM_KV_OFS)`; pass to api_win
+- `fw/CMakeLists.txt`               — add `device_identity.cc`
+- `fw/tests/CMakeLists.txt`         — add `test_device_identity` target
+
+### Checklist
+
+**22.1 DeviceIdentity**
+- [ ] `DeviceIdentity::init_or_load(kv)`:
+  - attempt to load `"dik.pub"` + `"dik.priv"` keys from KV (encrypted priv)
+  - if absent: generate new ed25519 keypair using RP2350 TRNG; store public key as
+    `"dik.pub"` (plaintext); store private key as `"dik.priv"` (encrypted with SMK);
+    write `"dik.flags"` = `{uint8_t provisioned}` (1 if OTP secret present, 0 if seed-only)
+  - if present: load and verify key format
+- [ ] `DeviceIdentity::sign(msg, len, sig_out)` — sign 64-byte output using ed25519 with
+  loaded private key
+- [ ] `DeviceIdentity::public_key(out_32)` — copy public key bytes
+- [ ] `DeviceIdentity::is_provisioned()` — return flag read from `"dik.flags"`
+- [ ] SMK derivation stub: if `posture.otp_device_secret_present`, derive key via HKDF;
+  otherwise use a flash-stored random seed with a "unprovisioned" flag
+  (`#ifndef JLPICART_HOST_TEST`: hardware path; host test uses a fixed test key)
+
+**22.2 GET_DEVICE_ID implementation**
+- [ ] Remove `API_E_UNSUPPORTED` from `SYS_GET_DEVICE_ID`
+- [ ] Parse `scope` byte (0=device, 1=collection-scoped, 2=publisher-scoped)
+- [ ] Respond with 16 bytes: HKDF-SHA256(DIK public key, scope label) truncated to 16 bytes
+  — this avoids exposing the raw public key unless scope=device and policy permits
+- [ ] If `scope=0` (stable device ID) and `!policy.expose_stable_device_id`, return
+  `API_E_DENIED`
+
+**22.3 Leaderboard signing wiring (Stage 21 completion)**
+- [ ] In `userstats_service.cc`: `UST_LEADER_SUBMIT` — sign the canonical submission payload
+  with `device_identity.sign()`; include signature bytes in the submission record stored to KV
+  (so offline records are pre-signed and ready for server sync)
+
+**22.4 Main wiring**
+- [ ] Declare `static DeviceIdentity device_identity` in `main()`
+- [ ] After `kv_store` init: `device_identity.init_or_load(kv_store)`
+- [ ] Log `"DIK ready (provisioned)"` or `"DIK ready (seed-only, unprovisioned)"` from flag
+- [ ] Pass `device_identity` to `api_win.init(...)` (extend signature)
+
+**22.5 Host tests (`test_device_identity.cc`)**
+- [ ] `test_dik_generate`: fresh KV → keygen runs; public key and encrypted private key stored
+- [ ] `test_dik_reload`: load a pre-generated key; verify same public key returned after reload
+- [ ] `test_dik_idempotent`: call `init_or_load()` twice on same KV → same public key, no new
+  keygen
+- [ ] `test_dik_sign_verify`: sign a message; verify signature with the public key (ed25519
+  verify using the same library)
+- [ ] `test_get_device_id_scoped`: scope=1 returns different 16 bytes than scope=0
+
+### Definition of done
+
+- [ ] All host tests pass
+- [ ] `GET_DEVICE_ID` returns 16 bytes (not `API_E_UNSUPPORTED`)
+- [ ] On hardware: DIK survives power cycle; leaderboard records include a valid signature field
+- [ ] `is_provisioned()` correctly reflects OTP secret presence
+
+---
+
+## Stage 23+ — Feature peripherals and services
 
 **Goal:** Implement concrete peripherals and services by following the same pattern.
 

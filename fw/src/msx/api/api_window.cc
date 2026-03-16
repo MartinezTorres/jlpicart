@@ -6,6 +6,8 @@
 
 #include "msx/api/api_window.h"
 #include "msx/api/services/core_service.h"
+#include "msx/api/services/identity_service.h"
+#include "msx/api/services/storage_service.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------
@@ -57,6 +59,32 @@ void ApiWindow::init(const SecurityPosture& posture,
     rrsp.flags = 0;
 
     initialized_ = true;
+}
+
+// ---------------------------------------------------------------------------
+// bind_profile_store
+// ---------------------------------------------------------------------------
+
+void ApiWindow::bind_profile_store(ProfileStore& ps)
+{
+    profile_store_ = &ps;
+    // Advertise the Identity service now that it has a backing store.
+    header().feature_bits |= API_FEATURE_IDENTITY;
+}
+
+void ApiWindow::set_reset_menu_fn(void (*fn)())
+{
+    reset_menu_fn_ = fn;
+}
+
+void ApiWindow::bind_save_store(SaveStore& ss)
+{
+    save_store_ = &ss;
+    // Update active_profile_id_ from profile store if available.
+    if (profile_store_) {
+        active_profile_id_ = profile_store_->active();
+    }
+    header().feature_bits |= API_FEATURE_STORAGE;
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +335,32 @@ bool ApiWindow::service_once()
     switch (req.service) {
         case SVC_SYSTEM:
             core_service_handle(req, payload, payload_len, *this,
-                                *posture_, *policy_store_, *registry_);
+                                *posture_, *policy_store_, *registry_,
+                                reset_menu_fn_);
+            break;
+
+        case SVC_IDENTITY:
+            if (profile_store_ != nullptr) {
+                identity_service_handle(req, payload, payload_len,
+                                        *this, *profile_store_);
+            } else {
+                write_response(req.seq, req.service, req.method,
+                               API_E_UNSUPPORTED, nullptr, 0);
+            }
+            break;
+
+        case SVC_STORAGE:
+            if (save_store_ != nullptr) {
+                // Refresh active profile from ProfileStore on each request.
+                uint16_t pid = (profile_store_ != nullptr)
+                               ? profile_store_->active()
+                               : active_profile_id_;
+                storage_service_handle(req, payload, payload_len,
+                                       *this, *save_store_, pid);
+            } else {
+                write_response(req.seq, req.service, req.method,
+                               API_E_UNSUPPORTED, nullptr, 0);
+            }
             break;
 
         default:

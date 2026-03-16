@@ -55,7 +55,12 @@ static constexpr uint32_t API_FEATURE_IDENTITY  = (1u << 3); // Identity service
 static constexpr uint32_t API_FEATURE_USERSTATS = (1u << 4); // UserStats 0x04 (future)
 
 // Stage 4: only System service implemented.
-static constexpr uint32_t API_FEATURES_STAGE4 = API_FEATURE_SYSTEM;
+static constexpr uint32_t API_FEATURES_STAGE4  = API_FEATURE_SYSTEM;
+// Stage 15: adds Identity service.
+static constexpr uint32_t API_FEATURES_STAGE15 = API_FEATURE_SYSTEM | API_FEATURE_IDENTITY;
+// Stage 19: adds Storage service.
+static constexpr uint32_t API_FEATURES_STAGE19 =
+    API_FEATURE_SYSTEM | API_FEATURE_IDENTITY | API_FEATURE_STORAGE;
 
 // ---------------------------------------------------------------------------
 // Packed structs — layout identical on RP2350 and Z80
@@ -148,6 +153,7 @@ static constexpr uint8_t SVC_SYSTEM   = 0x00u;
 static constexpr uint8_t SVC_STORAGE  = 0x01u;
 static constexpr uint8_t SVC_NETWORK  = 0x02u;
 static constexpr uint8_t SVC_IDENTITY = 0x03u;
+static constexpr uint8_t SVC_USERSTATS = 0x04u;
 
 // ---------------------------------------------------------------------------
 // System service (0x00) method IDs (spec.md "System service")
@@ -160,6 +166,35 @@ static constexpr uint8_t SYS_GET_RANDOM        = 0x03u;
 static constexpr uint8_t SYS_RESET_TO_MENU     = 0x04u;
 static constexpr uint8_t SYS_GET_SECURITY_INFO = 0x05u;
 static constexpr uint8_t SYS_GET_POLICY_FLAGS  = 0x06u;
+
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Storage service (0x01) method IDs  (spec.md "Storage service")
+// ---------------------------------------------------------------------------
+
+static constexpr uint8_t STG_LIST_BLOBS        = 0x00u;
+static constexpr uint8_t STG_READ_BLOB         = 0x01u;
+static constexpr uint8_t STG_WRITE_BLOB_BEGIN  = 0x02u;
+static constexpr uint8_t STG_WRITE_BLOB_CHUNK  = 0x03u;
+static constexpr uint8_t STG_WRITE_BLOB_COMMIT = 0x04u;
+static constexpr uint8_t STG_DELETE_BLOB       = 0x05u;
+
+// ---------------------------------------------------------------------------
+// Identity service (0x03) method IDs  (spec.md "Identity service")
+// ---------------------------------------------------------------------------
+
+static constexpr uint8_t IDN_LIST_PROFILES       = 0x00u;
+static constexpr uint8_t IDN_SET_ACTIVE_PROFILE  = 0x01u;
+static constexpr uint8_t IDN_GET_ACTIVE_PROFILE  = 0x02u;
+static constexpr uint8_t IDN_GUEST_BEGIN         = 0x03u;
+static constexpr uint8_t IDN_GUEST_END           = 0x04u;
+
+// Max name bytes returned in a LIST_PROFILES entry (must fit within API_MAX_MSG
+// when encoding PROF_MAX_PROFILES=8 entries with a 16-byte MsgHeader).
+// Payload budget: API_MAX_MSG(254) - sizeof(MsgHeader)(16) = 238 bytes.
+// With 8 profiles: 2 (count) + 8×(2+1+name_len) ≤ 238 → name_len ≤ 26.
+// Use 16 bytes for a comfortable fit.
+static constexpr uint8_t PROF_API_NAME_MAX = 16u;
 
 // ---------------------------------------------------------------------------
 // posture_props bitfield  (spec.md "Posture properties (OTP-derived)")

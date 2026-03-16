@@ -15,13 +15,15 @@ class ApiWindow;
 
 // Dispatch a System service request.
 // Called from ApiWindow::service_once() when req.service == SVC_SYSTEM.
-void core_service_handle(const MsgHeader&         req,
-                         const uint8_t*           payload,
-                         uint16_t                 payload_len,
-                         ApiWindow&               win,
-                         const SecurityPosture&   posture,
-                         const PolicyStore&       policy_store,
-                         const CapabilityRegistry& registry);
+// reset_menu_fn is called (if non-null) when SYS_RESET_TO_MENU is processed.
+void core_service_handle(const MsgHeader&          req,
+                         const uint8_t*            payload,
+                         uint16_t                  payload_len,
+                         ApiWindow&                win,
+                         const SecurityPosture&    posture,
+                         const PolicyStore&        policy_store,
+                         const CapabilityRegistry& registry,
+                         void                    (*reset_menu_fn)() = nullptr);
 
 // Build the posture_props bitfield from a SecurityPosture.
 // Exported for use by both GET_API_INFO and GET_SECURITY_INFO.

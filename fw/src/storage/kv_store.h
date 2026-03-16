@@ -69,6 +69,11 @@ public:
     uint32_t bytes_used() const { return write_ptr_; }
     uint32_t bytes_free() const;
 
+    // Delete all live keys whose name begins with the given prefix.
+    // Returns success even if no keys match; returns the first error if any
+    // individual deletion fails (all matching keys are still attempted).
+    DiagStatus del_prefix(const char* prefix);
+
 private:
     struct IndexEntry {
         char     key[KV_MAX_KEY_LEN];

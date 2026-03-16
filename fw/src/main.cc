@@ -1,15 +1,17 @@
-// JLPiCart firmware — Stage 14: USB host collection install.
+// JLPiCart firmware — Stage 17: System Settings.
 //
-// Boot order (spec.md §4.4, bootstrapping.md Stage 14):
+// Boot order (spec.md §4.4, bootstrapping.md Stage 15):
 //   1. diag/log init
 //   2. Storage init: KvStore (SYSTEM_KV) + AppendLog (EVENT_LOG)
+//   2a. ProfileStore init (PROFILES_KV)
 //   3. SecurityPosture (OTP read — once, never again)
 //   4. PolicyStore (flash read + HMAC verify)
 //   5. CapabilityRegistry (declared → allowed)
 //   6. Activation preflight: Allocator → LaunchPlan → PeripheralManager
 //   7. MappingPlan: ContentStore lookup → mapping_plan_from_payload_record → apply_mapping()
-//   8. ApiWindow init (header + rings)
+//   8. ApiWindow init (header + rings) + bind ProfileStore
 //   9. MenuMailbox init (menu page header + mailbox registers)
+//   9a. MenuApp init (state machine attached to MenuMailbox)
 //  10. Bus wiring: map_menu_page() + map_api_window() → BUS::cartridges[]
 //  11. Append BOOT record to EVENT_LOG
 //  12. Print boot banner
@@ -35,6 +37,10 @@
 #include "drivers/driver_descriptor.h"
 #include "msx/api/api_window.h"
 #include "msx/menu/menu_host_abi.h"
+#include "menu/menu_app.h"
+#include "profiles/profile_store.h"
+#include "settings/system_settings_store.h"
+#include "storage/save_store.h"
 #include "usb/usb_host.h"
 #include "usb/usb_install_scanner.h"
 #include "storage/flash_device.h"
@@ -82,6 +88,35 @@ int main() {
             log_info("EVENT_LOG ready");
         }
     }
+
+    // 2a. Init profile store (PROFILES_KV).
+    static ProfileStore profile_store;
+    {
+        DiagStatus s = profile_store.init(flash,
+                                           FLASH_PROFILES_KV_OFS,
+                                           FLASH_PROFILES_KV_SIZE);
+        if (!s.ok()) {
+            log_warn("PROFILES_KV init failed — profiles unavailable");
+        } else {
+            log_info("PROFILES_KV ready");
+        }
+    }
+
+    // 2b. Init saves store KV (SAVES_KV) — used by SaveStore (Stage 19) and wipe ops.
+    static KvStore saves_kv;
+    {
+        DiagStatus s = saves_kv.init(flash, FLASH_SAVES_KV_OFS, FLASH_SAVES_KV_SIZE);
+        if (!s.ok()) {
+            log_warn("SAVES_KV init failed — saves unavailable");
+        } else {
+            log_info("SAVES_KV ready");
+        }
+    }
+
+    // 2c. Init system settings store (SYSTEM_KV).
+    static SystemSettingsStore settings_store;
+    settings_store.init(kv_store);
+    log_info("system settings loaded");
 
     const OtpReader& otp = get_hardware_otp_reader();
     SecurityPosture posture = SecurityPosture::read(otp);
@@ -149,15 +184,35 @@ int main() {
         map_mgr.apply_mapping(mapping_plan);
     }
 
+    // 2d. Init save store (backed by saves_kv, Stage 19).
+    static SaveStore save_store;
+    save_store.init(saves_kv, profile_store);
+
     // 8. Init API window (16KB buffer, writes "JLP1" header).
     static ApiWindow api_win;
     api_win.init(posture, policy_store, registry);
+    if (profile_store.initialized()) {
+        api_win.bind_profile_store(profile_store);
+    }
+    if (save_store.initialized()) {
+        api_win.bind_save_store(save_store);
+    }
     log_info("API window initialised");
 
     // 9. Init Menu mailbox (16KB page buffer, writes "JLMN" header + stub code).
     static uint8_t menu_page[MENU_PAGE_SIZE];
     static MenuMailbox menu_mbx;
     menu_mbx.init(menu_page, MENU_DATA_OFS);
+
+    // 9a. Init menu application state machine.
+    static MenuApp menu_app;
+    menu_app.init(menu_mbx, kv_store, profile_store);
+    menu_app.bind_settings_store(settings_store, saves_kv);
+
+    // 9b. Wire RESET_TO_MENU callback: API service → MenuApp (Stage 18).
+    static MenuApp* g_menu_app = &menu_app;
+    api_win.set_reset_menu_fn([]() { g_menu_app->request_reset_to_menu(); });
+
     log_info("Menu mailbox initialised");
 
     // 10. Wire bus mappings: menu page at subslot 1 / 0x4000 (RW),
@@ -211,13 +266,13 @@ int main() {
     // Core 1 service loop — handles API window, menu mailbox, and USB poll.
     // All three are static (file-visible from any point in this function)
     // so the function pointer can reach them without capturing.
-    static ApiWindow*   g_api_win  = &api_win;
-    static MenuMailbox* g_menu_mbx = &menu_mbx;
-    static UsbHost*     g_usb_host = &usb_host;
+    static ApiWindow*   g_api_win   = &api_win;
+    static MenuApp*     g_menu_app  = &menu_app;
+    static UsbHost*     g_usb_host  = &usb_host;
     multicore_launch_core1([]() {
         while (true) {
             g_api_win->service_once();
-            g_menu_mbx->tick();
+            g_menu_app->tick();
             g_usb_host->poll();
             tight_loop_contents();
         }
@@ -232,7 +287,7 @@ int main() {
 #else
     while (true) {
         api_win.service_once();
-        menu_mbx.tick();
+        menu_app.tick();
     }
 #endif
 }

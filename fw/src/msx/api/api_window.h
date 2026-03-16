@@ -11,7 +11,10 @@
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
+#include "profiles/profile_store.h"
 #include <cstddef>
+
+class SaveStore;
 
 class ApiWindow {
 public:
@@ -28,6 +31,22 @@ public:
     const uint8_t* buf() const { return buf_; }
 
     bool initialized() const { return initialized_; }
+
+    // Bind a ProfileStore and enable API_FEATURE_IDENTITY in the window header.
+    // Must be called after init().  Safe to call more than once (rebinds).
+    void bind_profile_store(ProfileStore& ps);
+
+    // Register a callback invoked when the cartridge requests RESET_TO_MENU
+    // (Stage 18).  The callback is called from service_once() on Core 1.
+    // fn may be nullptr (disables the callback).
+    void set_reset_menu_fn(void (*fn)());
+
+    // Bind a SaveStore and enable API_FEATURE_STORAGE (Stage 19).
+    void bind_save_store(SaveStore& ss);
+
+    // Active profile ID for storage and stats services (Stage 19+).
+    // Updated by bind_profile_store or set directly.
+    uint16_t active_profile_id() const { return active_profile_id_; }
 
     // Read one request frame from the request ring, dispatch to the appropriate
     // service handler, and write one response frame to the response ring.
@@ -63,9 +82,13 @@ public:
 private:
     alignas(4) uint8_t buf_[WIN_BYTES] = {};
 
-    const SecurityPosture*    posture_      = nullptr;
-    const PolicyStore*        policy_store_ = nullptr;
-    const CapabilityRegistry* registry_     = nullptr;
+    const SecurityPosture*    posture_          = nullptr;
+    const PolicyStore*        policy_store_     = nullptr;
+    const CapabilityRegistry* registry_         = nullptr;
+    ProfileStore*             profile_store_    = nullptr;
+    SaveStore*                save_store_       = nullptr;
+    uint16_t                  active_profile_id_ = 0u;
+    void                    (*reset_menu_fn_)() = nullptr;
 
     bool initialized_ = false;
 
