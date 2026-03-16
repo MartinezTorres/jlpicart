@@ -120,6 +120,9 @@ add_executable(jlpicart
     # Peripheral bus wiring (Stage 9 + Stage 13)
     src/peripherals/peripheral_manager.cc
 
+    # PSG audio emulation (Stage 27)
+    src/peripherals/psg.cc
+
     # User Profiles (Stage 15)
     src/profiles/profile_store.cc
 

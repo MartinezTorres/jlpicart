@@ -31,6 +31,7 @@
 #include "allocator/allocator.h"
 #include "allocator/resource_model.h"
 #include "peripherals/peripheral_manager.h"
+#include "peripherals/psg.h"
 #include "bus/mapping_plan.h"
 #include "content/content_store.h"
 #include "boards/board_descriptor.h"
@@ -247,6 +248,13 @@ int main() {
     map_mgr.map_menu_page(menu_page);
     map_mgr.map_api_window(api_win.buf());
 
+    // 10a. Wire PSG (AY-3-8910) if sw.psg is activated (Stage 27).
+    static PsgState psg_state;
+    if (registry.is_activated("sw.psg")) {
+        psg_reset(psg_state);
+        map_mgr.map_psg(psg_state);
+    }
+
     // 11. Append BOOT record to EVENT_LOG (spec §6.5 boot integration).
     {
         BootRecord boot_rec = {};
@@ -296,11 +304,13 @@ int main() {
     static ApiWindow*   g_api_win   = &api_win;
     static MenuApp*     g_menu_app  = &menu_app;
     static UsbHost*     g_usb_host  = &usb_host;
+    static PsgState*    g_psg_state = &psg_state;
     multicore_launch_core1([]() {
         while (true) {
             g_api_win->service_once();
             g_menu_app->tick();
             g_usb_host->poll();
+            psg_service(*g_psg_state);
             tight_loop_contents();
         }
     });

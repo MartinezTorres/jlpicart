@@ -12,6 +12,7 @@
 
 #include "allocator/allocator.h"
 #include "bus/mapping_plan.h"
+#include "peripherals/psg.h"
 #include "spine/capability_registry.h"
 #include <cstddef>
 #include <cstdint>
@@ -39,6 +40,11 @@ public:
     // subslot 2) as a read-only region.  The Z80 reads the API window; writes
     // from the Z80 are silently discarded by the bus loop.
     void map_api_window(const uint8_t* buf);
+
+    // Wire PSG (AY-3-8910) IO callbacks into the bus at slot 4 (IO-only).
+    // Calls psg_setup(); the caller must have already called psg_reset().
+    // On hardware: also calls psg_audio_init() to start PWM output.
+    void map_psg(PsgState& state);
 
     // Log a human-readable activation report via log_info/log_warn.
     void log_report(const LaunchPlan& plan) const;

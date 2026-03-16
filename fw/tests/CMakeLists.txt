@@ -185,6 +185,7 @@ set(SRC_ALLOCATOR       "${FW_SRC}/allocator/allocator.cc")
 set(SRC_ACTIVATION      "${FW_SRC}/spine/activation.cc")
 set(SRC_BUS_MAP         "${FW_SRC}/bus/bus_map.cc")
 set(SRC_PERIPH_MGR      "${FW_SRC}/peripherals/peripheral_manager.cc")
+set(SRC_PSG             "${FW_SRC}/peripherals/psg.cc")
 set(SRC_MAPPERS         "${FW_SRC}/mappers/mappers.cc")
 set(SRC_MAPPING_PLAN    "${FW_SRC}/bus/mapping_plan.cc")
 
@@ -199,6 +200,7 @@ add_host_test(test_allocator
     ${SRC_ACTIVATION}
     ${SRC_BUS_MAP}
     ${SRC_PERIPH_MGR}
+    ${SRC_PSG}
     ${SRC_MAPPERS}
     ${SRC_MAPPING_PLAN}
     ${SRC_CAP_REG}
@@ -531,6 +533,15 @@ add_host_test(test_policy_enforcement
     ${SRC_APPEND_LOG}
     ${SRC_PROFILE_STORE}
     ${SRC_LOG}
+)
+
+# ---------------------------------------------------------------------------
+# Stage 27 tests
+# ---------------------------------------------------------------------------
+
+add_host_test(test_psg
+    host/test_psg.cc
+    ${SRC_PSG}
 )
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 // peripheral_manager.cc — PeripheralManager implementation.
 
 #include "peripherals/peripheral_manager.h"
+#include "peripherals/psg.h"
 #include "bus/bus_map.h"
 #include "mappers/mappers.h"
 #include "log/log.h"
@@ -83,6 +84,20 @@ bool PeripheralManager::apply_mapping(const MappingPlan& plan) {
 #endif
 
     return true;
+}
+
+void PeripheralManager::map_psg(PsgState& state)
+{
+#ifndef JLPICART_HOST_TEST
+    psg_setup(BUS::cartridges[4], state);
+    psg_audio_init(state);
+#else
+    // Host test build: BUS::cartridges not available.  Wire into a local dummy
+    // so psg_setup() can record the state pointer; callbacks are never invoked.
+    static Cartridge dummy_slot;
+    psg_setup(dummy_slot, state);
+#endif
+    log_info("PSG (AY-3-8910) wired at IO ports 0xA0/0xA1/0xA2 (slot 4)");
 }
 
 void PeripheralManager::map_menu_page(uint8_t* page) {

@@ -17,8 +17,10 @@ const DriverDescriptor kDriverDescriptors[] = {
     // See bus/mapping_plan.h and bootstrapping.md Stage 9.
     { "sw.mapper", {} },
 
+    // PSG audio emulation (Stage 27).
+    { "sw.psg",   {} },
+
     // Future entries are added here following the same pattern:
-    // { "sw.psg",   {} },  // PSG audio emulation
     // { "sw.scc",   {} },  // SCC audio emulation
     // { "sw.menu",  {} },  // menu host ABI
     // { "net.esp32",{} },  // ESP32 network transport
