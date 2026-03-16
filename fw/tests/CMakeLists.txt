@@ -186,6 +186,7 @@ set(SRC_ACTIVATION      "${FW_SRC}/spine/activation.cc")
 set(SRC_BUS_MAP         "${FW_SRC}/bus/bus_map.cc")
 set(SRC_PERIPH_MGR      "${FW_SRC}/peripherals/peripheral_manager.cc")
 set(SRC_PSG             "${FW_SRC}/peripherals/psg.cc")
+set(SRC_SCC             "${FW_SRC}/peripherals/scc.cc")
 set(SRC_MAPPERS         "${FW_SRC}/mappers/mappers.cc")
 set(SRC_MAPPING_PLAN    "${FW_SRC}/bus/mapping_plan.cc")
 
@@ -201,6 +202,7 @@ add_host_test(test_allocator
     ${SRC_BUS_MAP}
     ${SRC_PERIPH_MGR}
     ${SRC_PSG}
+    ${SRC_SCC}
     ${SRC_MAPPERS}
     ${SRC_MAPPING_PLAN}
     ${SRC_CAP_REG}
@@ -217,6 +219,7 @@ add_host_test(test_allocator
 
 add_host_test(test_bus_mapper
     host/test_bus_mapper.cc
+    ${SRC_SCC}
     ${SRC_MAPPERS}
     ${SRC_MAPPING_PLAN}
     ${SRC_MANIFEST_PARSER}
@@ -546,6 +549,19 @@ add_host_test(test_psg
 )
 
 # ---------------------------------------------------------------------------
+# Stage 29 tests
+# ---------------------------------------------------------------------------
+
+add_host_test(test_scc
+    host/test_scc.cc
+    ${SRC_SCC}
+    ${SRC_MAPPERS}
+    ${SRC_MAPPING_PLAN}
+    ${SRC_MANIFEST_PARSER}
+    ${SRC_DIAG}
+)
+
+# ---------------------------------------------------------------------------
 # Stage 28 tests
 # ---------------------------------------------------------------------------
 
@@ -555,6 +571,7 @@ add_host_test(test_rom_loading
     ${SRC_RECEIPTS}
     ${SRC_CONTENT_STORE}
     ${SRC_MAPPING_PLAN}
+    ${SRC_SCC}
     ${SRC_MAPPERS}
     ${SRC_MANIFEST_PARSER}
     ${SRC_KV_STORE}
@@ -576,6 +593,7 @@ add_host_test(test_content_store
     host/test_content_store.cc
     ${SRC_CONTENT_STORE}
     ${SRC_MAPPING_PLAN}
+    ${SRC_SCC}
     ${SRC_MAPPERS}
     ${SRC_MANIFEST_PARSER}
     ${SRC_INSTALLER}

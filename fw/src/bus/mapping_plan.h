@@ -23,6 +23,7 @@ enum class MapperType : uint8_t {
     ROM,               // Linear ROM (up to 64 KB, mirrored if smaller)
     ROM_32K_MIRRORED,  // 32 KB ROM with header at 0x4000, mirrored pattern
     KONAMI,            // Konami 8 KB banking (pages 2–5 switchable)
+    KONAMI_SCC,        // Konami SCC: Konami banking + SCC sound chip registers
     KONAMI_Z,          // Konami without 0x6000 register (pages 4–5 switchable)
     ASCII8,            // ASCII 8 KB banking
     ASCII16,           // ASCII 16 KB banking

@@ -1,6 +1,7 @@
 // mappers.cc — MSX mapper implementations.
 
 #include "mappers/mappers.h"
+#include "peripherals/scc.h"
 #include "boards/gpio_defs.h"
 #include <cstring>
 
@@ -132,6 +133,32 @@ void mapper_setup_ascii16(Cartridge& c, const uint8_t* rom_base) {
     }
     // Writes to segment 3 (0x6000–0x7FFF) switch the two 16 KB windows.
     c.memory_write_callbacks[3] = ascii16_write_cb;
+}
+
+// ---------------------------------------------------------------------------
+// mapper_setup_konami_scc
+// ---------------------------------------------------------------------------
+
+void mapper_setup_konami_scc(Cartridge& c, const uint8_t* rom_base,
+                              SccState& state) {
+    // Segments 0–1 (0x0000–0x3FFF): unused for Konami SCC carts.
+    // Segments 2–5 (0x4000–0xBFFF): switchable 8 KB banks, same as Konami.
+    // Segment 4 (0x8000–0x9FFF): also hosts the SCC register space at 0x9800.
+    //
+    // scc_setup() installs scc_read_cb and scc_write_cb on segment 4.
+    // Segments 2, 3, 5 use the plain konami_write_cb for bank switching.
+
+    c.clear();
+    c.name     = "konami_scc";
+    c.rom_base = rom_base;
+    // Initial bank mapping: segments 0–3 at pages 2–5.
+    for (int i = 0; i < 4; ++i) {
+        c.memory_read_addresses[2 + i]  = &rom_base[i * 8192u];
+        c.memory_write_callbacks[2 + i] = konami_write_cb;
+    }
+    // Segment 4 callbacks are overridden by scc_setup() to handle both
+    // bank switching (0x8000–0x97FF) and SCC registers (0x9800–0x9FFF).
+    scc_setup(c, state);
 }
 
 // ---------------------------------------------------------------------------

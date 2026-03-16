@@ -123,6 +123,9 @@ add_executable(jlpicart
     # PSG audio emulation (Stage 27)
     src/peripherals/psg.cc
 
+    # SCC audio emulation (Stage 29)
+    src/peripherals/scc.cc
+
     # User Profiles (Stage 15)
     src/profiles/profile_store.cc
 

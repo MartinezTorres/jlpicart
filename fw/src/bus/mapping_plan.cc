@@ -12,6 +12,7 @@ MapperType mapper_type_from_string(const char* s) {
     if (strcmp(s, "rom")              == 0) return MapperType::ROM;
     if (strcmp(s, "rom_32k_mirrored") == 0) return MapperType::ROM_32K_MIRRORED;
     if (strcmp(s, "konami")           == 0) return MapperType::KONAMI;
+    if (strcmp(s, "konami_scc")       == 0) return MapperType::KONAMI_SCC;
     if (strcmp(s, "konami_z")         == 0) return MapperType::KONAMI_Z;
     if (strcmp(s, "ascii8")           == 0) return MapperType::ASCII8;
     if (strcmp(s, "ascii16")          == 0) return MapperType::ASCII16;
@@ -24,6 +25,7 @@ const char* mapper_type_to_string(MapperType t) {
         case MapperType::ROM:              return "rom";
         case MapperType::ROM_32K_MIRRORED: return "rom_32k_mirrored";
         case MapperType::KONAMI:           return "konami";
+        case MapperType::KONAMI_SCC:       return "konami_scc";
         case MapperType::KONAMI_Z:         return "konami_z";
         case MapperType::ASCII8:           return "ascii8";
         case MapperType::ASCII16:          return "ascii16";

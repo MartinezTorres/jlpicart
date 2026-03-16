@@ -13,6 +13,7 @@
 // See spec.md §5.1, bootstrapping.md Stage 9.
 
 #include "cartridges/cartridge.h"
+#include "peripherals/scc.h"
 #include <cstddef>
 
 // ---------------------------------------------------------------------------
@@ -45,6 +46,13 @@ void mapper_setup_ascii8(Cartridge& c, const uint8_t* rom_base);
 // Two independent 16 KB windows in 0x4000–0xBFFF; each switched by a write
 // to page 3; segments are 16 KB (two consecutive 8 KB chunks).
 void mapper_setup_ascii16(Cartridge& c, const uint8_t* rom_base);
+
+// Konami SCC: 8 KB banking with SCC sound chip register space.
+// Pages 2–5 (0x4000–0xBFFF) are switchable; writing 0x3F to segment 4
+// (0x8000–0x97FF) enables the SCC register space at 0x9800–0x9FFF.
+// SccState must outlive the Cartridge; the caller owns the SccState object.
+void mapper_setup_konami_scc(Cartridge& c, const uint8_t* rom_base,
+                              SccState& state);
 
 // ---------------------------------------------------------------------------
 // RAM mapper (read-write; SRAM allocation by caller)
