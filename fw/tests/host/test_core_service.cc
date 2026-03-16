@@ -228,6 +228,98 @@ static void test_menu_app_reset_flag()
 }
 
 // ---------------------------------------------------------------------------
+// test_get_caps_stable_ids — GET_CAPS returns stable numeric IDs, not indices
+// ---------------------------------------------------------------------------
+
+static void test_get_caps_stable_ids()
+{
+    ApiFixture f;
+
+    // Push a GET_CAPS request.
+    f.push_req(10u, SVC_SYSTEM, SYS_GET_CAPS);
+    CHECK(f.win.service_once());
+
+    // Pop the response with enough room for a full payload.
+    uint8_t  frame[sizeof(MsgHeader) + 256];
+    uint16_t len = 0;
+    CHECK(f.win.ring_pop_msg(API_RSP_RING_OFS, frame, sizeof(frame), &len));
+    CHECK(len >= sizeof(MsgHeader));
+
+    MsgHeader rsp;
+    memcpy(&rsp, frame, sizeof(rsp));
+    CHECK(rsp.status == API_OK);
+    CHECK(rsp.payload_len >= 2u);
+
+    const uint8_t* payload = frame + sizeof(MsgHeader);
+    const uint16_t count = static_cast<uint16_t>(payload[0] | (payload[1] << 8u));
+    CHECK(count > 0u);
+
+    // Verify every returned cap_id is a known non-zero stable ID (not a
+    // placeholder index like 0, 1, 2).
+    for (uint16_t i = 0; i < count; ++i) {
+        CapEntry entry;
+        memcpy(&entry, payload + 2u + i * sizeof(CapEntry), sizeof(CapEntry));
+        CHECK(entry.cap_id != 0x0000u); // 0 = unknown; must not appear
+
+        // cap_id must be one of the defined values in the table.
+        bool found = false;
+        for (size_t j = 0; j < kCapIdMappingCount; ++j) {
+            if (kCapIdMappings[j].cap_id == entry.cap_id) { found = true; break; }
+        }
+        CHECK(found);
+
+        // Reserved cap_flags bits must be zero.
+        CHECK((entry.cap_flags & ~(CAP_FLAG_ACTIVATED | CAP_FLAG_HARDWARE | CAP_FLAG_PROBE_OK)) == 0u);
+    }
+
+    // sw.mapper (CAP_SW_MAPPER = 0x1002) must be present — it is always declared.
+    bool found_mapper = false;
+    for (uint16_t i = 0; i < count; ++i) {
+        CapEntry entry;
+        memcpy(&entry, payload + 2u + i * sizeof(CapEntry), sizeof(CapEntry));
+        if (entry.cap_id == CAP_SW_MAPPER) { found_mapper = true; break; }
+    }
+    CHECK(found_mapper);
+}
+
+// ---------------------------------------------------------------------------
+// test_get_caps_hw_flag — hardware capabilities have CAP_FLAG_HARDWARE set
+// ---------------------------------------------------------------------------
+
+static void test_get_caps_hw_flag()
+{
+    ApiFixture f;
+
+    f.push_req(11u, SVC_SYSTEM, SYS_GET_CAPS);
+    CHECK(f.win.service_once());
+
+    uint8_t  frame[sizeof(MsgHeader) + 256];
+    uint16_t len = 0;
+    CHECK(f.win.ring_pop_msg(API_RSP_RING_OFS, frame, sizeof(frame), &len));
+
+    MsgHeader rsp;
+    memcpy(&rsp, frame, sizeof(rsp));
+    CHECK(rsp.status == API_OK);
+
+    const uint8_t* payload = frame + sizeof(MsgHeader);
+    const uint16_t count = static_cast<uint16_t>(payload[0] | (payload[1] << 8u));
+
+    for (uint16_t i = 0; i < count; ++i) {
+        CapEntry entry;
+        memcpy(&entry, payload + 2u + i * sizeof(CapEntry), sizeof(CapEntry));
+
+        // bus.msx is a hw capability — must have CAP_FLAG_HARDWARE set.
+        if (entry.cap_id == CAP_BUS_MSX) {
+            CHECK((entry.cap_flags & CAP_FLAG_HARDWARE) != 0u);
+        }
+        // sw.mapper is a sw capability — must NOT have CAP_FLAG_HARDWARE.
+        if (entry.cap_id == CAP_SW_MAPPER) {
+            CHECK((entry.cap_flags & CAP_FLAG_HARDWARE) == 0u);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
@@ -238,6 +330,8 @@ int main()
     test_get_random();
     test_get_random_cap();
     test_menu_app_reset_flag();
+    test_get_caps_stable_ids();
+    test_get_caps_hw_flag();
 
     return test_summary();
 }

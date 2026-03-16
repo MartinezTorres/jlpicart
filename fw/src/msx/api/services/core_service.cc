@@ -71,34 +71,48 @@ static void handle_get_api_info(const MsgHeader& req, ApiWindow& win,
 // 0x02 GET_CAPS
 // ---------------------------------------------------------------------------
 //
-// Returns allowed capabilities from the registry.
+// Returns the allowed capability set with stable numeric IDs per
+// doc/api/capabilities.md.  Capabilities with unknown names (not in the
+// kCapIdMappings table) are omitted from the response rather than sent as
+// ID 0x0000, to preserve forward-compatibility.
+//
 // Response payload: u16 count, then count × CapEntry (8 bytes each).
-// cap_id is a placeholder index (0..N-1) until stable numeric IDs are defined.
-// cap_flags = 0, cap_param = 0 in Stage 4.
+// cap_id:    stable numeric ID (doc/api/capabilities.md)
+// cap_flags: CAP_FLAG_ACTIVATED | CAP_FLAG_HARDWARE | CAP_FLAG_PROBE_OK
+// cap_param: 0 for all current capabilities
 
 static void handle_get_caps(const MsgHeader& req, ApiWindow& win,
                              const CapabilityRegistry& registry)
 {
-    const size_t count = registry.allowed_count();
+    // Collect all allowed capability names.
+    const char* names[CAPABILITY_REGISTRY_MAX];
+    const size_t allowed = registry.list_allowed(names, CAPABILITY_REGISTRY_MAX);
 
-    // Build payload: u16 count + count × CapEntry.
+    // Build entries, skipping any name not in the stable ID table.
+    CapEntry entries[CAPABILITY_REGISTRY_MAX];
+    size_t count = 0;
+    for (size_t i = 0; i < allowed; ++i) {
+        const uint16_t cap_id = cap_id_from_name(names[i]);
+        if (cap_id == 0x0000u) continue; // unknown name — omit
+
+        CapEntry& e = entries[count++];
+        e.cap_id    = cap_id;
+        e.cap_flags = 0u;
+        if (registry.is_activated(names[i])) e.cap_flags |= CAP_FLAG_ACTIVATED;
+        if (cap_is_hw(names[i]))             e.cap_flags |= CAP_FLAG_HARDWARE;
+        e.cap_param = 0u;
+    }
+
     const uint16_t payload_len = static_cast<uint16_t>(2u + count * sizeof(CapEntry));
     if (payload_len > API_MAX_MSG - sizeof(MsgHeader)) {
         send_error(win, req, API_E_TOO_BIG);
         return;
     }
 
-    uint8_t payload[2 + CAPABILITY_REGISTRY_MAX * sizeof(CapEntry)];
+    uint8_t payload[2u + CAPABILITY_REGISTRY_MAX * sizeof(CapEntry)];
     payload[0] = static_cast<uint8_t>(count & 0xFFu);
     payload[1] = static_cast<uint8_t>(count >> 8u);
-
-    for (size_t i = 0; i < count; i++) {
-        CapEntry entry = {};
-        entry.cap_id    = static_cast<uint16_t>(i); // placeholder index (IDs not yet finalized)
-        entry.cap_flags = 0;
-        entry.cap_param = 0;
-        memcpy(payload + 2 + i * sizeof(CapEntry), &entry, sizeof(CapEntry));
-    }
+    memcpy(payload + 2u, entries, count * sizeof(CapEntry));
 
     send_ok(win, req, payload, payload_len);
 }

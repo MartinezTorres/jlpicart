@@ -7,6 +7,7 @@
 // Spec references: spec.md §5 (JLPiCart API), §5.1 (Fixed MSX-visible allocations).
 
 #include <cstdint>
+#include <cstddef>
 
 // ---------------------------------------------------------------------------
 // Window layout constants (spec.md §5.1 "Fixed layout within the 16KB API Window")
@@ -147,6 +148,7 @@ static constexpr uint16_t API_E_TIMEOUT     = 0x1007u; // operation exceeded lim
 static constexpr uint16_t API_E_RING_FULL   = 0x1008u; // cannot enqueue frame
 static constexpr uint16_t API_E_TOO_BIG     = 0x1009u; // payload or scratch too large
 static constexpr uint16_t API_E_INTERNAL    = 0x2001u; // cart-side runtime error
+static constexpr uint16_t API_E_POLICY      = 0x1010u; // operation blocked by policy flag
 
 // ---------------------------------------------------------------------------
 // Service IDs (spec.md "Services")
@@ -244,10 +246,123 @@ struct ApiInfo {
 };
 static_assert(sizeof(ApiInfo) == 20, "ApiInfo must be 20 bytes");
 
+// ---------------------------------------------------------------------------
+// Capability numeric IDs (spec.md §5.1, doc/api/capabilities.md)
+//
+// These assignments are stable: once an ID is assigned to a capability string
+// it MUST NOT be reassigned or reused.  Domain groupings are 0x0100 wide.
+// ---------------------------------------------------------------------------
+
+// Domain 0x0000: Core platform services
+static constexpr uint16_t CAP_BUS_MSX             = 0x0001u; // hw: MSX bus interface
+
+// Domain 0x0100: Storage
+static constexpr uint16_t CAP_STORAGE_EXT_FLASH   = 0x0101u; // hw: external SPI flash
+static constexpr uint16_t CAP_STORAGE_MASS        = 0x0102u; // sw: Nextor block device
+static constexpr uint16_t CAP_STORAGE_FLOPPY      = 0x0103u; // sw: floppy controller
+
+// Domain 0x0200: Network
+static constexpr uint16_t CAP_NET_WIFI            = 0x0201u; // hw: ESP32 WiFi via AT
+static constexpr uint16_t CAP_NET_ETH             = 0x0202u; // hw: Ethernet (custom boards)
+static constexpr uint16_t CAP_NET_ESP32           = 0x0203u; // sw: ESP32 AT transport driver
+
+// Domain 0x0300: I/O
+static constexpr uint16_t CAP_IO_USB_HOST         = 0x0301u; // hw: USB host port
+static constexpr uint16_t CAP_IO_ADC              = 0x0302u; // hw: ADC channels
+static constexpr uint16_t CAP_IO_RS232            = 0x0303u; // hw: RS232/UART (custom boards)
+
+// Domain 0x0400: UI
+static constexpr uint16_t CAP_UI_OLED             = 0x0401u; // hw: SSD1306 128x32 OLED
+static constexpr uint16_t CAP_UI_EINK             = 0x0402u; // hw: e-ink display (custom boards)
+
+// Domain 0x0500: Video
+static constexpr uint16_t CAP_VIDEO_CRT           = 0x0501u; // hw: CRT/VGA analog output
+static constexpr uint16_t CAP_VIDEO_V9990         = 0x0502u; // sw: V9990/G9000 VDP emulation
+
+// Domain 0x0600: Audio
+static constexpr uint16_t CAP_AUDIO_OUT           = 0x0601u; // hw: stereo DAC output
+static constexpr uint16_t CAP_AUDIO_OPL4          = 0x0602u; // sw: OPL4 MoonSound emulation
+
+// Domain 0x1000: Software capabilities
+static constexpr uint16_t CAP_API_CORE            = 0x1001u; // sw: core API service
+static constexpr uint16_t CAP_SW_MAPPER           = 0x1002u; // sw: MSX ROM mapper emulation
+static constexpr uint16_t CAP_SW_PSG              = 0x1010u; // sw: AY-3-8910 PSG emulation
+static constexpr uint16_t CAP_SW_SCC              = 0x1011u; // sw: Konami SCC/SCC+ emulation
+static constexpr uint16_t CAP_SW_MENU             = 0x1020u; // sw: menu host ABI + Z80 stub
+
+// cap_flags bits in CapEntry (doc/api/capabilities.md)
+static constexpr uint16_t CAP_FLAG_ACTIVATED      = (1u << 0); // active for current session
+static constexpr uint16_t CAP_FLAG_HARDWARE       = (1u << 1); // hw capability (not emulated)
+static constexpr uint16_t CAP_FLAG_PROBE_OK       = (1u << 2); // hw probe succeeded
+
+// ---------------------------------------------------------------------------
+// Capability string → numeric ID mapping.
+// Used by handle_get_caps() in core_service.cc.
+// Add entries here when new capabilities are added to the descriptor tables.
+// ---------------------------------------------------------------------------
+
+struct CapIdMapping {
+    const char* name;
+    uint16_t    cap_id;
+    bool        is_hw;   // true → CAP_FLAG_HARDWARE set in response
+};
+
+// Complete mapping table.  Ordering does not matter — cap_id is the stable key.
+static constexpr CapIdMapping kCapIdMappings[] = {
+    { "bus.msx",           CAP_BUS_MSX,           true  },
+    { "storage.ext_flash", CAP_STORAGE_EXT_FLASH, true  },
+    { "storage.mass",      CAP_STORAGE_MASS,      false },
+    { "storage.floppy",    CAP_STORAGE_FLOPPY,    false },
+    { "net.wifi",          CAP_NET_WIFI,           true  },
+    { "net.eth",           CAP_NET_ETH,            true  },
+    { "net.esp32",         CAP_NET_ESP32,          false },
+    { "io.usb_host",       CAP_IO_USB_HOST,        true  },
+    { "io.adc",            CAP_IO_ADC,             true  },
+    { "io.rs232",          CAP_IO_RS232,           true  },
+    { "ui.oled",           CAP_UI_OLED,            true  },
+    { "ui.eink",           CAP_UI_EINK,            true  },
+    { "video.crt",         CAP_VIDEO_CRT,          true  },
+    { "video.v9990",       CAP_VIDEO_V9990,        false },
+    { "audio.out",         CAP_AUDIO_OUT,          true  },
+    { "audio.opl4",        CAP_AUDIO_OPL4,         false },
+    { "api.core",          CAP_API_CORE,           false },
+    { "sw.mapper",         CAP_SW_MAPPER,          false },
+    { "sw.psg",            CAP_SW_PSG,             false },
+    { "sw.scc",            CAP_SW_SCC,             false },
+    { "sw.menu",           CAP_SW_MENU,            false },
+};
+static constexpr size_t kCapIdMappingCount =
+    sizeof(kCapIdMappings) / sizeof(kCapIdMappings[0]);
+
+// Resolve a capability string name to its stable numeric ID.
+// Returns 0x0000 (reserved/unknown) if the name is not in the table.
+inline uint16_t cap_id_from_name(const char* name)
+{
+    for (size_t i = 0; i < kCapIdMappingCount; ++i) {
+        const char* a = kCapIdMappings[i].name;
+        const char* b = name;
+        while (*a && *a == *b) { ++a; ++b; }
+        if (*a == '\0' && *b == '\0') return kCapIdMappings[i].cap_id;
+    }
+    return 0x0000u; // unknown
+}
+
+// Return the is_hw flag for a capability name.  False if not found.
+inline bool cap_is_hw(const char* name)
+{
+    for (size_t i = 0; i < kCapIdMappingCount; ++i) {
+        const char* a = kCapIdMappings[i].name;
+        const char* b = name;
+        while (*a && *a == *b) { ++a; ++b; }
+        if (*a == '\0' && *b == '\0') return kCapIdMappings[i].is_hw;
+    }
+    return false;
+}
+
 // System.GET_CAPS (0x02) — one entry per capability
-// cap_id: stable numeric mapping (Stage 4: uses index as placeholder; IDs not yet finalized)
-// cap_flags: reserved (0)
-// cap_param: capability-specific parameter (0)
+// cap_id:    stable numeric ID from kCapIdMappings (doc/api/capabilities.md)
+// cap_flags: CAP_FLAG_* bitmap
+// cap_param: capability-specific parameter (0 for most; KB for storage)
 struct CapEntry {
     uint16_t cap_id;
     uint16_t cap_flags;
