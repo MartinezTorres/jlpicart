@@ -16,6 +16,7 @@
 
 class SaveStore;
 class StatsStore;
+class DeviceIdentity;
 
 class ApiWindow {
 public:
@@ -47,6 +48,10 @@ public:
 
     // Bind a StatsStore and enable API_FEATURE_USERSTATS (Stage 21).
     void bind_stats_store(StatsStore& ss);
+
+    // Bind the Device Identity Key (Stage 22).
+    // Enables GET_DEVICE_ID to return a real scoped ID.
+    void bind_device_identity(DeviceIdentity& dik);
 
     // Active profile ID for storage and stats services (Stage 19+).
     // Updated by bind_profile_store or set directly.
@@ -98,6 +103,7 @@ private:
     ProfileStore*             profile_store_    = nullptr;
     SaveStore*                save_store_        = nullptr;
     StatsStore*               stats_store_       = nullptr;
+    DeviceIdentity*           device_identity_   = nullptr;
     uint16_t                  active_profile_id_ = 0u;
     char                      active_payload_id_[64] = {};
     void                    (*reset_menu_fn_)()  = nullptr;

@@ -10,12 +10,14 @@
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
 
-// Forward declaration to avoid a circular include.
+// Forward declarations.
 class ApiWindow;
+class DeviceIdentity;
 
 // Dispatch a System service request.
 // Called from ApiWindow::service_once() when req.service == SVC_SYSTEM.
 // reset_menu_fn is called (if non-null) when SYS_RESET_TO_MENU is processed.
+// device_identity may be nullptr (GET_DEVICE_ID returns E_UNSUPPORTED if absent).
 void core_service_handle(const MsgHeader&          req,
                          const uint8_t*            payload,
                          uint16_t                  payload_len,
@@ -23,7 +25,8 @@ void core_service_handle(const MsgHeader&          req,
                          const SecurityPosture&    posture,
                          const PolicyStore&        policy_store,
                          const CapabilityRegistry& registry,
-                         void                    (*reset_menu_fn)() = nullptr);
+                         void                    (*reset_menu_fn)() = nullptr,
+                         const DeviceIdentity*     device_identity  = nullptr);
 
 // Build the posture_props bitfield from a SecurityPosture.
 // Exported for use by both GET_API_INFO and GET_SECURITY_INFO.

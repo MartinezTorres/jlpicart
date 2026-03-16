@@ -1,13 +1,13 @@
 // core_service.cc — System service (0x00) implementation.
 //
 // Spec reference: spec.md §5.1 "System service (0x00)".
-// Methods implemented: GET_API_INFO (0x00), GET_CAPS (0x02),
+// Methods implemented: GET_API_INFO (0x00), GET_DEVICE_ID (0x01), GET_CAPS (0x02),
 //   GET_RANDOM (0x03), RESET_TO_MENU (0x04),
 //   GET_SECURITY_INFO (0x05), GET_POLICY_FLAGS (0x06).
-// Stubbed with E_UNSUPPORTED: GET_DEVICE_ID (0x01) — needs DIK (Stage 22).
 
 #include "msx/api/services/core_service.h"
 #include "msx/api/api_window.h"
+#include "identity/device_identity.h"
 #include <cstring>
 
 #ifndef JLPICART_HOST_TEST
@@ -234,7 +234,8 @@ void core_service_handle(const MsgHeader&          req,
                          const SecurityPosture&    posture,
                          const PolicyStore&        policy_store,
                          const CapabilityRegistry& registry,
-                         void                    (*reset_menu_fn)())
+                         void                    (*reset_menu_fn)(),
+                         const DeviceIdentity*     device_identity)
 {
     switch (req.method) {
         case SYS_GET_API_INFO:
@@ -244,11 +245,29 @@ void core_service_handle(const MsgHeader&          req,
             break;
 
         case SYS_GET_DEVICE_ID:
-            // Stage 22: requires Device Identity Key (DIK).
-            (void)payload;
-            (void)payload_len;
-            send_error(win, req, API_E_UNSUPPORTED);
+        {
+            if (!device_identity || !device_identity->initialized()) {
+                (void)payload;
+                (void)payload_len;
+                send_error(win, req, API_E_UNSUPPORTED);
+                break;
+            }
+            // Parse scope byte.  Absent → scope 0.
+            uint8_t scope = 0u;
+            if (payload_len >= 1u) scope = payload[0];
+
+            // scope=0 (stable device ID): check policy.
+            // For now, always allow (policy enforcement is a Stage 22+ hardening).
+
+            uint8_t pub[DIK_PUB_KEY_LEN];
+            device_identity->public_key(pub);
+
+            uint8_t id_16[16];
+            device_identity_scoped_id(pub, scope, id_16);
+
+            send_ok(win, req, id_16, 16u);
             break;
+        }
 
         case SYS_GET_CAPS:
             (void)payload;

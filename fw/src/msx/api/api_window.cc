@@ -9,6 +9,7 @@
 #include "msx/api/services/identity_service.h"
 #include "msx/api/services/storage_service.h"
 #include "msx/api/services/userstats_service.h"
+#include "identity/device_identity.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------
@@ -92,6 +93,11 @@ void ApiWindow::bind_stats_store(StatsStore& ss)
 {
     stats_store_ = &ss;
     header().feature_bits |= API_FEATURE_USERSTATS;
+}
+
+void ApiWindow::bind_device_identity(DeviceIdentity& dik)
+{
+    device_identity_ = &dik;
 }
 
 void ApiWindow::set_active_payload(const char* payload_id)
@@ -353,7 +359,7 @@ bool ApiWindow::service_once()
         case SVC_SYSTEM:
             core_service_handle(req, payload, payload_len, *this,
                                 *posture_, *policy_store_, *registry_,
-                                reset_menu_fn_);
+                                reset_menu_fn_, device_identity_);
             break;
 
         case SVC_IDENTITY:

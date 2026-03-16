@@ -27,10 +27,14 @@ set(SRC_BOARD_DESC  "${FW_SRC}/boards/board_descriptor_jlpicart.cc")
 set(SRC_DRV_TABLE   "${FW_SRC}/drivers/driver_descriptor_table.cc")
 
 # Helper macro to reduce boilerplate.
+# Tests that include SRC_DEVICE_IDENTITY automatically pick up OpenSSL linkage
+# via the target_link_libraries call below.
 function(add_host_test name)
     add_executable(${name} ${ARGN})
     target_include_directories(${name} PRIVATE ${COMMON_INC})
     target_compile_definitions(${name} PRIVATE ${COMMON_DEFS})
+    # Link OpenSSL for device_identity.cc (ed25519 in host test mode).
+    target_link_libraries(${name} PRIVATE OpenSSL::Crypto)
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
 
@@ -92,8 +96,12 @@ set(SRC_FLASH_DEVICE  "${FW_SRC}/storage/flash_device.cc")
 set(SRC_KV_STORE      "${FW_SRC}/storage/kv_store.cc")
 set(SRC_SAVE_STORE    "${FW_SRC}/storage/save_store.cc")
 set(SRC_STORAGE_SVC   "${FW_SRC}/msx/api/services/storage_service.cc")
-set(SRC_STATS_STORE   "${FW_SRC}/stats/stats_store.cc")
-set(SRC_USERSTATS_SVC "${FW_SRC}/msx/api/services/userstats_service.cc")
+set(SRC_STATS_STORE    "${FW_SRC}/stats/stats_store.cc")
+set(SRC_USERSTATS_SVC  "${FW_SRC}/msx/api/services/userstats_service.cc")
+set(SRC_DEVICE_IDENTITY "${FW_SRC}/identity/device_identity.cc")
+
+# OpenSSL is used by device_identity.cc in host test mode for ed25519 operations.
+find_package(OpenSSL REQUIRED)
 
 add_host_test(test_api_window
     host/test_api_window.cc
@@ -104,6 +112,7 @@ add_host_test(test_api_window
     ${SRC_SAVE_STORE}
     ${SRC_USERSTATS_SVC}
     ${SRC_STATS_STORE}
+    ${SRC_DEVICE_IDENTITY}
     ${SRC_PROFILE_STORE}
     ${SRC_CAP_REG}
     ${SRC_BOARD_DESC}
@@ -229,6 +238,7 @@ add_host_test(test_profiles
     ${SRC_SAVE_STORE}
     ${SRC_USERSTATS_SVC}
     ${SRC_STATS_STORE}
+    ${SRC_DEVICE_IDENTITY}
     ${SRC_API_WINDOW}
     ${SRC_CORE_SERVICE}
     ${SRC_CAP_REG}
@@ -288,6 +298,7 @@ add_host_test(test_menu_app
     ${SRC_SAVE_STORE}
     ${SRC_USERSTATS_SVC}
     ${SRC_STATS_STORE}
+    ${SRC_DEVICE_IDENTITY}
     ${SRC_CONTENT_STORE}
     ${SRC_KV_STORE}
     ${SRC_FLASH_DEVICE}
@@ -347,6 +358,7 @@ add_host_test(test_core_service
     ${SRC_SAVE_STORE}
     ${SRC_USERSTATS_SVC}
     ${SRC_STATS_STORE}
+    ${SRC_DEVICE_IDENTITY}
     ${SRC_CORE_SVC_FULL}
 )
 
@@ -360,6 +372,7 @@ add_host_test(test_save_store
     ${SRC_STORAGE_SVC}
     ${SRC_USERSTATS_SVC}
     ${SRC_STATS_STORE}
+    ${SRC_DEVICE_IDENTITY}
     ${SRC_API_WINDOW}
     ${SRC_IDENTITY_SVC}
     ${SRC_CORE_SERVICE}
@@ -391,6 +404,7 @@ add_host_test(test_boot_mode
     ${SRC_SAVE_STORE}
     ${SRC_USERSTATS_SVC}
     ${SRC_STATS_STORE}
+    ${SRC_DEVICE_IDENTITY}
     ${SRC_CONTENT_STORE}
     ${SRC_KV_STORE}
     ${SRC_FLASH_DEVICE}
@@ -414,11 +428,39 @@ add_host_test(test_stats_store
     host/test_stats_store.cc
     ${SRC_STATS_STORE}
     ${SRC_USERSTATS_SVC}
+    ${SRC_DEVICE_IDENTITY}
     ${SRC_API_WINDOW}
     ${SRC_CORE_SERVICE}
     ${SRC_IDENTITY_SVC}
     ${SRC_STORAGE_SVC}
     ${SRC_SAVE_STORE}
+    ${SRC_CAP_REG}
+    ${SRC_BOARD_DESC}
+    ${SRC_DRV_TABLE}
+    ${SRC_KV_STORE}
+    ${SRC_FLASH_DEVICE}
+    ${SRC_PROFILE_STORE}
+    ${SRC_DIAG}
+    ${SRC_SHA256}
+    ${SRC_POL_VERIFY}
+    ${SRC_POL_STORE}
+    ${SRC_POSTURE}
+)
+
+# ---------------------------------------------------------------------------
+# Stage 22 tests
+# ---------------------------------------------------------------------------
+
+add_host_test(test_device_identity
+    host/test_device_identity.cc
+    ${SRC_DEVICE_IDENTITY}
+    ${SRC_API_WINDOW}
+    ${SRC_CORE_SERVICE}
+    ${SRC_IDENTITY_SVC}
+    ${SRC_STORAGE_SVC}
+    ${SRC_SAVE_STORE}
+    ${SRC_USERSTATS_SVC}
+    ${SRC_STATS_STORE}
     ${SRC_CAP_REG}
     ${SRC_BOARD_DESC}
     ${SRC_DRV_TABLE}

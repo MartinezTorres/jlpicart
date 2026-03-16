@@ -79,6 +79,9 @@ add_executable(jlpicart
     src/stats/stats_store.cc
     src/msx/api/services/userstats_service.cc
 
+    # Device Identity Key and GET_DEVICE_ID (Stage 22)
+    src/identity/device_identity.cc
+
     # Storage substrate (Stage 6)
     src/storage/flash_device.cc
     src/storage/kv_store.cc

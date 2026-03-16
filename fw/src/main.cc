@@ -42,6 +42,7 @@
 #include "settings/system_settings_store.h"
 #include "storage/save_store.h"
 #include "stats/stats_store.h"
+#include "identity/device_identity.h"
 #include "usb/usb_host.h"
 #include "usb/usb_install_scanner.h"
 #include "storage/flash_device.h"
@@ -193,6 +194,19 @@ int main() {
     static StatsStore stats_store;
     stats_store.init(saves_kv, profile_store);
 
+    // 2f. Init Device Identity Key (Stage 22).
+    static DeviceIdentity device_identity;
+    {
+        DiagStatus s = device_identity.init_or_load(kv_store);
+        if (s.ok()) {
+            log_info(device_identity.is_provisioned()
+                     ? "DIK ready (provisioned)"
+                     : "DIK ready (seed-only, unprovisioned)");
+        } else {
+            log_warn("DIK init failed — GET_DEVICE_ID unavailable");
+        }
+    }
+
     // 8. Init API window (16KB buffer, writes "JLP1" header).
     static ApiWindow api_win;
     api_win.init(posture, policy_store, registry);
@@ -204,6 +218,9 @@ int main() {
     }
     if (stats_store.initialized()) {
         api_win.bind_stats_store(stats_store);
+    }
+    if (device_identity.initialized()) {
+        api_win.bind_device_identity(device_identity);
     }
     log_info("API window initialised");
 
