@@ -8,6 +8,7 @@
 #include "msx/api/services/core_service.h"
 #include "msx/api/services/identity_service.h"
 #include "msx/api/services/storage_service.h"
+#include "msx/api/services/userstats_service.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------
@@ -85,6 +86,22 @@ void ApiWindow::bind_save_store(SaveStore& ss)
         active_profile_id_ = profile_store_->active();
     }
     header().feature_bits |= API_FEATURE_STORAGE;
+}
+
+void ApiWindow::bind_stats_store(StatsStore& ss)
+{
+    stats_store_ = &ss;
+    header().feature_bits |= API_FEATURE_USERSTATS;
+}
+
+void ApiWindow::set_active_payload(const char* payload_id)
+{
+    if (!payload_id) {
+        active_payload_id_[0] = '\0';
+        return;
+    }
+    strncpy(active_payload_id_, payload_id, sizeof(active_payload_id_) - 1u);
+    active_payload_id_[sizeof(active_payload_id_) - 1u] = '\0';
 }
 
 // ---------------------------------------------------------------------------
@@ -357,6 +374,20 @@ bool ApiWindow::service_once()
                                : active_profile_id_;
                 storage_service_handle(req, payload, payload_len,
                                        *this, *save_store_, pid);
+            } else {
+                write_response(req.seq, req.service, req.method,
+                               API_E_UNSUPPORTED, nullptr, 0);
+            }
+            break;
+
+        case SVC_USERSTATS:
+            if (stats_store_ != nullptr) {
+                uint16_t pid = (profile_store_ != nullptr)
+                               ? profile_store_->active()
+                               : active_profile_id_;
+                userstats_service_handle(req, payload, payload_len,
+                                          *this, *stats_store_,
+                                          pid, active_payload_id_);
             } else {
                 write_response(req.seq, req.service, req.method,
                                API_E_UNSUPPORTED, nullptr, 0);

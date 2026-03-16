@@ -61,6 +61,9 @@ static constexpr uint32_t API_FEATURES_STAGE15 = API_FEATURE_SYSTEM | API_FEATUR
 // Stage 19: adds Storage service.
 static constexpr uint32_t API_FEATURES_STAGE19 =
     API_FEATURE_SYSTEM | API_FEATURE_IDENTITY | API_FEATURE_STORAGE;
+// Stage 21: adds UserStats service.
+static constexpr uint32_t API_FEATURES_STAGE21 =
+    API_FEATURE_SYSTEM | API_FEATURE_IDENTITY | API_FEATURE_STORAGE | API_FEATURE_USERSTATS;
 
 // ---------------------------------------------------------------------------
 // Packed structs — layout identical on RP2350 and Z80
@@ -195,6 +198,16 @@ static constexpr uint8_t IDN_GUEST_END           = 0x04u;
 // With 8 profiles: 2 (count) + 8×(2+1+name_len) ≤ 238 → name_len ≤ 26.
 // Use 16 bytes for a comfortable fit.
 static constexpr uint8_t PROF_API_NAME_MAX = 16u;
+
+// ---------------------------------------------------------------------------
+// UserStats service (0x04) method IDs  (spec.md "UserStats service")
+// ---------------------------------------------------------------------------
+
+static constexpr uint8_t UST_STAT_GET          = 0x00u;
+static constexpr uint8_t UST_STAT_SET          = 0x01u;
+static constexpr uint8_t UST_ACH_UNLOCK        = 0x02u;
+static constexpr uint8_t UST_LEADER_RUN_BEGIN  = 0x03u;
+static constexpr uint8_t UST_LEADER_SUBMIT     = 0x04u;
 
 // ---------------------------------------------------------------------------
 // posture_props bitfield  (spec.md "Posture properties (OTP-derived)")

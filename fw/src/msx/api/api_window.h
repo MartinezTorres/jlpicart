@@ -15,6 +15,7 @@
 #include <cstddef>
 
 class SaveStore;
+class StatsStore;
 
 class ApiWindow {
 public:
@@ -44,9 +45,18 @@ public:
     // Bind a SaveStore and enable API_FEATURE_STORAGE (Stage 19).
     void bind_save_store(SaveStore& ss);
 
+    // Bind a StatsStore and enable API_FEATURE_USERSTATS (Stage 21).
+    void bind_stats_store(StatsStore& ss);
+
     // Active profile ID for storage and stats services (Stage 19+).
     // Updated by bind_profile_store or set directly.
     uint16_t active_profile_id() const { return active_profile_id_; }
+
+    // Active payload ID for UserStats service keying (Stage 20+).
+    // Set by MenuApp when entering/leaving the LAUNCH screen.
+    // Empty string means no payload is currently active.
+    void set_active_payload(const char* payload_id);
+    const char* active_payload_id() const { return active_payload_id_; }
 
     // Read one request frame from the request ring, dispatch to the appropriate
     // service handler, and write one response frame to the response ring.
@@ -86,9 +96,11 @@ private:
     const PolicyStore*        policy_store_     = nullptr;
     const CapabilityRegistry* registry_         = nullptr;
     ProfileStore*             profile_store_    = nullptr;
-    SaveStore*                save_store_       = nullptr;
+    SaveStore*                save_store_        = nullptr;
+    StatsStore*               stats_store_       = nullptr;
     uint16_t                  active_profile_id_ = 0u;
-    void                    (*reset_menu_fn_)() = nullptr;
+    char                      active_payload_id_[64] = {};
+    void                    (*reset_menu_fn_)()  = nullptr;
 
     bool initialized_ = false;
 

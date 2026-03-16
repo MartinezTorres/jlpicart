@@ -75,6 +75,10 @@ add_executable(jlpicart
     src/storage/save_store.cc
     src/msx/api/services/storage_service.cc
 
+    # Stats store and UserStats service (Stage 21)
+    src/stats/stats_store.cc
+    src/msx/api/services/userstats_service.cc
+
     # Storage substrate (Stage 6)
     src/storage/flash_device.cc
     src/storage/kv_store.cc

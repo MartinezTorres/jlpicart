@@ -1,17 +1,18 @@
-// menu_app.cc — RP2350-side menu application (Stage 16 + Stage 17).
+// menu_app.cc — RP2350-side menu application (Stages 16–20).
 //
 // Non-blocking state machine.  Each tick() issues at most one mailbox command.
 // Screen handlers advance step_ by 1 per completed command; when READ_INPUT
 // completes, the "process" step decodes input and resets step_=0 (re-render)
 // or calls switch_screen() to transition.
 //
-// See bootstrapping.md Stage 16 and Stage 17 for step-by-step design notes.
+// See bootstrapping.md Stages 16–20 for step-by-step design notes.
 
 #include "menu/menu_app.h"
 #include "menu/input_decoder.h"
 #include "content/content_store.h"
 #include "profiles/profile_store.h"
 #include "settings/system_settings_store.h"
+#include "msx/api/api_window.h"
 #include <cstring>
 #include <cstdio>
 
@@ -26,6 +27,7 @@ void MenuApp::init(MenuMailbox& mbx, KvStore& kv, ProfileStore& ps)
     ps_           = &ps;
     ss_           = nullptr;
     saves_kv_     = nullptr;
+    api_win_      = nullptr;
     screen_       = Screen::BOOT;
     step_         = 0;
     cursor_       = 0;
@@ -42,6 +44,11 @@ void MenuApp::bind_settings_store(SystemSettingsStore& ss, KvStore& saves_kv)
 void MenuApp::request_reset_to_menu()
 {
     reset_requested_ = true;
+}
+
+void MenuApp::bind_api_window(ApiWindow& win)
+{
+    api_win_ = &win;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,6 +78,7 @@ void MenuApp::tick()
         case Screen::COLLECTIONS: tick_collections(); break;
         case Screen::PROFILES:    tick_profiles();    break;
         case Screen::SETTINGS:    tick_settings();    break;
+        case Screen::LAUNCH:      tick_launch();      break;
     }
 }
 
@@ -152,7 +160,16 @@ void MenuApp::tick_boot_info()
         }
         load_collection_data();
         load_profile_data();
-        switch_screen(Screen::MAIN);
+        // Stage 20: if the active collection requests direct boot, skip MAIN.
+        if (has_collection_ && col_record_.boot_mode == 1u) {
+            strncpy(launch_title_,      col_record_.title,             sizeof(launch_title_) - 1u);
+            strncpy(launch_payload_id_, col_record_.default_payload_id, sizeof(launch_payload_id_) - 1u);
+            launch_title_[sizeof(launch_title_) - 1u]           = '\0';
+            launch_payload_id_[sizeof(launch_payload_id_) - 1u] = '\0';
+            switch_screen(Screen::LAUNCH);
+        } else {
+            switch_screen(Screen::MAIN);
+        }
         break;
     }
 }
@@ -636,4 +653,64 @@ void MenuApp::handle_settings_input()
     }
 
     step_ = 0;
+}
+
+// ---------------------------------------------------------------------------
+// LAUNCH screen (Stage 20)
+// ---------------------------------------------------------------------------
+//
+// Steps:
+//   0: CLEAR; register active payload with ApiWindow
+//   1: PUT_TEXT 0,0 "  Launching <title>..."
+//   2: PUT_TEXT 0,2 "  (press any key to cancel)"
+//   3: READ_INPUT
+//   4: process — any key cancels → MAIN; otherwise loop to step 3
+
+void MenuApp::tick_launch()
+{
+    switch (step_) {
+    case 0:
+        if (!mbx_->send_command(MENU_CMD_CLEAR)) return;
+        if (api_win_) {
+            api_win_->set_active_payload(launch_payload_id_);
+        }
+        step_ = 1;
+        break;
+    case 1:
+        snprintf(fmt_, sizeof(fmt_), "  Launching %.38s...", launch_title_);
+        if (!put_text(0u, 0u, fmt_)) return;
+        step_ = 2;
+        break;
+    case 2:
+        if (!put_text(0u, 2u, "  (press any key to cancel)")) return;
+        step_ = 3;
+        break;
+    case 3:
+        if (!mbx_->send_command(MENU_CMD_READ_INPUT)) return;
+        step_ = 4;
+        break;
+    case 4:
+        handle_launch_input();
+        break;
+    }
+}
+
+void MenuApp::handle_launch_input()
+{
+    InputSnapshot inp = {};
+    if (mbx_->last_out_len() >= sizeof(InputSnapshot)) {
+        memcpy(&inp, mbx_->data_buf(), sizeof(InputSnapshot));
+    }
+
+    // Any key press cancels and returns to MAIN.
+    if (key_any(inp)) {
+        if (api_win_) {
+            api_win_->set_active_payload("");
+        }
+        switch_screen(Screen::MAIN);
+        return;
+    }
+
+    // No key: loop back to READ_INPUT.
+    step_ = 3;
 }

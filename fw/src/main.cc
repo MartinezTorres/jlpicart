@@ -41,6 +41,7 @@
 #include "profiles/profile_store.h"
 #include "settings/system_settings_store.h"
 #include "storage/save_store.h"
+#include "stats/stats_store.h"
 #include "usb/usb_host.h"
 #include "usb/usb_install_scanner.h"
 #include "storage/flash_device.h"
@@ -188,6 +189,10 @@ int main() {
     static SaveStore save_store;
     save_store.init(saves_kv, profile_store);
 
+    // 2e. Init stats store (backed by saves_kv under "st.*" prefix, Stage 21).
+    static StatsStore stats_store;
+    stats_store.init(saves_kv, profile_store);
+
     // 8. Init API window (16KB buffer, writes "JLP1" header).
     static ApiWindow api_win;
     api_win.init(posture, policy_store, registry);
@@ -196,6 +201,9 @@ int main() {
     }
     if (save_store.initialized()) {
         api_win.bind_save_store(save_store);
+    }
+    if (stats_store.initialized()) {
+        api_win.bind_stats_store(stats_store);
     }
     log_info("API window initialised");
 
@@ -210,8 +218,10 @@ int main() {
     menu_app.bind_settings_store(settings_store, saves_kv);
 
     // 9b. Wire RESET_TO_MENU callback: API service → MenuApp (Stage 18).
+    // 9c. Bind ApiWindow to MenuApp for LAUNCH screen active-payload tracking (Stage 20).
     static MenuApp* g_menu_app = &menu_app;
     api_win.set_reset_menu_fn([]() { g_menu_app->request_reset_to_menu(); });
+    menu_app.bind_api_window(api_win);
 
     log_info("Menu mailbox initialised");
 

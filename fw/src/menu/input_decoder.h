@@ -40,3 +40,16 @@ inline bool joy1_down (const InputSnapshot& s) { return (s.joy1 & 0x02u) == 0u; 
 inline bool joy1_left (const InputSnapshot& s) { return (s.joy1 & 0x04u) == 0u; }
 inline bool joy1_right(const InputSnapshot& s) { return (s.joy1 & 0x08u) == 0u; }
 inline bool joy1_trig (const InputSnapshot& s) { return (s.joy1 & 0x10u) == 0u; }
+
+// ---------------------------------------------------------------------------
+// Composite: any key or joystick button pressed
+// ---------------------------------------------------------------------------
+
+inline bool key_any(const InputSnapshot& s) {
+    // Any keyboard row has a pressed bit (0 in active-low).
+    for (uint8_t i = 0; i < sizeof(s.kbd_rows); ++i) {
+        if (s.kbd_rows[i] != 0xFFu) return true;
+    }
+    // Any joystick direction or trigger pressed (bits 0-4, active-low 0xFF = all released).
+    return (s.joy1 & 0x1Fu) != 0x1Fu;
+}

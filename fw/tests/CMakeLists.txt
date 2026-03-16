@@ -92,6 +92,8 @@ set(SRC_FLASH_DEVICE  "${FW_SRC}/storage/flash_device.cc")
 set(SRC_KV_STORE      "${FW_SRC}/storage/kv_store.cc")
 set(SRC_SAVE_STORE    "${FW_SRC}/storage/save_store.cc")
 set(SRC_STORAGE_SVC   "${FW_SRC}/msx/api/services/storage_service.cc")
+set(SRC_STATS_STORE   "${FW_SRC}/stats/stats_store.cc")
+set(SRC_USERSTATS_SVC "${FW_SRC}/msx/api/services/userstats_service.cc")
 
 add_host_test(test_api_window
     host/test_api_window.cc
@@ -100,6 +102,8 @@ add_host_test(test_api_window
     ${SRC_IDENTITY_SVC}
     ${SRC_STORAGE_SVC}
     ${SRC_SAVE_STORE}
+    ${SRC_USERSTATS_SVC}
+    ${SRC_STATS_STORE}
     ${SRC_PROFILE_STORE}
     ${SRC_CAP_REG}
     ${SRC_BOARD_DESC}
@@ -223,6 +227,8 @@ add_host_test(test_profiles
     ${SRC_IDENTITY_SVC}
     ${SRC_STORAGE_SVC}
     ${SRC_SAVE_STORE}
+    ${SRC_USERSTATS_SVC}
+    ${SRC_STATS_STORE}
     ${SRC_API_WINDOW}
     ${SRC_CORE_SERVICE}
     ${SRC_CAP_REG}
@@ -275,12 +281,26 @@ add_host_test(test_menu_app
     host/test_menu_app.cc
     ${SRC_MENU_APP}
     ${SRC_MENU_HOST_ABI}
+    ${SRC_API_WINDOW}
+    ${SRC_CORE_SERVICE}
+    ${SRC_IDENTITY_SVC}
+    ${SRC_STORAGE_SVC}
+    ${SRC_SAVE_STORE}
+    ${SRC_USERSTATS_SVC}
+    ${SRC_STATS_STORE}
     ${SRC_CONTENT_STORE}
     ${SRC_KV_STORE}
     ${SRC_FLASH_DEVICE}
     ${SRC_PROFILE_STORE}
     ${SRC_SYSTEM_SETTINGS}
+    ${SRC_CAP_REG}
+    ${SRC_BOARD_DESC}
+    ${SRC_DRV_TABLE}
     ${SRC_DIAG}
+    ${SRC_SHA256}
+    ${SRC_POL_VERIFY}
+    ${SRC_POL_STORE}
+    ${SRC_POSTURE}
 )
 
 # ---------------------------------------------------------------------------
@@ -325,6 +345,8 @@ add_host_test(test_core_service
     ${SRC_IDENTITY_SVC}
     ${SRC_STORAGE_SVC}
     ${SRC_SAVE_STORE}
+    ${SRC_USERSTATS_SVC}
+    ${SRC_STATS_STORE}
     ${SRC_CORE_SVC_FULL}
 )
 
@@ -336,9 +358,67 @@ add_host_test(test_save_store
     host/test_save_store.cc
     ${SRC_SAVE_STORE}
     ${SRC_STORAGE_SVC}
+    ${SRC_USERSTATS_SVC}
+    ${SRC_STATS_STORE}
     ${SRC_API_WINDOW}
     ${SRC_IDENTITY_SVC}
     ${SRC_CORE_SERVICE}
+    ${SRC_CAP_REG}
+    ${SRC_BOARD_DESC}
+    ${SRC_DRV_TABLE}
+    ${SRC_KV_STORE}
+    ${SRC_FLASH_DEVICE}
+    ${SRC_PROFILE_STORE}
+    ${SRC_DIAG}
+    ${SRC_SHA256}
+    ${SRC_POL_VERIFY}
+    ${SRC_POL_STORE}
+    ${SRC_POSTURE}
+)
+
+# ---------------------------------------------------------------------------
+# Stage 20 tests
+# ---------------------------------------------------------------------------
+
+add_host_test(test_boot_mode
+    host/test_boot_mode.cc
+    ${SRC_MENU_APP}
+    ${SRC_MENU_HOST_ABI}
+    ${SRC_API_WINDOW}
+    ${SRC_CORE_SERVICE}
+    ${SRC_IDENTITY_SVC}
+    ${SRC_STORAGE_SVC}
+    ${SRC_SAVE_STORE}
+    ${SRC_USERSTATS_SVC}
+    ${SRC_STATS_STORE}
+    ${SRC_CONTENT_STORE}
+    ${SRC_KV_STORE}
+    ${SRC_FLASH_DEVICE}
+    ${SRC_PROFILE_STORE}
+    ${SRC_SYSTEM_SETTINGS}
+    ${SRC_CAP_REG}
+    ${SRC_BOARD_DESC}
+    ${SRC_DRV_TABLE}
+    ${SRC_DIAG}
+    ${SRC_SHA256}
+    ${SRC_POL_VERIFY}
+    ${SRC_POL_STORE}
+    ${SRC_POSTURE}
+)
+
+# ---------------------------------------------------------------------------
+# Stage 21 tests
+# ---------------------------------------------------------------------------
+
+add_host_test(test_stats_store
+    host/test_stats_store.cc
+    ${SRC_STATS_STORE}
+    ${SRC_USERSTATS_SVC}
+    ${SRC_API_WINDOW}
+    ${SRC_CORE_SERVICE}
+    ${SRC_IDENTITY_SVC}
+    ${SRC_STORAGE_SVC}
+    ${SRC_SAVE_STORE}
     ${SRC_CAP_REG}
     ${SRC_BOARD_DESC}
     ${SRC_DRV_TABLE}

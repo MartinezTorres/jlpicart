@@ -5,9 +5,9 @@
 // cartridge UI.  It is non-blocking: each tick() call issues at most one
 // command to the mailbox and returns immediately.
 //
-// Screens: BOOT → BOOT_INFO → MAIN ↔ COLLECTIONS / PROFILES / SETTINGS
+// Screens: BOOT → BOOT_INFO → MAIN ↔ COLLECTIONS / PROFILES / SETTINGS / LAUNCH
 //
-// See bootstrapping.md Stage 16 for the full design spec.
+// See bootstrapping.md Stages 16–20 for the full design spec.
 
 #include "msx/menu/menu_host_abi.h"   // MenuMailbox, HostInfo, InputSnapshot
 #include "content/collection_format.h" // CollectionRecord
@@ -18,6 +18,7 @@
 class KvStore;
 class ProfileStore;
 class SystemSettingsStore;
+class ApiWindow;
 
 class MenuApp {
 public:
@@ -35,6 +36,11 @@ public:
     // Thread-safe-enough for Core 1 service loop: sets a flag read by tick().
     void request_reset_to_menu();
 
+    // Bind the ApiWindow pointer so MenuApp can call set_active_payload()
+    // when transitioning to/from the LAUNCH screen (Stage 20).
+    // Must be called after init().  Optional: if not set, active_payload is not updated.
+    void bind_api_window(ApiWindow& win);
+
     bool initialized() const { return initialized_; }
 
     // Advance the state machine by one step.  Call repeatedly from the
@@ -49,6 +55,7 @@ private:
         COLLECTIONS,
         PROFILES,
         SETTINGS,
+        LAUNCH,     // active payload running; stub shows "Launching…" (Stage 20)
     };
 
     // --- Core state ---
@@ -71,12 +78,17 @@ private:
     // --- Wipe confirmation state (SETTINGS screen) ---
     bool          wipe_confirm_    = false;
 
+    // --- LAUNCH screen state (Stage 20) ---
+    char          launch_title_[64]      = {};  // title of the payload being launched
+    char          launch_payload_id_[64] = {};  // payload_id registered with ApiWindow
+
     // --- Subsystem references ---
     MenuMailbox*          mbx_       = nullptr;
     KvStore*              kv_        = nullptr;
     ProfileStore*         ps_        = nullptr;
     SystemSettingsStore*  ss_        = nullptr;  // nullptr until bind_settings_store()
     KvStore*              saves_kv_  = nullptr;  // nullptr until bind_settings_store()
+    ApiWindow*            api_win_   = nullptr;  // nullptr until bind_api_window()
 
     // Scratch buffer for formatted strings
     char fmt_[64] = {};
@@ -88,6 +100,7 @@ private:
     void tick_collections();
     void tick_profiles();
     void tick_settings();
+    void tick_launch();
 
     // --- Data loaders ---
     void load_collection_data();
@@ -105,6 +118,7 @@ private:
     void handle_collections_input();
     void handle_profiles_input();
     void handle_settings_input();
+    void handle_launch_input();
 
     // Number of selectable items in the PROFILES screen.
     // = profile_count_ + 2 (each profile + "New Profile..." + "Back").
