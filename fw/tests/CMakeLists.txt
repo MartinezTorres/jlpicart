@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
-project(jlpicart_tests CXX)
+# Both C and CXX needed: Monocypher is a C library (monocypher.c).
+project(jlpicart_tests C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 enable_testing()
@@ -98,7 +99,18 @@ set(SRC_SAVE_STORE    "${FW_SRC}/storage/save_store.cc")
 set(SRC_STORAGE_SVC   "${FW_SRC}/msx/api/services/storage_service.cc")
 set(SRC_STATS_STORE    "${FW_SRC}/stats/stats_store.cc")
 set(SRC_USERSTATS_SVC  "${FW_SRC}/msx/api/services/userstats_service.cc")
-set(SRC_DEVICE_IDENTITY "${FW_SRC}/identity/device_identity.cc")
+# Monocypher: used by device_identity.cc for AEAD wrapping and ed25519.
+set(SRC_MONOCYPHER "${FW_SRC}/crypto/monocypher/monocypher.c")
+
+# device_identity.cc requires smk.cc and monocypher.c; bundle them so every
+# consumer of SRC_DEVICE_IDENTITY automatically gets the full dependency set.
+set(SRC_DEVICE_IDENTITY
+    "${FW_SRC}/identity/device_identity.cc"
+    "${FW_SRC}/crypto/smk.cc"
+    "${FW_SRC}/crypto/monocypher/monocypher.c"
+)
+# SRC_SMK alone (for tests that only need HKDF / SMK, no DeviceIdentity).
+set(SRC_SMK "${FW_SRC}/crypto/smk.cc")
 
 # OpenSSL is used by device_identity.cc in host test mode for ed25519 operations.
 find_package(OpenSSL REQUIRED)
@@ -472,6 +484,19 @@ add_host_test(test_device_identity
     ${SRC_POL_VERIFY}
     ${SRC_POL_STORE}
     ${SRC_POSTURE}
+)
+
+# ---------------------------------------------------------------------------
+# Stage 25 tests
+# ---------------------------------------------------------------------------
+
+add_host_test(test_smk
+    host/test_smk.cc
+    ${SRC_DEVICE_IDENTITY}
+    ${SRC_SHA256}
+    ${SRC_KV_STORE}
+    ${SRC_FLASH_DEVICE}
+    ${SRC_DIAG}
 )
 
 # ---------------------------------------------------------------------------

@@ -41,8 +41,14 @@ class DeviceIdentity {
 public:
     // Attempt to load an existing DIK from kv.  If no key is found, generate
     // a new keypair using TRNG (hardware) or deterministic seed (host tests),
-    // then store it.  Idempotent: calling twice returns the same public key.
-    DiagStatus init_or_load(KvStore& kv);
+    // then store it.  Idempotent: calling twice with the same key returns the
+    // same public key.
+    //
+    // wrap_key_32: 32-byte key that wraps dik.priv in KV storage (Stage 25).
+    //   nullptr → zero-derived key (unprovisioned; effectively unencrypted).
+    //   Derive via smk_derive() + smk_derive_ns_key(smk, "dik.priv", key).
+    //   If decryption fails (wrong key / corruption): regenerates a fresh pair.
+    DiagStatus init_or_load(KvStore& kv, const uint8_t* wrap_key_32 = nullptr);
 
     bool initialized() const { return initialized_; }
 
@@ -65,6 +71,6 @@ private:
     // Fills priv_key_[0..63] and pub_key_[0..31].
     DiagStatus generate_keypair();
 
-    // Persist the current keypair to kv.
-    DiagStatus store(KvStore& kv) const;
+    // Persist the current keypair to kv, encrypting dik.priv with wrap_key_32.
+    DiagStatus store(KvStore& kv, const uint8_t* wrap_key_32) const;
 };

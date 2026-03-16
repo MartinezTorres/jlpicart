@@ -47,8 +47,11 @@ add_executable(jlpicart
     src/security/otp_reader_hw.cc
     src/spine/security_posture.cc
 
-    # Policy
+    # Crypto
     src/crypto/sha256.cc
+    src/crypto/smk.cc
+
+    # Policy
     src/policy/policy_verify.cc
     src/spine/policy_store.cc
 

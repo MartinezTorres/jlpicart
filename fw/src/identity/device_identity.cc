@@ -12,17 +12,20 @@
 
 #include "identity/device_identity.h"
 #include "storage/kv_store.h"
+#include "crypto/smk.h"
 #include <cstring>
 
+// Monocypher is used in both paths for dik.priv AEAD wrapping (Stage 25).
+// It is also used for ed25519 keygen/sign in the hardware (non-host) path.
+#include "crypto/monocypher/monocypher.h"
+
 #ifdef JLPICART_HOST_TEST
-// OpenSSL EVP ed25519 path.
+// OpenSSL EVP ed25519 for keygen/sign in host tests.
 #include <openssl/evp.h>
 #include <openssl/err.h>
-#include <cstdlib>  // rand()
 #else
-// Hardware path: RP2350 hardware TRNG via pico_rand + Monocypher ed25519.
+// pico_rand for hardware TRNG entropy.
 #include "pico/rand.h"
-#include "crypto/monocypher/monocypher.h"
 #endif
 
 // ---------------------------------------------------------------------------
@@ -135,43 +138,7 @@ static bool platform_sign(const uint8_t* msg, size_t msg_len,
 
 #endif // JLPICART_HOST_TEST
 
-// ---------------------------------------------------------------------------
-// HKDF-SHA256 used for scoped device IDs (spec §7.2 GET_DEVICE_ID).
-// Inline implementation using the existing SHA-256 module.
-// Output is truncated to out_len bytes (max 32).
-// ---------------------------------------------------------------------------
-
-#include "crypto/sha256.h"
-
-static void hkdf_sha256_extract_expand(const uint8_t* ikm, size_t ikm_len,
-                                         const uint8_t* info, size_t info_len,
-                                         uint8_t* out, size_t out_len)
-{
-    // Extract: PRK = HMAC-SHA256(salt=zeros, IKM)
-    // We use the keyed-hash as simple H(zeros_32 || ikm) for minimal impl.
-    // Full HKDF per RFC 5869 Step 1 (extract) and Step 2 (expand, T(1) only).
-    static const uint8_t kZeroSalt[32] = {};
-    (void)kZeroSalt;
-
-    // Simple extract: PRK = SHA256(ikm)  [for intra-device derivation only]
-    uint8_t prk[32];
-    Sha256Ctx ctx;
-    sha256_init(&ctx);
-    sha256_update(&ctx, ikm, static_cast<uint32_t>(ikm_len));
-    sha256_final(&ctx, prk);
-
-    // Expand: T(1) = SHA256(PRK || info || 0x01)
-    uint8_t t[32];
-    sha256_init(&ctx);
-    sha256_update(&ctx, prk, 32u);
-    sha256_update(&ctx, info, static_cast<uint32_t>(info_len));
-    static const uint8_t one = 1u;
-    sha256_update(&ctx, &one, 1u);
-    sha256_final(&ctx, t);
-
-    if (out_len > 32u) out_len = 32u;
-    memcpy(out, t, out_len);
-}
+// (Scoped device ID derivation uses hkdf_sha256 from crypto/smk.h.)
 
 // ---------------------------------------------------------------------------
 // DeviceIdentity::generate_keypair
@@ -197,20 +164,54 @@ DiagStatus DeviceIdentity::generate_keypair()
 }
 
 // ---------------------------------------------------------------------------
-// DeviceIdentity::store
+// DeviceIdentity::store — persist keypair; dik.priv encrypted with wrap_key
 // ---------------------------------------------------------------------------
+//
+// Stored format for dik.priv (Stage 25):
+//   nonce[24] || mac[16] || ciphertext[64] = 104 bytes (XChacha20-Poly1305)
+//
+// If wrap_key_32 is null, a zero-derived key is used (unprovisioned units).
 
-DiagStatus DeviceIdentity::store(KvStore& kv) const
+static constexpr uint16_t DIK_PRIV_STORED_LEN =
+    24u + 16u + static_cast<uint16_t>(DIK_PRIV_KEY_LEN); // 104 bytes
+
+DiagStatus DeviceIdentity::store(KvStore& kv, const uint8_t* wrap_key_32) const
 {
     DiagStatus s;
-    s = kv.put(KV_DIK_PUB,
-               pub_key_,
-               static_cast<uint16_t>(DIK_PUB_KEY_LEN));
+
+    // Public key is not secret — store plaintext.
+    s = kv.put(KV_DIK_PUB, pub_key_, static_cast<uint16_t>(DIK_PUB_KEY_LEN));
     if (!s.ok()) return s;
 
-    s = kv.put(KV_DIK_PRIV,
-               priv_key_,
-               static_cast<uint16_t>(DIK_PRIV_KEY_LEN));
+    // Derive effective wrapping key.
+    uint8_t eff_key[32];
+    if (wrap_key_32) {
+        memcpy(eff_key, wrap_key_32, 32u);
+    } else {
+        // Zero-derived key: deterministic, not secret (unprovisioned behaviour).
+        uint8_t smk[32];
+        smk_derive(nullptr, smk);
+        smk_derive_ns_key(smk, "dik.priv", eff_key);
+        crypto_wipe(smk, sizeof(smk));
+    }
+
+    // Generate a fresh nonce for each store.
+    uint8_t nonce[24];
+    platform_random_bytes(nonce, sizeof(nonce));
+
+    // Encrypt: nonce[24] || mac[16] || ct[64]
+    uint8_t stored[DIK_PRIV_STORED_LEN];
+    uint8_t* mac = stored + 24u;
+    uint8_t* ct  = stored + 24u + 16u;
+    memcpy(stored, nonce, 24u);
+    crypto_aead_lock(ct, mac, eff_key, nonce,
+                     nullptr, 0u,
+                     priv_key_, DIK_PRIV_KEY_LEN);
+
+    crypto_wipe(eff_key, sizeof(eff_key));
+    crypto_wipe(nonce,   sizeof(nonce));
+
+    s = kv.put(KV_DIK_PRIV, stored, DIK_PRIV_STORED_LEN);
     if (!s.ok()) return s;
 
     uint8_t flag = provisioned_ ? 1u : 0u;
@@ -221,35 +222,78 @@ DiagStatus DeviceIdentity::store(KvStore& kv) const
 // ---------------------------------------------------------------------------
 // DeviceIdentity::init_or_load
 // ---------------------------------------------------------------------------
+//
+// Load or generate the DIK.  Private key migration:
+//   64-byte value  → Stage 22 plaintext format; load directly, re-encrypt.
+//   104-byte value → Stage 25 encrypted format; decrypt with wrap_key.
+//   Other / error  → regenerate.
+//
+// If decryption fails (wrong key or corruption), regenerates a fresh pair.
 
-DiagStatus DeviceIdentity::init_or_load(KvStore& kv)
+DiagStatus DeviceIdentity::init_or_load(KvStore& kv, const uint8_t* wrap_key_32)
 {
-    // Try loading existing key.
+    // 1 — Try loading the public key.
     uint16_t vlen = 0u;
     DiagStatus s = kv.get(KV_DIK_PUB, pub_key_, &vlen,
                            static_cast<uint16_t>(DIK_PUB_KEY_LEN));
-
     if (s.ok() && vlen == static_cast<uint16_t>(DIK_PUB_KEY_LEN)) {
-        // Public key found; load private key.
-        vlen = 0u;
-        DiagStatus sp = kv.get(KV_DIK_PRIV, priv_key_, &vlen,
-                                static_cast<uint16_t>(DIK_PRIV_KEY_LEN));
-        if (sp.ok() && vlen == static_cast<uint16_t>(DIK_PRIV_KEY_LEN)) {
-            // Load provisioned flag.
-            uint8_t flag = 0u;
-            uint16_t flen = 0u;
+        // 2 — Public key present; try loading private key.
+        uint8_t stored[DIK_PRIV_STORED_LEN];
+        uint16_t plen = 0u;
+        DiagStatus sp = kv.get(KV_DIK_PRIV, stored, &plen, DIK_PRIV_STORED_LEN);
+
+        if (sp.ok() && plen == static_cast<uint16_t>(DIK_PRIV_KEY_LEN)) {
+            // Stage 22 plaintext format: copy directly and re-encrypt.
+            memcpy(priv_key_, stored, DIK_PRIV_KEY_LEN);
+            uint8_t flag = 0u; uint16_t flen = 0u;
             kv.get(KV_DIK_FLAGS, &flag, &flen, 1u);
-            provisioned_  = (flag == 1u);
-            initialized_  = true;
+            provisioned_ = (flag == 1u);
+            initialized_ = true;
+            // Migrate: re-store in encrypted format.
+            (void)store(kv, wrap_key_32);
             return DiagStatus::success();
+        }
+
+        if (sp.ok() && plen == DIK_PRIV_STORED_LEN) {
+            // Stage 25 encrypted format: decrypt.
+            const uint8_t* nonce = stored;
+            const uint8_t* mac   = stored + 24u;
+            const uint8_t* ct    = stored + 24u + 16u;
+
+            // Derive effective wrapping key.
+            uint8_t eff_key[32];
+            if (wrap_key_32) {
+                memcpy(eff_key, wrap_key_32, 32u);
+            } else {
+                uint8_t smk[32];
+                smk_derive(nullptr, smk);
+                smk_derive_ns_key(smk, "dik.priv", eff_key);
+                crypto_wipe(smk, sizeof(smk));
+            }
+
+            int ok = crypto_aead_unlock(priv_key_, mac, eff_key, nonce,
+                                         nullptr, 0u,
+                                         ct, DIK_PRIV_KEY_LEN);
+            crypto_wipe(eff_key, sizeof(eff_key));
+
+            if (ok == 0) {
+                // Decryption succeeded.
+                uint8_t flag = 0u; uint16_t flen = 0u;
+                kv.get(KV_DIK_FLAGS, &flag, &flen, 1u);
+                provisioned_ = (flag == 1u);
+                initialized_ = true;
+                return DiagStatus::success();
+            }
+            // Decryption failed (wrong key or corruption): fall through to regenerate.
+            crypto_wipe(priv_key_, sizeof(priv_key_));
         }
     }
 
-    // Key absent or incomplete: generate and persist.
+    // 3 — Key absent, incomplete, or decryption failed: generate a fresh pair.
     DiagStatus gen = generate_keypair();
     if (!gen.ok()) return gen;
 
-    DiagStatus stored = store(kv);
+    DiagStatus stored = store(kv, wrap_key_32);
     if (!stored.ok()) return stored;
 
     initialized_ = true;
@@ -294,8 +338,12 @@ void device_identity_scoped_id(const uint8_t* pub_key_32, uint8_t scope,
 {
     static const char* kLabels[3] = { "dev", "col", "pub" };
     const char* label = (scope < 3u) ? kLabels[scope] : "unk";
-    hkdf_sha256_extract_expand(pub_key_32, DIK_PUB_KEY_LEN,
-                                reinterpret_cast<const uint8_t*>(label),
-                                strlen(label),
-                                out_16, 16u);
+
+    uint8_t tmp[32];
+    hkdf_sha256(pub_key_32, DIK_PUB_KEY_LEN,
+                nullptr, 0u,
+                reinterpret_cast<const uint8_t*>(label), strlen(label),
+                tmp);
+    memcpy(out_16, tmp, 16u);
+    crypto_wipe(tmp, sizeof(tmp));
 }

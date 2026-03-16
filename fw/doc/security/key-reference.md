@@ -148,7 +148,12 @@ Derived fresh from OTP at every boot.
 **What it protects:** Ensures that per-namespace keys cannot be recovered without
 the OTP device secret, even if flash memory is extracted.
 
-**Implementation status:** SMK derivation implemented in Stage 25.
+**Implementation status:** SMK derivation (HKDF-SHA256 via `src/crypto/smk.cc`) and
+per-namespace key derivation implemented in Stage 25. DIK private key is wrapped
+with XChacha20-Poly1305 (Monocypher) using the dik.priv namespace key before KV
+storage. Unprovisioned units use a zero-IKM-derived key (effectively unencrypted,
+as documented above). Wiring to actual OTP device secret bytes is deferred to the
+`jlpicart-provision` tooling (Stage 26).
 
 ---
 
