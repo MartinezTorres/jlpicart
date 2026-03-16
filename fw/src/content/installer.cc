@@ -130,8 +130,10 @@ DiagStatus Installer::run(InstallReader& reader,
     // ------------------------------------------------------------------
     // 2. Parse and verify bundle.sig (if present).
     // ------------------------------------------------------------------
-    const bool requires_sig =
+    const bool requires_sig    =
         (policy.info().flags & POLICY_REQUIRE_PUBLISHER_SIGNATURE) != 0u;
+    const bool allows_unsigned =
+        (policy.info().flags & POLICY_ALLOW_UNSIGNED_COLLECTIONS)  != 0u;
 
     if (reader.file_exists(BUNDLE_SIG_FILE)) {
         uint8_t sig_buf[SIG_ENV_BYTES_MAX];
@@ -188,8 +190,10 @@ DiagStatus Installer::run(InstallReader& reader,
             return DiagStatus::error(reason);
         }
 
-    } else if (requires_sig) {
-        // No bundle.sig but policy requires signatures → reject.
+    } else if (requires_sig || !allows_unsigned) {
+        // No bundle.sig, but either:
+        //   - policy requires a publisher signature (POLICY_REQUIRE_PUBLISHER_SIGNATURE), or
+        //   - unsigned collections are not explicitly allowed (POLICY_ALLOW_UNSIGNED_COLLECTIONS).
         const DiagCode reason = DiagCode::COLLECTION_UNSATISFIED_REQ;
         result_out.reason = reason;
         write_failure_receipt(event_log,

@@ -500,6 +500,40 @@ add_host_test(test_smk
 )
 
 # ---------------------------------------------------------------------------
+# Stage 26 tests
+# ---------------------------------------------------------------------------
+
+add_host_test(test_policy_enforcement
+    host/test_policy_enforcement.cc
+    ${SRC_API_WINDOW}
+    ${SRC_CORE_SERVICE}
+    ${SRC_IDENTITY_SVC}
+    ${SRC_STORAGE_SVC}
+    ${SRC_SAVE_STORE}
+    ${SRC_USERSTATS_SVC}
+    ${SRC_STATS_STORE}
+    ${SRC_DEVICE_IDENTITY}
+    ${SRC_USB_HOST}
+    ${SRC_USB_SCANNER}
+    ${SRC_MANIFEST_PARSER}
+    ${SRC_INSTALLER}
+    ${SRC_RECEIPTS}
+    ${SRC_CAP_REG}
+    ${SRC_BOARD_DESC}
+    ${SRC_DRV_TABLE}
+    ${SRC_DIAG}
+    ${SRC_SHA256}
+    ${SRC_POL_VERIFY}
+    ${SRC_POL_STORE}
+    ${SRC_POSTURE}
+    ${SRC_FLASH_DEVICE}
+    ${SRC_KV_STORE}
+    ${SRC_APPEND_LOG}
+    ${SRC_PROFILE_STORE}
+    ${SRC_LOG}
+)
+
+# ---------------------------------------------------------------------------
 # Stage 10 tests
 # ---------------------------------------------------------------------------
 

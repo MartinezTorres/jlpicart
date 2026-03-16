@@ -53,12 +53,22 @@ DiagStatus PolicyStore::load_from_buffer(const uint8_t* buf, size_t len,
     return st;
 }
 
-DiagStatus PolicyStore::load(const SecurityPosture& /*posture*/) {
-    // Host build: no flash available.  Callers that want to test policy
-    // verification should use load_from_buffer().  Callers that deliberately
-    // call load() (e.g. test_collections) get safe defaults, which is correct.
+DiagStatus PolicyStore::load(const SecurityPosture& posture) {
+    // Host build: no flash available.  Callers that want to test specific policy
+    // flag combinations should use load_from_buffer().
+    //
+    // Mirrors firmware behaviour: DEV mode (secure_boot not enabled) gets
+    // POLICY_DEV_DEFAULTS so that host tests which exercise install / scan /
+    // GET_DEVICE_ID paths are not silently blocked by POLICY_SAFE_DEFAULTS.
     initialized_ = true;
-    apply_safe_defaults();
+    if (!posture.secure_boot_enabled) {
+        info_.flags   = POLICY_DEV_DEFAULTS;
+        info_.version = POLICY_VERSION_V1;
+        memset(info_.digest16, 0xDE, sizeof(info_.digest16));
+        loaded_ok_    = false;  // no stored document — still an error
+    } else {
+        apply_safe_defaults();
+    }
     return DiagStatus::error(DiagCode::POLICY_FLASH_READ_ERROR);
 }
 

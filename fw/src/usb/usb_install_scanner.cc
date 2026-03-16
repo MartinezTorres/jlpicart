@@ -105,6 +105,12 @@ bool UsbInstallScanner::already_installed(KvStore& kv,
 void UsbInstallScanner::run_scan(InstallDirSource& dirs,
                                   KvStore& kv, AppendLog& event_log,
                                   const PolicyStore& policy) {
+    // Policy gate: USB collection install must be explicitly permitted.
+    if (!(policy.info().flags & POLICY_ALLOW_USB_COLLECTION_INSTALL)) {
+        log_info("USB install: denied by policy (POLICY_ALLOW_USB_COLLECTION_INSTALL not set)");
+        return;
+    }
+
     size_t n = dirs.count();
     if (n > INSTALL_SCAN_MAX_DIRS) n = INSTALL_SCAN_MAX_DIRS;
 

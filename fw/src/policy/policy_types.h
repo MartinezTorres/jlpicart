@@ -27,12 +27,14 @@ static constexpr PolicyFlags POLICY_EXPOSE_STABLE_DEVICE_ID          = (1ULL << 
 static constexpr PolicyFlags POLICY_SAFE_DEFAULTS = 0ULL;
 
 // Permissive defaults for DEV mode (secure_boot not enforced).
-// Allows USB install and unsigned collections so development is frictionless.
+// Allows USB install, unsigned collections, and stable device ID exposure so
+// development and debugging are frictionless.
 static constexpr PolicyFlags POLICY_DEV_DEFAULTS =
     POLICY_ALLOW_USB_COLLECTION_INSTALL     |
     POLICY_ALLOW_UNSIGNED_COLLECTIONS       |
     POLICY_ALLOW_USER_REPLACE_COLLECTIONS   |
-    POLICY_ALLOW_BOOT_KEY_ENROLLMENT;
+    POLICY_ALLOW_BOOT_KEY_ENROLLMENT        |
+    POLICY_EXPOSE_STABLE_DEVICE_ID;
 
 static constexpr uint32_t POLICY_VERSION_V1 = 1u;
 

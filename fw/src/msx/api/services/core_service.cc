@@ -270,8 +270,14 @@ void core_service_handle(const MsgHeader&          req,
             uint8_t scope = 0u;
             if (payload_len >= 1u) scope = payload[0];
 
-            // scope=0 (stable device ID): check policy.
-            // For now, always allow (policy enforcement is a Stage 22+ hardening).
+            // scope=0 (stable device ID): requires explicit policy permission.
+            // Without the flag the global device ID is not exposed, preventing
+            // game titles from correlating the same device across collections.
+            if (scope == 0u &&
+                !(policy_store.info().flags & POLICY_EXPOSE_STABLE_DEVICE_ID)) {
+                send_error(win, req, API_E_POLICY);
+                break;
+            }
 
             uint8_t pub[DIK_PUB_KEY_LEN];
             device_identity->public_key(pub);
