@@ -205,8 +205,11 @@ policy flag is not set, GET_DEVICE_ID(scope=0) returns `API_E_POLICY`.
 online service interactions to a specific device. Prevents identity spoofing.
 
 **Implementation status:** Key generation (host OpenSSL path) implemented in Stage 22.
-Hardware ed25519 via mbedTLS PSA implemented in Stage 24. Private key wrapping under
-SMK implemented in Stage 25. Policy enforcement for scope=0 implemented in Stage 26.
+Hardware ed25519 via Monocypher (vendored at `src/crypto/monocypher/`) implemented in
+Stage 24; entropy from RP2350 hardware TRNG via `pico_rand`. Note: the Pico SDK ships
+mbedTLS 3.6.2 which does not implement ed25519 PSA keygen; Monocypher is used instead.
+Private key wrapping under SMK implemented in Stage 25.
+Policy enforcement for scope=0 implemented in Stage 26.
 
 ---
 

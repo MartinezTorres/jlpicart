@@ -1,11 +1,14 @@
-// device_identity.cc — DeviceIdentity implementation (Stage 22).
+// device_identity.cc — DeviceIdentity implementation (Stage 22/24).
 //
 // Host test path: uses OpenSSL's EVP ed25519 for correct keygen/sign/verify.
-// Hardware path:  TRNG for seed generation, mbedtls/openssl for ed25519 ops
-//                 (wired in main.cc via separate compilation unit; stubbed here).
+//   platform_sign() receives priv_key_[64] = seed[32] || pub[32]; uses seed only.
 //
-// Encryption of the private key: deferred (stored plaintext in both paths for
-// now; Stage 22+ adds AES-256-GCM wrapping under SMK-derived key).
+// Hardware path (Stage 24): uses pico_rand (RP2350 hardware TRNG) for entropy
+//   and Monocypher ed25519 for keygen/sign.  Monocypher secret_key[64] is an
+//   expanded/clamped form of the seed — NOT seed||pub.  priv_key_[64] stores
+//   Monocypher secret_key directly.
+//
+// Encryption of the private key: deferred to Stage 25 (AES-256-GCM under SMK).
 
 #include "identity/device_identity.h"
 #include "storage/kv_store.h"
@@ -17,8 +20,9 @@
 #include <openssl/err.h>
 #include <cstdlib>  // rand()
 #else
-// Hardware path: RP2350 ROSC + deferred mbedtls wiring.
-#include "hardware/structs/rosc.h"
+// Hardware path: RP2350 hardware TRNG via pico_rand + Monocypher ed25519.
+#include "pico/rand.h"
+#include "crypto/monocypher/monocypher.h"
 #endif
 
 // ---------------------------------------------------------------------------
@@ -64,11 +68,12 @@ static bool platform_keygen_from_seed(const uint8_t* seed_32,
     return true;
 }
 
+// priv_key points to priv_key_[64] = seed[32] || pub[32]; OpenSSL needs seed only.
 static bool platform_sign(const uint8_t* msg, size_t msg_len,
-                           const uint8_t* priv_seed_32, uint8_t* sig_out_64)
+                           const uint8_t* priv_key, uint8_t* sig_out_64)
 {
     EVP_PKEY* key = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, nullptr,
-                                                   priv_seed_32, 32u);
+                                                   priv_key, 32u);
     if (!key) return false;
 
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
@@ -90,32 +95,42 @@ static bool platform_sign(const uint8_t* msg, size_t msg_len,
 
 #else // !JLPICART_HOST_TEST
 
+// Fill out[0..len-1] with cryptographically random bytes from the RP2350 TRNG.
 static void platform_random_bytes(uint8_t* out, size_t len)
 {
-    for (size_t i = 0; i < len; ++i) {
-        uint8_t byte = 0u;
-        for (int b = 0; b < 8; ++b) {
-            byte = static_cast<uint8_t>((byte << 1u) | (rosc_hw->randombit & 1u));
-        }
-        out[i] = byte;
+    size_t i = 0u;
+    while (i + 8u <= len) {
+        const uint64_t r = get_rand_64();
+        memcpy(out + i, &r, 8u);
+        i += 8u;
+    }
+    if (i < len) {
+        const uint64_t r = get_rand_64();
+        memcpy(out + i, &r, len - i);
     }
 }
 
-// Hardware ed25519: stubbed until firmware crypto library is wired in.
-// Replaced in a future stage when pico_mbedtls / hardware acceleration is ready.
-static bool platform_keygen_from_seed(const uint8_t* /* seed */,
-                                       uint8_t* pub_out_32, uint8_t* /* priv_out_64 */)
+// Generate an ed25519 keypair from a 32-byte seed using Monocypher.
+// priv_out_64 receives Monocypher's 64-byte secret_key (expanded form of seed).
+// pub_out_32 receives the 32-byte public key.
+static bool platform_keygen_from_seed(const uint8_t* seed_32,
+                                       uint8_t* pub_out_32, uint8_t* priv_out_64)
 {
-    // Placeholder: zero public key signals "not provisioned".
-    memset(pub_out_32, 0, 32u);
-    return false; // TODO: wire mbedtls or hardware ed25519
+    // Monocypher takes a non-const seed (it wipes it after use); copy first.
+    uint8_t seed_copy[32u];
+    memcpy(seed_copy, seed_32, 32u);
+    crypto_eddsa_key_pair(priv_out_64, pub_out_32, seed_copy);
+    crypto_wipe(seed_copy, sizeof(seed_copy));
+    return true;
 }
 
-static bool platform_sign(const uint8_t* /* msg */, size_t /* len */,
-                           const uint8_t* /* priv */, uint8_t* sig_out_64)
+// Sign msg using Monocypher ed25519.
+// priv_key points to priv_key_[64] — Monocypher's 64-byte secret_key.
+static bool platform_sign(const uint8_t* msg, size_t msg_len,
+                           const uint8_t* priv_key, uint8_t* sig_out_64)
 {
-    memset(sig_out_64, 0, DIK_SIG_LEN);
-    return false; // TODO: wire mbedtls or hardware ed25519
+    crypto_eddsa_sign(sig_out_64, priv_key, msg, msg_len);
+    return true;
 }
 
 #endif // JLPICART_HOST_TEST

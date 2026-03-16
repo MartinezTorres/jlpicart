@@ -1,0 +1,16 @@
+Monocypher — vendored from https://github.com/LoupVaillant/Monocypher
+
+Dual-licensed: BSD-2-Clause OR CC0-1.0 (see monocypher.h for full license text).
+Copyright (c) 2017-2019, Loup Vaillant.
+
+Files included:
+  monocypher.h
+  monocypher.c
+
+Why vendored: The RP2350 Pico SDK ships mbedTLS 3.6.2, which does not implement
+ed25519 PSA keygen (PSA_WANT_ECC_TWISTED_EDWARDS_255 is DEPENDENCY_NOT_IMPLEMENTED_YET).
+Monocypher provides a formally verified, ISC/BSD-2-Clause-licensed, self-contained
+implementation suitable for Cortex-M embedded targets.
+
+Version: master branch as of 2026-03-16.
+Used for: DeviceIdentity Key (DIK) ed25519 keygen and signing (Stage 24).

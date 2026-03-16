@@ -79,8 +79,11 @@ add_executable(jlpicart
     src/stats/stats_store.cc
     src/msx/api/services/userstats_service.cc
 
-    # Device Identity Key and GET_DEVICE_ID (Stage 22)
+    # Device Identity Key and GET_DEVICE_ID (Stage 22/24)
     src/identity/device_identity.cc
+
+    # Monocypher — vendored ed25519 / Argon2 (Stage 24)
+    src/crypto/monocypher/monocypher.c
 
     # Storage substrate (Stage 6)
     src/storage/flash_device.cc
@@ -167,6 +170,7 @@ target_link_libraries(jlpicart
     pico_stdlib
     hardware_flash
     pico_unique_id
+    pico_rand
 )
 
 set_target_properties(jlpicart PROPERTIES
