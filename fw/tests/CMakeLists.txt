@@ -176,10 +176,11 @@ add_host_test(test_storage
 # Stage 7 tests
 # ---------------------------------------------------------------------------
 
-set(SRC_MANIFEST_PARSER "${FW_SRC}/content/manifest_parser.cc")
-set(SRC_INSTALLER       "${FW_SRC}/content/installer.cc")
-set(SRC_RECEIPTS        "${FW_SRC}/content/receipts.cc")
-set(SRC_CONTENT_STORE   "${FW_SRC}/content/content_store.cc")
+set(SRC_MANIFEST_PARSER    "${FW_SRC}/content/manifest_parser.cc")
+set(SRC_INSTALLER          "${FW_SRC}/content/installer.cc")
+set(SRC_RECEIPTS           "${FW_SRC}/content/receipts.cc")
+set(SRC_CONTENT_STORE      "${FW_SRC}/content/content_store.cc")
+set(SRC_BUNDLE_SIG_VERIFY  "${FW_SRC}/content/bundle_sig_verify.cc")
 set(SRC_RESOURCE_MODEL  "${FW_SRC}/allocator/resource_model.cc")
 set(SRC_ALLOCATOR       "${FW_SRC}/allocator/allocator.cc")
 set(SRC_ACTIVATION      "${FW_SRC}/spine/activation.cc")
@@ -235,6 +236,8 @@ add_host_test(test_collections
     ${SRC_MANIFEST_PARSER}
     ${SRC_INSTALLER}
     ${SRC_RECEIPTS}
+    ${SRC_BUNDLE_SIG_VERIFY}
+    ${SRC_MONOCYPHER}
     ${SRC_KV_STORE}
     ${SRC_APPEND_LOG}
     ${SRC_FLASH_DEVICE}
@@ -287,6 +290,8 @@ add_host_test(test_usb_scanner
     ${SRC_MANIFEST_PARSER}
     ${SRC_INSTALLER}
     ${SRC_RECEIPTS}
+    ${SRC_BUNDLE_SIG_VERIFY}
+    ${SRC_MONOCYPHER}
     ${SRC_KV_STORE}
     ${SRC_APPEND_LOG}
     ${SRC_FLASH_DEVICE}
@@ -526,6 +531,8 @@ add_host_test(test_policy_enforcement
     ${SRC_MANIFEST_PARSER}
     ${SRC_INSTALLER}
     ${SRC_RECEIPTS}
+    ${SRC_BUNDLE_SIG_VERIFY}
+    # Monocypher already pulled in by SRC_DEVICE_IDENTITY above.
     ${SRC_CAP_REG}
     ${SRC_BOARD_DESC}
     ${SRC_DRV_TABLE}
@@ -577,6 +584,8 @@ add_host_test(test_rom_loading
     host/test_rom_loading.cc
     ${SRC_INSTALLER}
     ${SRC_RECEIPTS}
+    ${SRC_BUNDLE_SIG_VERIFY}
+    ${SRC_MONOCYPHER}
     ${SRC_CONTENT_STORE}
     ${SRC_MAPPING_PLAN}
     ${SRC_SCC}
@@ -606,6 +615,8 @@ add_host_test(test_content_store
     ${SRC_MANIFEST_PARSER}
     ${SRC_INSTALLER}
     ${SRC_RECEIPTS}
+    ${SRC_BUNDLE_SIG_VERIFY}
+    ${SRC_MONOCYPHER}
     ${SRC_KV_STORE}
     ${SRC_APPEND_LOG}
     ${SRC_FLASH_DEVICE}
@@ -615,4 +626,17 @@ add_host_test(test_content_store
     ${SRC_POL_STORE}
     ${SRC_POSTURE}
     ${SRC_LOG}
+)
+
+# ---------------------------------------------------------------------------
+# Stage 31 tests — bundle signature verification
+# ---------------------------------------------------------------------------
+
+add_host_test(test_bundle_sig
+    host/test_bundle_sig.cc
+    ${SRC_BUNDLE_SIG_VERIFY}
+    ${SRC_MONOCYPHER}
+    ${SRC_KV_STORE}
+    ${SRC_FLASH_DEVICE}
+    ${SRC_DIAG}
 )

@@ -167,7 +167,7 @@ int main() {
     // 7. MappingPlan: look up the default payload from ContentStore.
     //    If there is no active collection or data_size == 0, fall back to
     //    an empty plan (standby/menu mode).  apply_mapping() logs the result.
-    PeripheralManager map_mgr;
+    static PeripheralManager map_mgr;
     {
         ContentStore content_store(kv_store);
         MappingPlan mapping_plan = {};
@@ -290,12 +290,29 @@ int main() {
     }
 
     // 10b. OPL4 (YMF278B) — wire IO callbacks if sw.opl4 is activated (Stage 30).
-    // Wave ROM lives in XIP flash at a fixed content-data offset; for now no ROM
-    // is pre-loaded so wave_rom=nullptr (silence on all 24 channels until a
-    // Collection with an OPL4 wave ROM is installed and loaded).
+    // Try to locate a wave ROM payload ("opl4_wave") in the active collection.
+    // If found, map its XIP address directly (zero-copy from flash cache).
+    // Falls back to nullptr (silence on all 24 channels) if no ROM is installed.
     if (registry.is_activated("sw.opl4")) {
         opl4_reset(opl4_state);
-        map_mgr.map_opl4(opl4_state, nullptr, 0u);
+        const uint8_t* wave_rom  = nullptr;
+        uint32_t       wave_size = 0u;
+#ifndef JLPICART_HOST_TEST
+        {
+            ContentStore cs(kv_store);
+            if (cs.has_active_collection()) {
+                PayloadRecord wave_pr = {};
+                if (cs.load_payload("opl4_wave", wave_pr).ok() &&
+                    wave_pr.data_size > 0u) {
+                    wave_rom  = reinterpret_cast<const uint8_t*>(
+                        XIP_BASE + wave_pr.data_flash_offset);
+                    wave_size = wave_pr.data_size;
+                    log_info("OPL4: wave ROM mapped from XIP flash");
+                }
+            }
+        }
+#endif
+        map_mgr.map_opl4(opl4_state, wave_rom, wave_size);
     }
 
     // 11. Append BOOT record to EVENT_LOG (spec §6.5 boot integration).
@@ -344,11 +361,14 @@ int main() {
     // Core 1 service loop — handles API window, menu mailbox, and USB poll.
     // All three are static (file-visible from any point in this function)
     // so the function pointer can reach them without capturing.
-    static ApiWindow*   g_api_win   = &api_win;
-    static MenuApp*     g_menu_app  = &menu_app;
-    static UsbHost*     g_usb_host  = &usb_host;
+    static ApiWindow*   g_api_win    = &api_win;
+    static MenuApp*     g_menu_app   = &menu_app;
+    static UsbHost*     g_usb_host   = &usb_host;
     static PsgState*    g_psg_state  = &psg_state;
-    static SccState*    g_scc_state  = &scc_state;
+    // Use the SCC state wired by apply_mapping() (KONAMI_SCC slot) when
+    // available; fall back to the standalone scc_state otherwise.
+    static SccState*    g_scc_state  = map_mgr.active_scc()
+                                           ? map_mgr.active_scc() : &scc_state;
     static Opl4State*   g_opl4_state = &opl4_state;
     multicore_launch_core1([]() {
         while (true) {
@@ -364,8 +384,19 @@ int main() {
         }
     });
 
-    // BUS::reset_callback: stub — no cartridge re-init needed in standby mode.
-    BUS::reset_callback = nullptr;
+    // BUS::reset_callback: re-initialise all mapper bank registers and audio
+    // chips on MSX warm reset.  Called while WAIT is asserted (Core 0 safe).
+    BUS::reset_callback = []() {
+        for (size_t i = 0; i < BUS::CARTRIDGE_COUNT; ++i) {
+            if (BUS::cartridges[i].reset_fn)
+                BUS::cartridges[i].reset_fn(BUS::cartridges[i]);
+        }
+        // OPL4 and PSG are IO-only; reset their state so boot-time silence
+        // is restored.  SCC reset is handled inside konami_scc_reset_fn via
+        // the per-slot Cartridge callback.
+        opl4_reset(*g_opl4_state);
+        psg_reset(*g_psg_state);
+    };
 
     // Core 0 enters the MSX bus loop.  [[noreturn]]
     log_info("entering bus loop on Core 0");

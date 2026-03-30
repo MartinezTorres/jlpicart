@@ -35,6 +35,7 @@ enum class DiagCode : uint16_t {
     COLLECTION_HASH_MISMATCH    = 0x0400,
     COLLECTION_BAD_MANIFEST     = 0x0401,
     COLLECTION_UNSATISFIED_REQ  = 0x0402,
+    COLLECTION_SIG_INVALID      = 0x0403,  // signature present but verification failed
 };
 
 struct DiagStatus {

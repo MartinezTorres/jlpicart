@@ -67,7 +67,18 @@ public:
     bool   launch_ok()       const { return launch_ok_; }
     size_t activated_count() const { return activated_count_; }
 
+    // Returns the SCC state that was wired by apply_mapping() for the
+    // KONAMI_SCC slot, or nullptr if no KONAMI_SCC mapping has been applied.
+    // Core 1 must use this to service the correct SccState instance.
+    SccState* active_scc() { return active_scc_; }
+
 private:
-    bool   launch_ok_       = false;
-    size_t activated_count_ = 0;
+    bool      launch_ok_       = false;
+    size_t    activated_count_ = 0;
+
+    // SCC states for each subslot (0–MAPPING_MAX_ENTRIES-1).
+    // apply_mapping() uses these instead of static locals so the instances
+    // persist after apply_mapping() returns and Core 1 can service them.
+    SccState  scc_states_[MAPPING_MAX_ENTRIES] = {};
+    SccState* active_scc_ = nullptr;
 };

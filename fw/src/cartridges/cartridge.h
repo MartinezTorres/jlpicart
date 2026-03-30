@@ -53,6 +53,14 @@ struct Cartridge {
     BusCallback    io_read_callbacks[256]    = {};
     BusCallback    io_write_callbacks[256]   = {};
 
+    // Optional reset callback — called by BUS::reset_callback when the MSX
+    // /RESET line is asserted.  Restores mapper bank registers to their
+    // power-on defaults so the Z80 BIOS sees a clean ROM layout after a
+    // warm reset.  Set by mapper_setup_XXX(); null for ROM/RAM mappers that
+    // carry no per-session state.
+    using ResetFn = void(*)(Cartridge&);
+    ResetFn reset_fn = nullptr;
+
     // Reset all fields to their zero/null defaults.
     void clear() { *this = Cartridge{}; }
 };

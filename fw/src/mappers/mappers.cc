@@ -6,6 +6,37 @@
 #include <cstring>
 
 // ---------------------------------------------------------------------------
+// Reset callbacks — restore per-mapper bank state to power-on defaults.
+// Called by BUS::reset_callback when the MSX /RESET line is asserted.
+// Each function mirrors the initial memory_read_addresses[] setup performed
+// by the corresponding mapper_setup_XXX() call.
+// ---------------------------------------------------------------------------
+
+static void konami_reset_fn(Cartridge& c) {
+    for (int i = 0; i < 4; ++i)
+        c.memory_read_addresses[2 + i] = &c.rom_base[i * 8192u];
+}
+
+static void ascii8_reset_fn(Cartridge& c) {
+    for (int i = 0; i < 8; ++i)
+        c.memory_read_addresses[i] = &c.rom_base[0];
+}
+
+static void ascii16_reset_fn(Cartridge& c) {
+    for (int i = 0; i < 8; ++i)
+        c.memory_read_addresses[i] = &c.rom_base[(i % 2u) * 8192u];
+}
+
+static void konami_scc_reset_fn(Cartridge& c) {
+    konami_reset_fn(c);
+    // SccState* is stashed in c.ram_base by scc_setup().
+    if (c.ram_base) {
+        SccState* ss = reinterpret_cast<SccState*>(c.ram_base);
+        scc_reset(*ss);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Banking callbacks — run from SRAM (RAMFUNC) to avoid XIP cache stalls.
 // Each callback decodes the address and data from the raw GPIO bus word and
 // updates the affected memory_read_addresses[] entry in the cartridge.
@@ -84,6 +115,7 @@ void mapper_setup_konami(Cartridge& c, const uint8_t* rom_base) {
         c.memory_read_addresses[2 + i]  = &rom_base[i * 8192u];
         c.memory_write_callbacks[2 + i] = konami_write_cb;
     }
+    c.reset_fn = konami_reset_fn;
 }
 
 // ---------------------------------------------------------------------------
@@ -101,6 +133,7 @@ void mapper_setup_konami_z(Cartridge& c, const uint8_t* rom_base) {
     // Only pages 4–5 (0x8000–0xBFFF) are switchable (no 0x6000 register).
     c.memory_write_callbacks[4] = konami_write_cb;
     c.memory_write_callbacks[5] = konami_write_cb;
+    c.reset_fn = konami_reset_fn;
 }
 
 // ---------------------------------------------------------------------------
@@ -117,6 +150,7 @@ void mapper_setup_ascii8(Cartridge& c, const uint8_t* rom_base) {
     }
     // Writes to segment 3 (0x6000–0x7FFF) switch the four 8 KB windows.
     c.memory_write_callbacks[3] = ascii8_write_cb;
+    c.reset_fn = ascii8_reset_fn;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,6 +167,7 @@ void mapper_setup_ascii16(Cartridge& c, const uint8_t* rom_base) {
     }
     // Writes to segment 3 (0x6000–0x7FFF) switch the two 16 KB windows.
     c.memory_write_callbacks[3] = ascii16_write_cb;
+    c.reset_fn = ascii16_reset_fn;
 }
 
 // ---------------------------------------------------------------------------
@@ -159,6 +194,7 @@ void mapper_setup_konami_scc(Cartridge& c, const uint8_t* rom_base,
     // Segment 4 callbacks are overridden by scc_setup() to handle both
     // bank switching (0x8000–0x97FF) and SCC registers (0x9800–0x9FFF).
     scc_setup(c, state);
+    c.reset_fn = konami_scc_reset_fn;
 }
 
 // ---------------------------------------------------------------------------

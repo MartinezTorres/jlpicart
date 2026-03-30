@@ -68,13 +68,11 @@ bool PeripheralManager::apply_mapping(const MappingPlan& plan) {
             case MapperType::KONAMI:
                 mapper_setup_konami(slot, e.rom_data);                 break;
             case MapperType::KONAMI_SCC: {
-                // SccState must outlive the Cartridge.  One static instance
-                // per bus slot (slots 0–3); MAPPING_MAX_ENTRIES = 4.
-                static SccState scc_states[MAPPING_MAX_ENTRIES];
-                SccState& ss = scc_states[e.subslot < MAPPING_MAX_ENTRIES
-                                           ? e.subslot : 0];
+                uint8_t si = e.subslot < MAPPING_MAX_ENTRIES ? e.subslot : 0;
+                SccState& ss = scc_states_[si];
                 scc_reset(ss);
                 mapper_setup_konami_scc(slot, e.rom_data, ss);
+                active_scc_ = &ss;  // expose to Core 1 service loop
                 break;
             }
             case MapperType::KONAMI_Z:

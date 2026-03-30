@@ -21,6 +21,7 @@
 #include "content/installer.h"
 #include "content/manifest_parser.h"
 #include "content/receipts.h"
+#include "content/bundle_sig_verify.h"
 #include "crypto/sha256.h"
 #include "spine/policy_store.h"
 #include "storage/flash_device.h"
@@ -178,13 +179,35 @@ DiagStatus Installer::run(InstallReader& reader,
             }
         }
 
-        // ECDSA signature verification.
-        // TODO(crypto): implement ECDSA secp256k1 verification using sig_env.signature.
-        // For now, if policy requires signatures we reject (safe default).
-        // When the verifier is added, call:
-        //   policy_verify_bundle_sig(sig_env, publisher_cert_chain, policy)
-        if (requires_sig) {
-            // Stub: reject all signature-required installs until ECDSA is implemented.
+        // ed25519 signature verification.
+        // Supported algorithm: "ed25519" (Monocypher crypto_eddsa_check).
+        // The signed message is the SHA-256 of manifest.json bytes.
+        // The publisher's public key is stored under "pub.anchor" in SYSTEM_KV.
+        if (strncmp(sig_env.alg, "ed25519", sizeof(sig_env.alg)) == 0) {
+            uint8_t anchor[32] = {};
+            if (!policy_get_publisher_anchor(kv, anchor)) {
+                // No anchor key enrolled — cannot verify.  Reject if required.
+                if (requires_sig) {
+                    const DiagCode reason = DiagCode::COLLECTION_UNSATISFIED_REQ;
+                    result_out.reason = reason;
+                    write_failure_receipt(event_log,
+                        manifest.collection_id, manifest.version, manifest.publisher_id,
+                        result_out.manifest_sha256, reason);
+                    return DiagStatus::error(reason);
+                }
+                // Not required — treat missing anchor as unverified but acceptable.
+            } else {
+                if (!bundle_sig_verify(sig_env, anchor, result_out.manifest_sha256)) {
+                    const DiagCode reason = DiagCode::COLLECTION_SIG_INVALID;
+                    result_out.reason = reason;
+                    write_failure_receipt(event_log,
+                        manifest.collection_id, manifest.version, manifest.publisher_id,
+                        result_out.manifest_sha256, reason);
+                    return DiagStatus::error(reason);
+                }
+            }
+        } else if (requires_sig) {
+            // Unknown or unsupported signature algorithm — reject if required.
             const DiagCode reason = DiagCode::COLLECTION_UNSATISFIED_REQ;
             result_out.reason = reason;
             write_failure_receipt(event_log,

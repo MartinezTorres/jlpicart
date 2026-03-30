@@ -108,11 +108,12 @@ add_executable(jlpicart
     src/bus/bus.cc
     src/bus/mapping_plan.cc
 
-    # Collections (Stage 7)
+    # Collections (Stage 7 + Stage 31 signature verification)
     src/content/manifest_parser.cc
     src/content/installer.cc
     src/content/receipts.cc
     src/content/content_store.cc
+    src/content/bundle_sig_verify.cc
 
     # Bus mapping (Stage 13)
     src/bus/bus_map.cc

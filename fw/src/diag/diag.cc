@@ -17,6 +17,7 @@ const char* diag_code_to_string(DiagCode code) {
         case DiagCode::COLLECTION_HASH_MISMATCH:    return "COLLECTION_HASH_MISMATCH";
         case DiagCode::COLLECTION_BAD_MANIFEST:     return "COLLECTION_BAD_MANIFEST";
         case DiagCode::COLLECTION_UNSATISFIED_REQ:  return "COLLECTION_UNSATISFIED_REQ";
+        case DiagCode::COLLECTION_SIG_INVALID:      return "COLLECTION_SIG_INVALID";
     }
     return "UNKNOWN";
 }
