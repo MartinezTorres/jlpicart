@@ -187,6 +187,7 @@ set(SRC_BUS_MAP         "${FW_SRC}/bus/bus_map.cc")
 set(SRC_PERIPH_MGR      "${FW_SRC}/peripherals/peripheral_manager.cc")
 set(SRC_PSG             "${FW_SRC}/peripherals/psg.cc")
 set(SRC_SCC             "${FW_SRC}/peripherals/scc.cc")
+set(SRC_OPL4            "${FW_SRC}/peripherals/opl4.cc")
 set(SRC_MAPPERS         "${FW_SRC}/mappers/mappers.cc")
 set(SRC_MAPPING_PLAN    "${FW_SRC}/bus/mapping_plan.cc")
 
@@ -551,6 +552,12 @@ add_host_test(test_psg
 # ---------------------------------------------------------------------------
 # Stage 29 tests
 # ---------------------------------------------------------------------------
+
+add_host_test(test_opl4
+    host/test_opl4.cc
+    ${SRC_OPL4}
+    ${SRC_DIAG}
+)
 
 add_host_test(test_scc
     host/test_scc.cc
