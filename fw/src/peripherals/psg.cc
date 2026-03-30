@@ -13,6 +13,8 @@
 //   Carrier: 125 MHz / 256 = 488 kHz.  Duty updated at ~44100 Hz from Core 1.
 
 #include "peripherals/psg.h"
+#include "peripherals/scc.h"
+#include "peripherals/opl4.h"
 #include <cstring>
 
 #ifndef JLPICART_HOST_TEST
@@ -20,6 +22,11 @@
 #  include "hardware/gpio.h"
 #  include "hardware/pwm.h"
 #  include "pico/time.h"
+
+// Shared audio outputs from SCC and OPL4 service ticks (written by their
+// respective service functions on Core 1, read here for mixing).
+extern volatile uint8_t g_scc_sample;
+extern volatile uint8_t g_opl4_sample;
 #endif
 
 // ---------------------------------------------------------------------------
@@ -235,11 +242,18 @@ void psg_service(PsgState& state)
     if (now - last_us < PSG_SAMPLE_INTERVAL_US) return;
     last_us = now;
 
-    uint8_t sample = psg_compute_sample(state);
+    // Mix PSG + SCC + OPL4. Each source is 0–255 (128 = silence).
+    // Combine as signed offsets from 128, average, re-centre.
+    int32_t mixed = (int32_t)psg_compute_sample(state) - 128
+                  + (int32_t)g_scc_sample              - 128
+                  + (int32_t)g_opl4_sample             - 128;
+    mixed = 128 + mixed / 3;
+    if (mixed < 0)   mixed = 0;
+    if (mixed > 255) mixed = 255;
 
     uint slice   = pwm_gpio_to_slice_num(GPIO64_SND);
     uint channel = pwm_gpio_to_channel(GPIO64_SND);
-    pwm_set_chan_level(slice, channel, sample);
+    pwm_set_chan_level(slice, channel, (uint32_t)mixed);
 #else
     (void)state;
 #endif

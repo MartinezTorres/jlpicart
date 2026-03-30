@@ -20,8 +20,13 @@ const DriverDescriptor kDriverDescriptors[] = {
     // PSG audio emulation (Stage 27).
     { "sw.psg",   {} },
 
-    // Future entries are added here following the same pattern:
-    // { "sw.scc",   {} },  // SCC audio emulation
+    // SCC audio emulation (Stage 29) — Konami SCC wavetable synthesiser.
+    { "sw.scc",   {} },
+
+    // OPL4 / YMF278B audio emulation (Stage 30) — Moonsound PCM synthesis.
+    { "sw.opl4",  {} },
+
+    // Future entries:
     // { "sw.menu",  {} },  // menu host ABI
     // { "net.esp32",{} },  // ESP32 network transport
 };

@@ -204,6 +204,7 @@ add_host_test(test_allocator
     ${SRC_PERIPH_MGR}
     ${SRC_PSG}
     ${SRC_SCC}
+    ${SRC_OPL4}
     ${SRC_MAPPERS}
     ${SRC_MAPPING_PLAN}
     ${SRC_CAP_REG}

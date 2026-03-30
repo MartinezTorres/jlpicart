@@ -2,6 +2,8 @@
 
 #include "peripherals/peripheral_manager.h"
 #include "peripherals/psg.h"
+#include "peripherals/scc.h"
+#include "peripherals/opl4.h"
 #include "bus/bus_map.h"
 #include "mappers/mappers.h"
 #include "log/log.h"
@@ -65,6 +67,16 @@ bool PeripheralManager::apply_mapping(const MappingPlan& plan) {
                 mapper_setup_rom_32k_mirrored(slot, e.rom_data);      break;
             case MapperType::KONAMI:
                 mapper_setup_konami(slot, e.rom_data);                 break;
+            case MapperType::KONAMI_SCC: {
+                // SccState must outlive the Cartridge.  One static instance
+                // per bus slot (slots 0–3); MAPPING_MAX_ENTRIES = 4.
+                static SccState scc_states[MAPPING_MAX_ENTRIES];
+                SccState& ss = scc_states[e.subslot < MAPPING_MAX_ENTRIES
+                                           ? e.subslot : 0];
+                scc_reset(ss);
+                mapper_setup_konami_scc(slot, e.rom_data, ss);
+                break;
+            }
             case MapperType::KONAMI_Z:
                 mapper_setup_konami_z(slot, e.rom_data);               break;
             case MapperType::ASCII8:
@@ -98,6 +110,32 @@ void PeripheralManager::map_psg(PsgState& state)
     psg_setup(dummy_slot, state);
 #endif
     log_info("PSG (AY-3-8910) wired at IO ports 0xA0/0xA1/0xA2 (slot 4)");
+}
+
+void PeripheralManager::map_scc(uint8_t slot, const uint8_t* rom_data,
+                                 SccState& state)
+{
+#ifndef JLPICART_HOST_TEST
+    mapper_setup_konami_scc(BUS::cartridges[slot], rom_data, state);
+#else
+    (void)slot;
+    static Cartridge dummy_slot;
+    mapper_setup_konami_scc(dummy_slot, rom_data, state);
+#endif
+    log_info("SCC wired: Konami SCC mapper + register space 0x9800-0x9FFF");
+}
+
+void PeripheralManager::map_opl4(Opl4State& state,
+                                  const uint8_t* wave_rom, uint32_t wave_rom_size)
+{
+#ifndef JLPICART_HOST_TEST
+    opl4_setup(BUS::cartridges[5], state, wave_rom, wave_rom_size);
+    opl4_audio_init(state);
+#else
+    static Cartridge dummy_slot;
+    opl4_setup(dummy_slot, state, wave_rom, wave_rom_size);
+#endif
+    log_info("OPL4 (YMF278B) wired at IO ports 0x7E/0x7F + 0xF5/0xF6/0xF7 (slot 5)");
 }
 
 void PeripheralManager::map_menu_page(uint8_t* page) {

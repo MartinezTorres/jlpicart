@@ -32,6 +32,8 @@
 #include "allocator/resource_model.h"
 #include "peripherals/peripheral_manager.h"
 #include "peripherals/psg.h"
+#include "peripherals/scc.h"
+#include "peripherals/opl4.h"
 #include "bus/mapping_plan.h"
 #include "content/content_store.h"
 #include "boards/board_descriptor.h"
@@ -278,10 +280,22 @@ int main() {
     map_mgr.map_api_window(api_win.buf());
 
     // 10a. Wire PSG (AY-3-8910) if sw.psg is activated (Stage 27).
-    static PsgState psg_state;
+    static PsgState  psg_state;
+    static SccState  scc_state;
+    static Opl4State opl4_state;
+
     if (registry.is_activated("sw.psg")) {
         psg_reset(psg_state);
         map_mgr.map_psg(psg_state);
+    }
+
+    // 10b. OPL4 (YMF278B) — wire IO callbacks if sw.opl4 is activated (Stage 30).
+    // Wave ROM lives in XIP flash at a fixed content-data offset; for now no ROM
+    // is pre-loaded so wave_rom=nullptr (silence on all 24 channels until a
+    // Collection with an OPL4 wave ROM is installed and loaded).
+    if (registry.is_activated("sw.opl4")) {
+        opl4_reset(opl4_state);
+        map_mgr.map_opl4(opl4_state, nullptr, 0u);
     }
 
     // 11. Append BOOT record to EVENT_LOG (spec §6.5 boot integration).
@@ -333,12 +347,18 @@ int main() {
     static ApiWindow*   g_api_win   = &api_win;
     static MenuApp*     g_menu_app  = &menu_app;
     static UsbHost*     g_usb_host  = &usb_host;
-    static PsgState*    g_psg_state = &psg_state;
+    static PsgState*    g_psg_state  = &psg_state;
+    static SccState*    g_scc_state  = &scc_state;
+    static Opl4State*   g_opl4_state = &opl4_state;
     multicore_launch_core1([]() {
         while (true) {
             g_api_win->service_once();
             g_menu_app->tick();
             g_usb_host->poll();
+            // Audio: SCC and OPL4 write g_scc_sample / g_opl4_sample;
+            // psg_service() reads both and mixes all three into PWM.
+            scc_service(*g_scc_state);
+            opl4_service(*g_opl4_state);
             psg_service(*g_psg_state);
             tight_loop_contents();
         }

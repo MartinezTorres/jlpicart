@@ -13,6 +13,8 @@
 #include "allocator/allocator.h"
 #include "bus/mapping_plan.h"
 #include "peripherals/psg.h"
+#include "peripherals/scc.h"
+#include "peripherals/opl4.h"
 #include "spine/capability_registry.h"
 #include <cstddef>
 #include <cstdint>
@@ -45,6 +47,19 @@ public:
     // Calls psg_setup(); the caller must have already called psg_reset().
     // On hardware: also calls psg_audio_init() to start PWM output.
     void map_psg(PsgState& state);
+
+    // Wire SCC wavetable synthesiser into the Konami SCC mapper on a cartridge
+    // slot.  Caller owns the SccState and the ROM data; both must outlive the
+    // Cartridge.  scc_reset() must have been called before this.
+    // slot: BUS cartridge slot index (0–3) that holds the SCC cartridge.
+    void map_scc(uint8_t slot, const uint8_t* rom_data, SccState& state);
+
+    // Wire OPL4 (YMF278B) PCM section into the bus at slot 5 (IO-only).
+    // wave_rom/wave_rom_size: pointer and byte length of the YMF278B wave ROM
+    // (may be null; opl4_setup() handles missing ROM gracefully).
+    // opl4_reset() must have been called before this.
+    void map_opl4(Opl4State& state,
+                  const uint8_t* wave_rom, uint32_t wave_rom_size);
 
     // Log a human-readable activation report via log_info/log_warn.
     void log_report(const LaunchPlan& plan) const;
