@@ -231,6 +231,43 @@ static void test_full_wipe()
 }
 
 // ---------------------------------------------------------------------------
+// test_wipe_includes_stats — wipe_user_data removes "st.*" keys (bug regression)
+// ---------------------------------------------------------------------------
+
+static void test_wipe_includes_stats()
+{
+    FlashDevice sys_flash(TEST_FLASH_SIZE);
+    FlashDevice saves_flash(TEST_FLASH_SIZE);
+    FlashDevice prof_flash(TEST_FLASH_SIZE);
+
+    KvStore sys_kv;
+    sys_kv.init(sys_flash, 0u, TEST_FLASH_SIZE);
+    KvStore saves_kv;
+    saves_kv.init(saves_flash, 0u, TEST_FLASH_SIZE);
+    ProfileStore profiles;
+    profiles.init(prof_flash, 0u, TEST_FLASH_SIZE);
+
+    SystemSettingsStore store;
+    store.init(sys_kv);
+
+    // Write a stat, an achievement, and a leaderboard entry into the saves KV.
+    uint8_t one = 1u;
+    saves_kv.put("st.0001.game.s.0001", &one, 1u);
+    saves_kv.put("st.0001.game.a.0005", &one, 1u);
+    saves_kv.put("st.0001.game.l.0002", &one, 1u);
+    CHECK(saves_kv.contains("st.0001.game.s.0001"));
+    CHECK(saves_kv.contains("st.0001.game.a.0005"));
+    CHECK(saves_kv.contains("st.0001.game.l.0002"));
+
+    CHECK(store.wipe_user_data(saves_kv, profiles).ok());
+
+    // All three must be gone after wipe.
+    CHECK(!saves_kv.contains("st.0001.game.s.0001"));
+    CHECK(!saves_kv.contains("st.0001.game.a.0005"));
+    CHECK(!saves_kv.contains("st.0001.game.l.0002"));
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
@@ -242,6 +279,7 @@ int main()
     test_settings_corrupt();
     test_wipe_user_data();
     test_full_wipe();
+    test_wipe_includes_stats();
 
     return test_summary();
 }

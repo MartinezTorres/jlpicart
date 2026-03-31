@@ -101,11 +101,16 @@ DiagStatus SystemSettingsStore::wipe_user_data(KvStore& kv_saves, ProfileStore& 
     // Delete all save blobs ("sav.*" prefix in saves KV).
     DiagStatus s1 = kv_saves.del_prefix("sav.");
 
-    // Delete all profile data ("prof.*" prefix in profiles KV) and reset state.
-    DiagStatus s2 = profiles.wipe_all();
+    // Delete all stats/achievements/leaderboards ("st.*" prefix in saves KV).
+    DiagStatus s2 = kv_saves.del_prefix("st.");
 
-    // Return the first error encountered; both operations always attempted.
-    return s1.ok() ? s2 : s1;
+    // Delete all profile data ("prof.*" prefix in profiles KV) and reset state.
+    DiagStatus s3 = profiles.wipe_all();
+
+    // Return the first error encountered; all operations always attempted.
+    if (!s1.ok()) return s1;
+    if (!s2.ok()) return s2;
+    return s3;
 }
 
 // ---------------------------------------------------------------------------
