@@ -101,4 +101,66 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: openmsx
-          path: tools/openmsx/bin/openmsx
+          # Upload the full install tree (bin/ + share/) so the test job can
+          # use it without needing to re-check out the openMSX submodule.
+          path: tools/openmsx/
+
+  # ---------------------------------------------------------------------------
+  # openmsx-tests — run TCL integration tests under the pinned openMSX build
+  # Depends on: build (for the menupage stub ROM) + openmsx (for the emulator)
+  # ---------------------------------------------------------------------------
+  openmsx-tests:
+    name: openMSX integration tests
+    runs-on: ubuntu-latest
+    needs: [ build, openmsx ]
+
+    steps:
+      - name: Checkout (no submodules needed)
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Download openMSX artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: openmsx
+          path: tools/openmsx
+
+      - name: Restore openMSX binary permissions
+        run: chmod +x tools/openmsx/bin/openmsx
+
+      - name: Install C-BIOS and runtime libs
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cbios \
+            libsdl2-2.0-0 libsdl2-image-2.0-0 libsdl2-ttf-2.0-0 \
+            tcl libogg0 libvorbis0a libtheora0
+          # Copy C-BIOS ROMs into the openMSX share systemroms directory so
+          # openMSX finds them via OPENMSX_SYSTEM_DATA.
+          mkdir -p tools/openmsx/share/systemroms
+          cp /usr/share/cbios/*.rom tools/openmsx/share/systemroms/
+
+      - name: Fetch SDCC (Z80 compiler)
+        run: bash tools/fetch_sdcc.sh
+
+      - name: Build menupage.rom
+        run: |
+          PATH="${GITHUB_WORKSPACE}/tools/sdcc/bin:$PATH" \
+            make -C fw/src/msx/menu/stub menupage.rom
+
+      - name: Verify openMSX binary
+        run: OPENMSX_SYSTEM_DATA=tools/openmsx/share tools/openmsx/bin/openmsx --version
+
+      - name: Run test_menu_stub_basic
+        run: |
+          OPENMSX_BIN="${GITHUB_WORKSPACE}/tools/openmsx/bin/openmsx" \
+          OPENMSX_SYSTEM_DATA="${GITHUB_WORKSPACE}/tools/openmsx/share" \
+            bash fw/tests/openMSX/run_test.sh fw/tests/openMSX/test_menu_stub_basic.tcl
+
+      - name: Run test_menu_bus
+        run: |
+          OPENMSX_BIN="${GITHUB_WORKSPACE}/tools/openmsx/bin/openmsx" \
+          OPENMSX_SYSTEM_DATA="${GITHUB_WORKSPACE}/tools/openmsx/share" \
+          TEST_MACHINE=msx1_jlpicart_bus \
+            bash fw/tests/openMSX/run_test.sh fw/tests/openMSX/test_menu_bus.tcl
