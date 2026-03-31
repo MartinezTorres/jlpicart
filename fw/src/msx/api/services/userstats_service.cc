@@ -5,6 +5,7 @@
 #include "msx/api/services/userstats_service.h"
 #include "msx/api/api_window.h"
 #include "stats/stats_store.h"
+#include "identity/device_identity.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------
@@ -158,7 +159,7 @@ static void handle_leader_begin(const MsgHeader& req,
 
 static void handle_leader_submit(const MsgHeader& req,
                                    const uint8_t* payload, uint16_t payload_len,
-                                   ApiWindow& win, StatsStore& ss)
+                                   ApiWindow& win, StatsStore& ss, DeviceIdentity* dik)
 {
     if (payload_len < 8u) { send_err(win, req, API_E_BAD_REQ); return; }
 
@@ -175,7 +176,7 @@ static void handle_leader_submit(const MsgHeader& req,
     }
     if (proof_len > req.scratch_len) proof_len = req.scratch_len;
 
-    DiagStatus s = ss.leader_submit(handle, score, proof_kind, proof_buf, proof_len);
+    DiagStatus s = ss.leader_submit(handle, score, proof_kind, proof_buf, proof_len, dik);
     if (!s.ok()) { send_err(win, req, diag_to_api(s.code)); return; }
     send_ok(win, req);
 }
@@ -190,7 +191,8 @@ void userstats_service_handle(const MsgHeader& req,
                                 ApiWindow&       win,
                                 StatsStore&      stats_store,
                                 uint16_t         active_profile_id,
-                                const char*      active_payload_id)
+                                const char*      active_payload_id,
+                                DeviceIdentity*  dik)
 {
     switch (req.method) {
         case UST_STAT_GET:
@@ -210,7 +212,7 @@ void userstats_service_handle(const MsgHeader& req,
                                 stats_store, active_profile_id, active_payload_id);
             break;
         case UST_LEADER_SUBMIT:
-            handle_leader_submit(req, payload, payload_len, win, stats_store);
+            handle_leader_submit(req, payload, payload_len, win, stats_store, dik);
             break;
         default:
             win.write_response(req.seq, req.service, req.method,

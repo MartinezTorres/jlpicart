@@ -1,12 +1,14 @@
 # fw-build.yml — JLPiCart firmware CI
-#
-# NOT ENABLED FOR AUTOMATIC RUNS.
-# Trigger: manual only (workflow_dispatch) until Stage 2 is verified end-to-end.
-# To enable automatic runs, add `push:` and/or `pull_request:` triggers.
 
 name: Firmware build
 
 on:
+  push:
+    branches: [ main ]
+    paths: [ 'fw/**', 'tools/**', '.github/workflows/fw-build.yml' ]
+  pull_request:
+    branches: [ main ]
+    paths: [ 'fw/**', 'tools/**', '.github/workflows/fw-build.yml' ]
   workflow_dispatch:
 
 jobs:

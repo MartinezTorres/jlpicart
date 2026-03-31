@@ -387,6 +387,93 @@ static void test_identity_no_store() {
 }
 
 // ---------------------------------------------------------------------------
+// test_guest_session_begin_end — begin_guest sets PROF_ID_GUEST; end restores
+// ---------------------------------------------------------------------------
+
+static void test_guest_session_begin_end() {
+    ProfileFixture f;
+
+    uint16_t id = 0;
+    CHECK(f.ps.create("Leo", "en", &id).ok());
+    CHECK(f.ps.set_active(id).ok());
+    CHECK(f.ps.active() == id);
+
+    f.ps.begin_guest();
+    CHECK(f.ps.active() == PROF_ID_GUEST);
+    CHECK(f.ps.in_guest_session());
+
+    f.ps.end_guest();
+    CHECK(f.ps.active() == id);
+    CHECK(!f.ps.in_guest_session());
+}
+
+// ---------------------------------------------------------------------------
+// test_guest_session_no_prior — begin with PROF_ID_NONE; end restores NONE
+// ---------------------------------------------------------------------------
+
+static void test_guest_session_no_prior() {
+    ProfileFixture f;
+
+    CHECK(f.ps.active() == PROF_ID_NONE);
+
+    f.ps.begin_guest();
+    CHECK(f.ps.active() == PROF_ID_GUEST);
+    CHECK(f.ps.in_guest_session());
+
+    f.ps.end_guest();
+    CHECK(f.ps.active() == PROF_ID_NONE);
+    CHECK(!f.ps.in_guest_session());
+}
+
+// ---------------------------------------------------------------------------
+// test_guest_api_roundtrip — GUEST_BEGIN/GUEST_END via ApiWindow rings
+// ---------------------------------------------------------------------------
+
+static void test_guest_api_roundtrip() {
+    ensure_spine();
+
+    FlashDevice  flash(TEST_PART_SIZE);
+    ProfileStore ps;
+    CHECK(ps.init(flash, 0, TEST_PART_SIZE).ok());
+
+    uint16_t id = 0;
+    CHECK(ps.create("Mia", "en", &id).ok());
+    CHECK(ps.set_active(id).ok());
+
+    static ApiWindow win5;
+    win5.init(g_posture, g_policy, g_registry);
+    win5.bind_profile_store(ps);
+
+    // IDN_GUEST_BEGIN → API_OK; payload = {u16 PROF_ID_GUEST}
+    push_request(win5, 10u, SVC_IDENTITY, IDN_GUEST_BEGIN, nullptr, 0u);
+    CHECK(win5.service_once());
+
+    uint16_t status = 0xFFFFu;
+    uint8_t  rsp[4] = {};
+    uint16_t rsp_len = 0u;
+    CHECK(pop_response(win5, &status, rsp, sizeof(rsp), &rsp_len));
+    CHECK(status == API_OK);
+    CHECK(rsp_len == 2u);
+    uint16_t guest_id = static_cast<uint16_t>(rsp[0] | (rsp[1] << 8u));
+    CHECK(guest_id == PROF_ID_GUEST);
+    CHECK(ps.in_guest_session());
+
+    // IDN_GUEST_END → API_OK; payload = {u16 restored_id}
+    push_request(win5, 11u, SVC_IDENTITY, IDN_GUEST_END, nullptr, 0u);
+    CHECK(win5.service_once());
+
+    status  = 0xFFFFu;
+    rsp_len = 0u;
+    CHECK(pop_response(win5, &status, rsp, sizeof(rsp), &rsp_len));
+    CHECK(status == API_OK);
+    CHECK(rsp_len == 2u);
+    uint16_t restored_id = static_cast<uint16_t>(rsp[0] | (rsp[1] << 8u));
+    CHECK(restored_id == id);
+    CHECK(!ps.in_guest_session());
+    CHECK(ps.active() == id);
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
@@ -402,6 +489,9 @@ int main() {
     test_identity_set_get_active();
     test_identity_set_active_not_found();
     test_identity_no_store();
+    test_guest_session_begin_end();
+    test_guest_session_no_prior();
+    test_guest_api_roundtrip();
 
     return test_summary();
 }

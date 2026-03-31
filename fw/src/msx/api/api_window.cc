@@ -393,7 +393,8 @@ bool ApiWindow::service_once()
                                : active_profile_id_;
                 userstats_service_handle(req, payload, payload_len,
                                           *this, *stats_store_,
-                                          pid, active_payload_id_);
+                                          pid, active_payload_id_,
+                                          device_identity_);
             } else {
                 write_response(req.seq, req.service, req.method,
                                API_E_UNSUPPORTED, nullptr, 0);

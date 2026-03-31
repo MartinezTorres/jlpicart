@@ -190,6 +190,23 @@ DiagStatus ProfileStore::remove(uint16_t profile_id)
 }
 
 // ---------------------------------------------------------------------------
+// begin_guest / end_guest
+// ---------------------------------------------------------------------------
+
+void ProfileStore::begin_guest()
+{
+    pre_guest_id_ = active_id_;
+    active_id_    = PROF_ID_GUEST;
+    // No flash write: guest sessions are ephemeral.
+}
+
+void ProfileStore::end_guest()
+{
+    active_id_    = pre_guest_id_;
+    pre_guest_id_ = PROF_ID_NONE;
+}
+
+// ---------------------------------------------------------------------------
 // wipe_all
 // ---------------------------------------------------------------------------
 

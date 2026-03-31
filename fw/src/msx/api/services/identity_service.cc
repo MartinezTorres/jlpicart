@@ -122,12 +122,28 @@ void identity_service_handle(const MsgHeader& req,
             handle_get_active(req, win, ps);
             break;
 
-        case IDN_GUEST_BEGIN:
-        case IDN_GUEST_END:
-            // Stub: guest sessions not implemented in Stage 15.
+        case IDN_GUEST_BEGIN: {
+            // Start an ephemeral guest session.
+            // If already in a guest session, the new call is idempotent.
+            ps.begin_guest();
+            uint8_t resp[2];
+            resp[0] = static_cast<uint8_t>(PROF_ID_GUEST & 0xFFu);
+            resp[1] = static_cast<uint8_t>(PROF_ID_GUEST >> 8u);
             win.write_response(req.seq, req.service, req.method,
-                               API_OK, nullptr, 0);
+                               API_OK, resp, sizeof(resp));
             break;
+        }
+        case IDN_GUEST_END: {
+            // End the guest session; restore the previously active profile.
+            ps.end_guest();
+            uint16_t restored = ps.active();
+            uint8_t resp[2];
+            resp[0] = static_cast<uint8_t>(restored & 0xFFu);
+            resp[1] = static_cast<uint8_t>(restored >> 8u);
+            win.write_response(req.seq, req.service, req.method,
+                               API_OK, resp, sizeof(resp));
+            break;
+        }
 
         default:
             win.write_response(req.seq, req.service, req.method,

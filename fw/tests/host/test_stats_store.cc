@@ -1,7 +1,9 @@
 // test_stats_store.cc — host tests for StatsStore and UserStats service (Stage 21).
 
 #include "stats/stats_store.h"
+#include "identity/device_identity.h"
 #include "storage/kv_store.h"
+#include <openssl/evp.h>
 #include "storage/flash_device.h"
 #include "storage/flash_layout.h"
 #include "profiles/profile_store.h"
@@ -266,6 +268,93 @@ static void test_stats_api_stat_roundtrip()
 }
 
 // ---------------------------------------------------------------------------
+// ed25519_verify — OpenSSL helper (host-test only)
+// ---------------------------------------------------------------------------
+
+static bool ed25519_verify(const uint8_t* msg, size_t msg_len,
+                            const uint8_t* sig_64, const uint8_t* pub_32)
+{
+    EVP_PKEY* key = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, nullptr,
+                                                  pub_32, 32u);
+    if (!key) return false;
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (!ctx) { EVP_PKEY_free(key); return false; }
+    bool ok = false;
+    if (EVP_DigestVerifyInit(ctx, nullptr, nullptr, nullptr, key) == 1)
+        ok = (EVP_DigestVerify(ctx, sig_64, 64u, msg, msg_len) == 1);
+    EVP_MD_CTX_free(ctx);
+    EVP_PKEY_free(key);
+    return ok;
+}
+
+// ---------------------------------------------------------------------------
+// test_leaderboard_signed — leader_submit with DIK produces a valid signature
+// ---------------------------------------------------------------------------
+
+static void test_leaderboard_signed()
+{
+    // StatsStore KV + ProfileStore.
+    FlashDevice  kv_flash(TEST_FLASH_SIZE);
+    FlashDevice  ps_flash(TEST_FLASH_SIZE);
+    KvStore      kv;
+    ProfileStore ps;
+    StatsStore   ss;
+    kv.init(kv_flash, 0u, TEST_FLASH_SIZE);
+    ps.init(ps_flash, 0u, TEST_FLASH_SIZE);
+    ss.init(kv, ps);
+
+    // DIK stored in its own KV partition.
+    FlashDevice  dik_flash(TEST_FLASH_SIZE);
+    KvStore      dik_kv;
+    dik_kv.init(dik_flash, 0u, TEST_FLASH_SIZE);
+    DeviceIdentity dik;
+    CHECK(dik.init_or_load(dik_kv).ok());
+    CHECK(dik.initialized());
+
+    uint8_t token[STATS_TOKEN_LEN] = {};
+    uint8_t handle = 0xFFu;
+    const uint16_t profile_id = 1u;
+    const uint16_t lb_id      = 7u;
+    CHECK(ss.leader_begin(profile_id, "game-002", lb_id, token, &handle).ok());
+    CHECK(handle < STATS_TOKEN_SLOTS);
+
+    const uint32_t score = 88888u;
+    CHECK(ss.leader_submit(handle, score, 0u, nullptr, 0u, &dik).ok());
+
+    // Read back the stored entry.
+    char key[64];
+    snprintf(key, sizeof(key), "st.%04x.game-002.l.%04x",
+             static_cast<unsigned>(profile_id),
+             static_cast<unsigned>(lb_id));
+    LeaderEntry entry = {};
+    uint16_t vlen = 0u;
+    CHECK(kv.get(key,
+                  reinterpret_cast<uint8_t*>(&entry),
+                  &vlen,
+                  static_cast<uint16_t>(sizeof(entry))).ok());
+    CHECK(entry.score == score);
+
+    // Signature must be non-zero.
+    bool any_nonzero = false;
+    for (size_t i = 0; i < LEADER_SIG_LEN; ++i)
+        any_nonzero |= (entry.signature[i] != 0u);
+    CHECK(any_nonzero);
+
+    // Rebuild canonical message and verify with DIK public key.
+    // Canonical layout: score(4) || timestamp(4) || token(16) || profile_id(2) || lb_id(2)
+    uint8_t msg[28];
+    memcpy(msg + 0,  &entry.score,     4u);
+    memcpy(msg + 4,  &entry.timestamp, 4u);
+    memcpy(msg + 8,  token,            STATS_TOKEN_LEN);
+    memcpy(msg + 24, &profile_id,      2u);
+    memcpy(msg + 26, &lb_id,           2u);
+
+    uint8_t pub[DIK_PUB_KEY_LEN];
+    dik.public_key(pub);
+    CHECK(ed25519_verify(msg, sizeof(msg), entry.signature, pub));
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
@@ -278,6 +367,7 @@ int main()
     test_leaderboard_submit();
     test_stats_profile_isolation();
     test_stats_api_stat_roundtrip();
+    test_leaderboard_signed();
 
     return test_summary();
 }

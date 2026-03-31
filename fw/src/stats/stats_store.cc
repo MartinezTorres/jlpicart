@@ -1,6 +1,7 @@
 // stats_store.cc — StatsStore implementation (Stage 21).
 
 #include "stats/stats_store.h"
+#include "identity/device_identity.h"
 #include "storage/kv_store.h"
 #include <cstring>
 #include <cstdio>
@@ -188,7 +189,8 @@ DiagStatus StatsStore::leader_begin(uint16_t profile_id, const char* payload_id,
 DiagStatus StatsStore::leader_submit(uint8_t handle, uint32_t score,
                                        uint8_t /* proof_kind */,
                                        const uint8_t* /* proof_buf */,
-                                       uint16_t /* proof_len */)
+                                       uint16_t /* proof_len */,
+                                       DeviceIdentity* dik)
 {
     if (!initialized_) return DiagStatus::error(DiagCode::STORAGE_CORRUPT);
     if (handle >= STATS_TOKEN_SLOTS) return DiagStatus::error(DiagCode::STORAGE_NOT_FOUND);
@@ -196,13 +198,26 @@ DiagStatus StatsStore::leader_submit(uint8_t handle, uint32_t score,
     TokenSlot& ts = tokens_[handle];
     if (!ts.in_use) return DiagStatus::error(DiagCode::STORAGE_NOT_FOUND);
 
-    // Write leaderboard entry.
-    char key[KV_MAX_KEY_LEN + 1];
-    make_key(key, sizeof(key), ts.profile_id, ts.payload_id, 'l', ts.lb_id);
-
     LeaderEntry entry = {};
     entry.score     = score;
-    entry.timestamp = 0u; // Stage 22: fill with real RTC/tick
+    entry.timestamp = 0u; // TODO(stage-rtc): fill with real RTC/tick
+
+    // Sign the canonical submission payload with the DIK if available.
+    // Canonical message: score(4) || timestamp(4) || token(16) || profile_id(2) || lb_id(2)
+    // = 28 bytes.  This binds the score to the specific leaderboard run (token)
+    // and profile, providing replay protection and authorship proof for server sync.
+    if (dik != nullptr && dik->initialized()) {
+        uint8_t msg[28];
+        memcpy(msg + 0,  &entry.score,     4u);
+        memcpy(msg + 4,  &entry.timestamp, 4u);
+        memcpy(msg + 8,  ts.token,         STATS_TOKEN_LEN);  // 16 bytes
+        memcpy(msg + 24, &ts.profile_id,   2u);
+        memcpy(msg + 26, &ts.lb_id,        2u);
+        dik->sign(msg, sizeof(msg), entry.signature);
+    }
+
+    char key[KV_MAX_KEY_LEN + 1];
+    make_key(key, sizeof(key), ts.profile_id, ts.payload_id, 'l', ts.lb_id);
 
     DiagStatus s = kv_->put(key,
                              reinterpret_cast<const uint8_t*>(&entry),

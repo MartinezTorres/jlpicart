@@ -49,14 +49,25 @@ public:
     // Return the cached active profile ID (PROF_ID_NONE if none set).
     uint16_t active() const { return active_id_; }
 
+    // Guest session management.
+    // begin_guest(): saves the current active profile ID in memory and sets
+    //   active to PROF_ID_GUEST (0xFFFF).  No flash write — guest sessions
+    //   are ephemeral and do not survive a power cycle.
+    // end_guest(): restores the active ID saved by the most recent begin_guest().
+    //   If begin_guest() was never called, restores to PROF_ID_NONE.
+    void begin_guest();
+    void end_guest();
+    bool in_guest_session() const { return active_id_ == PROF_ID_GUEST; }
+
     // Wipe all profile data: deletes all "prof.*" keys from the underlying KV
     // and resets the active ID to PROF_ID_NONE.  Called by factory reset.
     DiagStatus wipe_all();
 
 private:
     KvStore  kv_;
-    uint16_t active_id_  = PROF_ID_NONE;
-    bool     initialized_= false;
+    uint16_t active_id_       = PROF_ID_NONE;
+    uint16_t pre_guest_id_    = PROF_ID_NONE; // saved by begin_guest()
+    bool     initialized_     = false;
 
     DiagStatus load_index(ProfileIndex& idx) const;
     DiagStatus save_index(const ProfileIndex& idx);

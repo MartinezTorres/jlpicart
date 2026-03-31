@@ -25,17 +25,19 @@
 
 class KvStore;
 class ProfileStore;
+class DeviceIdentity;
 
 static constexpr int     STATS_TOKEN_SLOTS      = 4;   // max concurrent leaderboard runs
 static constexpr uint8_t STATS_TOKEN_LEN        = 16u; // nonce token size in bytes
 static constexpr size_t  STATS_PAYLOAD_KEY_MAX  = 32u; // max payload_id chars in a KV key
+static constexpr size_t  LEADER_SIG_LEN         = 64u; // ed25519 signature bytes (DIK)
 
 struct LeaderEntry {
     uint32_t score;
     uint32_t timestamp;
-    // Stage 22 will add a 64-byte signature field here.
+    uint8_t  signature[LEADER_SIG_LEN]; // ed25519 DIK signature over canonical payload
 };
-static_assert(sizeof(LeaderEntry) == 8, "LeaderEntry must be 8 bytes");
+static_assert(sizeof(LeaderEntry) == 72, "LeaderEntry must be 72 bytes");
 
 class StatsStore {
 public:
@@ -64,11 +66,13 @@ public:
                              uint8_t* token_out, uint8_t* handle_out);
 
     // Commit a leaderboard entry.  Validates the handle slot is in use.
-    // proof_buf/proof_len are reserved for Stage 22 signing; ignored for now.
+    // If dik is non-null, signs the canonical submission with the device key
+    // and stores the 64-byte signature in the LeaderEntry.
     // Frees the token slot on success.
     DiagStatus leader_submit(uint8_t handle, uint32_t score,
                               uint8_t proof_kind,
-                              const uint8_t* proof_buf, uint16_t proof_len);
+                              const uint8_t* proof_buf, uint16_t proof_len,
+                              DeviceIdentity* dik = nullptr);
 
 private:
     struct TokenSlot {
