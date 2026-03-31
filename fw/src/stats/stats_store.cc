@@ -8,6 +8,7 @@
 
 #ifndef JLPICART_HOST_TEST
 #include "hardware/structs/rosc.h"
+#include "pico/time.h"
 #endif
 
 // ---------------------------------------------------------------------------
@@ -200,7 +201,11 @@ DiagStatus StatsStore::leader_submit(uint8_t handle, uint32_t score,
 
     LeaderEntry entry = {};
     entry.score     = score;
-    entry.timestamp = 0u; // TODO(stage-rtc): fill with real RTC/tick
+#ifdef JLPICART_HOST_TEST
+    entry.timestamp = 0u;
+#else
+    entry.timestamp = static_cast<uint32_t>(time_us_64() / 1000000u);
+#endif
 
     // Sign the canonical submission payload with the DIK if available.
     // Canonical message: score(4) || timestamp(4) || token(16) || profile_id(2) || lb_id(2)

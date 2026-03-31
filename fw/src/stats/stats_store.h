@@ -34,7 +34,7 @@ static constexpr size_t  LEADER_SIG_LEN         = 64u; // ed25519 signature byte
 
 struct LeaderEntry {
     uint32_t score;
-    uint32_t timestamp;
+    uint32_t timestamp;  // seconds since boot (time_us_64()/1e6); 0 in host tests
     uint8_t  signature[LEADER_SIG_LEN]; // ed25519 DIK signature over canonical payload
 };
 static_assert(sizeof(LeaderEntry) == 72, "LeaderEntry must be 72 bytes");
