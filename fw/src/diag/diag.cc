@@ -18,6 +18,9 @@ const char* diag_code_to_string(DiagCode code) {
         case DiagCode::COLLECTION_BAD_MANIFEST:     return "COLLECTION_BAD_MANIFEST";
         case DiagCode::COLLECTION_UNSATISFIED_REQ:  return "COLLECTION_UNSATISFIED_REQ";
         case DiagCode::COLLECTION_SIG_INVALID:      return "COLLECTION_SIG_INVALID";
+        case DiagCode::NET_UNAVAILABLE:             return "NET_UNAVAILABLE";
+        case DiagCode::NET_TIMEOUT:                 return "NET_TIMEOUT";
+        case DiagCode::NET_PARSE_ERROR:             return "NET_PARSE_ERROR";
     }
     return "UNKNOWN";
 }

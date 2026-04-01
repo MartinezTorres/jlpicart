@@ -185,6 +185,13 @@ static constexpr uint8_t STG_WRITE_BLOB_COMMIT = 0x04u;
 static constexpr uint8_t STG_DELETE_BLOB       = 0x05u;
 
 // ---------------------------------------------------------------------------
+// Network service (0x02) method IDs  (spec.md "Network service")
+// ---------------------------------------------------------------------------
+
+static constexpr uint8_t NET_STATUS        = 0x00u;
+static constexpr uint8_t NET_HTTP_REQUEST  = 0x01u;
+
+// ---------------------------------------------------------------------------
 // Identity service (0x03) method IDs  (spec.md "Identity service")
 // ---------------------------------------------------------------------------
 
@@ -230,6 +237,23 @@ static constexpr uint32_t API_POSTURE_ENCRYPTED_BOOT_ENABLED = (1u << 6);
 // ---------------------------------------------------------------------------
 // Response payload structs (all packed, little-endian)
 // ---------------------------------------------------------------------------
+
+// Network.HTTP_REQUEST (0x01) request payload  (spec.md "Network service")
+struct HttpReq {
+    uint8_t  verb;        // 0=GET, 1=POST, 2=PUT, 3=DELETE
+    uint8_t  flags;       // bit0=https, bit1=allow_redirects
+    uint16_t url_len;     // bytes of URL at start of H2C scratch
+    uint16_t body_len;    // bytes of request body immediately after URL in H2C scratch
+    uint16_t timeout_ms;  // request timeout (0 = use driver default)
+};
+static_assert(sizeof(HttpReq) == 8, "HttpReq must be 8 bytes");
+
+// Network.HTTP_REQUEST (0x01) response payload
+struct HttpResp {
+    uint16_t http_status;  // HTTP status code (200, 404, …); 0 if not available
+    uint16_t body_len;     // bytes written to C2H scratch
+};
+static_assert(sizeof(HttpResp) == 4, "HttpResp must be 4 bytes");
 
 // System.GET_API_INFO (0x00) response  (spec.md)
 struct ApiInfo {

@@ -123,15 +123,10 @@ size_t CapabilityRegistry::activated_count() const {
 }
 
 bool CapabilityRegistry::is_masked_by_policy(const char* name, const PolicyInfo& policy) {
-    // Stage 3: no capabilities are policy-gated yet.
-    // Future entries follow this pattern:
-    //
-    //   if (strcmp(name, "net.esp32") == 0) {
-    //       // Network requires POLICY_ALLOW_NETWORK_COLLECTION_INSTALL
-    //       // spec.md §5.1: board/driver must declare it; policy may restrict it.
-    //       return !(policy.flags & POLICY_ALLOW_NETWORK_COLLECTION_INSTALL);
-    //   }
-    //
+    // net.esp32 requires POLICY_ALLOW_NETWORK_COLLECTION_INSTALL (spec.md §5.1).
+    if (strcmp(name, "net.esp32") == 0) {
+        return !(policy.flags & POLICY_ALLOW_NETWORK_COLLECTION_INSTALL);
+    }
     (void)name;
     (void)policy;
     return false;

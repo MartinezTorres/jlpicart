@@ -9,6 +9,8 @@
 #include "msx/api/services/identity_service.h"
 #include "msx/api/services/storage_service.h"
 #include "msx/api/services/userstats_service.h"
+#include "net/network_service.h"
+#include "net/transport_esp_at.h"
 #include "identity/device_identity.h"
 #include <cstring>
 
@@ -93,6 +95,12 @@ void ApiWindow::bind_stats_store(StatsStore& ss)
 {
     stats_store_ = &ss;
     header().feature_bits |= API_FEATURE_USERSTATS;
+}
+
+void ApiWindow::bind_network_transport(TransportEspAt& t)
+{
+    net_transport_ = &t;
+    header().feature_bits |= API_FEATURE_NETWORK;
 }
 
 void ApiWindow::bind_device_identity(DeviceIdentity& dik)
@@ -366,6 +374,16 @@ bool ApiWindow::service_once()
             if (profile_store_ != nullptr) {
                 identity_service_handle(req, payload, payload_len,
                                         *this, *profile_store_);
+            } else {
+                write_response(req.seq, req.service, req.method,
+                               API_E_UNSUPPORTED, nullptr, 0);
+            }
+            break;
+
+        case SVC_NETWORK:
+            if (net_transport_ != nullptr) {
+                network_service_handle(req, payload, payload_len,
+                                       *this, *net_transport_);
             } else {
                 write_response(req.seq, req.service, req.method,
                                API_E_UNSUPPORTED, nullptr, 0);

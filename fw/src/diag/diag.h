@@ -36,6 +36,11 @@ enum class DiagCode : uint16_t {
     COLLECTION_BAD_MANIFEST     = 0x0401,
     COLLECTION_UNSATISFIED_REQ  = 0x0402,
     COLLECTION_SIG_INVALID      = 0x0403,  // signature present but verification failed
+
+    // --- Network ---
+    NET_UNAVAILABLE             = 0x0500,  // ESP32 not responding or WiFi not associated
+    NET_TIMEOUT                 = 0x0501,  // AT command or HTTP request exceeded deadline
+    NET_PARSE_ERROR             = 0x0502,  // malformed AT response or bad URL
 };
 
 struct DiagStatus {

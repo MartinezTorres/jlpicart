@@ -26,9 +26,11 @@ const DriverDescriptor kDriverDescriptors[] = {
     // OPL4 / YMF278B audio emulation (Stage 30) — Moonsound PCM synthesis.
     { "sw.opl4",  {} },
 
+    // ESP32 AT network transport (Stage 32).
+    { "net.esp32", {} },
+
     // Future entries:
     // { "sw.menu",  {} },  // menu host ABI
-    // { "net.esp32",{} },  // ESP32 network transport
 };
 
 const size_t kDriverDescriptorCount =

@@ -82,6 +82,10 @@ add_executable(jlpicart
     src/stats/stats_store.cc
     src/msx/api/services/userstats_service.cc
 
+    # ESP32 AT transport and Network service (Stage 32)
+    src/net/transport_esp_at.cc
+    src/net/network_service.cc
+
     # Device Identity Key and GET_DEVICE_ID (Stage 22/24)
     src/identity/device_identity.cc
 

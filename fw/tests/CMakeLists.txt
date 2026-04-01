@@ -99,6 +99,11 @@ set(SRC_SAVE_STORE    "${FW_SRC}/storage/save_store.cc")
 set(SRC_STORAGE_SVC   "${FW_SRC}/msx/api/services/storage_service.cc")
 set(SRC_STATS_STORE    "${FW_SRC}/stats/stats_store.cc")
 set(SRC_USERSTATS_SVC  "${FW_SRC}/msx/api/services/userstats_service.cc")
+set(SRC_NET_TRANSPORT  "${FW_SRC}/net/transport_esp_at.cc")
+set(SRC_NET_SERVICE    "${FW_SRC}/net/network_service.cc")
+# Any test that links api_window.cc must also include these (api_window.cc
+# references network_service_handle and transport_esp_at).
+set(SRC_NET_DEPS ${SRC_NET_TRANSPORT} ${SRC_NET_SERVICE})
 # Monocypher: used by device_identity.cc for AEAD wrapping and ed25519.
 set(SRC_MONOCYPHER "${FW_SRC}/crypto/monocypher/monocypher.c")
 
@@ -124,6 +129,37 @@ add_host_test(test_api_window
     ${SRC_SAVE_STORE}
     ${SRC_USERSTATS_SVC}
     ${SRC_STATS_STORE}
+    ${SRC_NET_TRANSPORT}
+    ${SRC_NET_SERVICE}
+    ${SRC_DEVICE_IDENTITY}
+    ${SRC_PROFILE_STORE}
+    ${SRC_CAP_REG}
+    ${SRC_BOARD_DESC}
+    ${SRC_DRV_TABLE}
+    ${SRC_DIAG}
+    ${SRC_SHA256}
+    ${SRC_POL_VERIFY}
+    ${SRC_POL_STORE}
+    ${SRC_POSTURE}
+    ${SRC_FLASH_DEVICE}
+    ${SRC_KV_STORE}
+)
+
+# ---------------------------------------------------------------------------
+# Stage 32 tests — Network service
+# ---------------------------------------------------------------------------
+
+add_host_test(test_network_service
+    host/test_network_service.cc
+    ${SRC_API_WINDOW}
+    ${SRC_CORE_SERVICE}
+    ${SRC_IDENTITY_SVC}
+    ${SRC_STORAGE_SVC}
+    ${SRC_SAVE_STORE}
+    ${SRC_USERSTATS_SVC}
+    ${SRC_STATS_STORE}
+    ${SRC_NET_TRANSPORT}
+    ${SRC_NET_SERVICE}
     ${SRC_DEVICE_IDENTITY}
     ${SRC_PROFILE_STORE}
     ${SRC_CAP_REG}
@@ -261,6 +297,7 @@ add_host_test(test_profiles
     ${SRC_SAVE_STORE}
     ${SRC_USERSTATS_SVC}
     ${SRC_STATS_STORE}
+    ${SRC_NET_DEPS}
     ${SRC_DEVICE_IDENTITY}
     ${SRC_API_WINDOW}
     ${SRC_CORE_SERVICE}
@@ -323,6 +360,7 @@ add_host_test(test_menu_app
     ${SRC_SAVE_STORE}
     ${SRC_USERSTATS_SVC}
     ${SRC_STATS_STORE}
+    ${SRC_NET_DEPS}
     ${SRC_DEVICE_IDENTITY}
     ${SRC_CONTENT_STORE}
     ${SRC_KV_STORE}
@@ -373,6 +411,7 @@ set(SRC_CORE_SVC_FULL
     ${SRC_MENU_APP}
     ${SRC_SYSTEM_SETTINGS}
     ${SRC_CONTENT_STORE}
+    ${SRC_NET_DEPS}
 )
 
 add_host_test(test_core_service
@@ -397,6 +436,7 @@ add_host_test(test_save_store
     ${SRC_STORAGE_SVC}
     ${SRC_USERSTATS_SVC}
     ${SRC_STATS_STORE}
+    ${SRC_NET_DEPS}
     ${SRC_DEVICE_IDENTITY}
     ${SRC_API_WINDOW}
     ${SRC_IDENTITY_SVC}
@@ -429,6 +469,7 @@ add_host_test(test_boot_mode
     ${SRC_SAVE_STORE}
     ${SRC_USERSTATS_SVC}
     ${SRC_STATS_STORE}
+    ${SRC_NET_DEPS}
     ${SRC_DEVICE_IDENTITY}
     ${SRC_CONTENT_STORE}
     ${SRC_KV_STORE}
@@ -453,6 +494,7 @@ add_host_test(test_stats_store
     host/test_stats_store.cc
     ${SRC_STATS_STORE}
     ${SRC_USERSTATS_SVC}
+    ${SRC_NET_DEPS}
     ${SRC_DEVICE_IDENTITY}
     ${SRC_API_WINDOW}
     ${SRC_CORE_SERVICE}
@@ -486,6 +528,7 @@ add_host_test(test_device_identity
     ${SRC_SAVE_STORE}
     ${SRC_USERSTATS_SVC}
     ${SRC_STATS_STORE}
+    ${SRC_NET_DEPS}
     ${SRC_CAP_REG}
     ${SRC_BOARD_DESC}
     ${SRC_DRV_TABLE}
@@ -525,6 +568,7 @@ add_host_test(test_policy_enforcement
     ${SRC_SAVE_STORE}
     ${SRC_USERSTATS_SVC}
     ${SRC_STATS_STORE}
+    ${SRC_NET_DEPS}
     ${SRC_DEVICE_IDENTITY}
     ${SRC_USB_HOST}
     ${SRC_USB_SCANNER}

@@ -17,6 +17,7 @@
 class SaveStore;
 class StatsStore;
 class DeviceIdentity;
+class TransportEspAt;
 
 class ApiWindow {
 public:
@@ -48,6 +49,9 @@ public:
 
     // Bind a StatsStore and enable API_FEATURE_USERSTATS (Stage 21).
     void bind_stats_store(StatsStore& ss);
+
+    // Bind the ESP32 AT transport and enable API_FEATURE_NETWORK (Stage 32).
+    void bind_network_transport(TransportEspAt& t);
 
     // Bind the Device Identity Key (Stage 22).
     // Enables GET_DEVICE_ID to return a real scoped ID.
@@ -104,6 +108,7 @@ private:
     SaveStore*                save_store_        = nullptr;
     StatsStore*               stats_store_       = nullptr;
     DeviceIdentity*           device_identity_   = nullptr;
+    TransportEspAt*           net_transport_     = nullptr;
     uint16_t                  active_profile_id_ = 0u;
     char                      active_payload_id_[64] = {};
     void                    (*reset_menu_fn_)()  = nullptr;
