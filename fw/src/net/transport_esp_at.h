@@ -33,6 +33,13 @@ public:
     void init();
     bool initialized() const { return initialized_; }
 
+    // Issue AT+CWJAP to connect to a WiFi network using stored credentials.
+    // Blocks until the ESP32 reports association or failure (up to 15 s).
+    // If ssid is empty or the transport is not initialised, this is a no-op.
+    // The ESP32 stores credentials in its own flash after a successful join,
+    // so subsequent power cycles auto-connect without needing this call again.
+    void connect(const char* ssid, const char* pass);
+
     // Query WiFi connection state, RSSI, and station IP.
     // Always succeeds; NetStatus.connected is false if the ESP32 is not
     // associated or does not respond.

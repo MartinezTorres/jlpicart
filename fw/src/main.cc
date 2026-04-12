@@ -48,6 +48,7 @@
 #include "identity/device_identity.h"
 #include "crypto/smk.h"
 #include "usb/usb_host.h"
+#include "net/transport_esp_at.h"
 #include "usb/usb_install_scanner.h"
 #include "storage/flash_device.h"
 #include "storage/flash_layout.h"
@@ -254,6 +255,27 @@ int main() {
     if (device_identity.initialized()) {
         api_win.bind_device_identity(device_identity);
     }
+
+    // 8a. Network transport: init ESP32 UART and connect to WiFi if
+    //     network is enabled and credentials are stored in SystemSettings.
+    //     The ESP32 caches credentials in its own flash after first join,
+    //     so subsequent boots auto-connect without delay.
+    static TransportEspAt net_transport;
+    {
+        const SystemSettings& ss = settings_store.get();
+        if (ss.network_enabled) {
+            net_transport.init();
+            if (ss.wifi_ssid[0] != '\0') {
+                log_info("WiFi: issuing AT+CWJAP...");
+                net_transport.connect(ss.wifi_ssid, ss.wifi_pass);
+            }
+            api_win.bind_network_transport(net_transport);
+            log_info("network transport bound");
+        } else {
+            log_info("network disabled by system settings");
+        }
+    }
+
     log_info("API window initialised");
 
     // 9. Init Menu mailbox (16KB page buffer, writes "JLMN" header + stub code).

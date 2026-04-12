@@ -35,6 +35,8 @@ DiagStatus TransportEspAt::get_status(NetStatus& out) const
     return DiagStatus::success();
 }
 
+void TransportEspAt::connect(const char* /*ssid*/, const char* /*pass*/) {}
+
 DiagStatus TransportEspAt::http_request(uint8_t, bool, const char*,
                                           const uint8_t*, uint16_t,
                                           uint8_t*, uint16_t, uint16_t,
@@ -244,6 +246,36 @@ void TransportEspAt::init()
     wait_line_prefix("OK", 1500u);
 
     initialized_ = true;
+}
+
+// ---------------------------------------------------------------------------
+// connect
+// ---------------------------------------------------------------------------
+
+void TransportEspAt::connect(const char* ssid, const char* pass)
+{
+    if (!initialized_ || !ssid || ssid[0] == '\0') return;
+
+    // Issue AT+CWJAP="ssid","pass" and wait for a terminal response.
+    // The ESP32 stores credentials in its own flash after a successful join,
+    // so this is only strictly needed when credentials are new or changed.
+    uart_write_str("AT+CWJAP=\"");
+    uart_write_str(ssid);
+    uart_write_str("\",\"");
+    if (pass) uart_write_str(pass);
+    uart_write_str("\"\r\n");
+
+    // Drain lines until OK, FAIL, ERROR, or 15 seconds elapse.
+    // Intermediate lines ("WIFI CONNECTED", "WIFI GOT IP") are silently consumed.
+    char line[128];
+    for (int i = 0; i < 20; ++i) {
+        uint16_t len = read_line(line, sizeof(line), 800u);
+        if (len == 0u) continue;
+        if (strncmp(line, "OK",    2) == 0) break;
+        if (strncmp(line, "FAIL",  4) == 0) break;
+        if (strncmp(line, "ERROR", 5) == 0) break;
+        if (strncmp(line, "+CWJAP:", 7) == 0) break;  // error code form
+    }
 }
 
 // ---------------------------------------------------------------------------
