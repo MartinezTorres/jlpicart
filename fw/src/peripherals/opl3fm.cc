@@ -466,8 +466,43 @@ void opl3_write_reg(Opl3State& s, uint16_t reg, uint8_t val)
         if (off == 0xBDu) {
             s.deep_tremolo = (val >> 7) & 1u;
             s.deep_vibrato = (val >> 6) & 1u;
-            s.rhythm       = (val >> 5) & 1u;
-            s.rhythm_key   = val & 0x1Fu;
+
+            bool new_rhythm = (val >> 5) & 1u;
+            if (new_rhythm && !s.rhythm) {
+                // Entering rhythm mode: clear melodic key-on state for ch 6-8
+                // so the percussion operators start from a clean state.
+                for (int ci = 6; ci <= 8; ++ci) s.ch[ci].key_on = false;
+            }
+            s.rhythm = new_rhythm;
+
+            uint8_t new_key  = val & 0x1Fu;
+            uint8_t prev_key = s.rhythm_key_prev;
+            uint8_t rising   = new_key & (uint8_t)(~prev_key);
+            uint8_t falling  = (uint8_t)(~new_key) & prev_key;
+            s.rhythm_key      = new_key;
+            s.rhythm_key_prev = new_key;
+
+            if (s.rhythm) {
+                // Percussion ops live in the primary bank (ops 12-17).
+                // BD:  bit 4 → mod=op12, car=op15 (ch6)
+                // HH:  bit 0 → op13 (ch7 mod)
+                // SD:  bit 3 → op16 (ch7 car)
+                // TT:  bit 2 → op14 (ch8 mod)
+                // CY:  bit 1 → op17 (ch8 car)
+                if (rising  & 0x10u) {
+                    env_key_on(s.ops[12], s.ops[12].ksr, s.ch[6].block, s.ch[6].fnum);
+                    env_key_on(s.ops[15], s.ops[15].ksr, s.ch[6].block, s.ch[6].fnum);
+                }
+                if (falling & 0x10u) { env_key_off(s.ops[12]); env_key_off(s.ops[15]); }
+                if (rising  & 0x01u) env_key_on(s.ops[13], s.ops[13].ksr, s.ch[7].block, s.ch[7].fnum);
+                if (falling & 0x01u) env_key_off(s.ops[13]);
+                if (rising  & 0x08u) env_key_on(s.ops[16], s.ops[16].ksr, s.ch[7].block, s.ch[7].fnum);
+                if (falling & 0x08u) env_key_off(s.ops[16]);
+                if (rising  & 0x04u) env_key_on(s.ops[14], s.ops[14].ksr, s.ch[8].block, s.ch[8].fnum);
+                if (falling & 0x04u) env_key_off(s.ops[14]);
+                if (rising  & 0x02u) env_key_on(s.ops[17], s.ops[17].ksr, s.ch[8].block, s.ch[8].fnum);
+                if (falling & 0x02u) env_key_off(s.ops[17]);
+            }
             return;
         }
     }
@@ -536,19 +571,21 @@ void opl3_write_reg(Opl3State& s, uint16_t reg, uint8_t val)
         int ci   = ch_base + ch_i;
         s.ch[ci].fnum  = (uint16_t)((s.ch[ci].fnum & 0x0FFu) | (((uint16_t)(val & 0x03u)) << 8));
         s.ch[ci].block = (val >> 2) & 0x07u;
-        bool new_keyon = (val >> 5) & 1u;
-        if (new_keyon && !s.ch[ci].key_on) {
-            // Key on: start both operators
-            Opl3Op& mod = s.ops[op_base + kChMod[ch_i]];
-            Opl3Op& car = s.ops[op_base + kChCar[ch_i]];
-            env_key_on(mod, mod.ksr, s.ch[ci].block, s.ch[ci].fnum);
-            env_key_on(car, car.ksr, s.ch[ci].block, s.ch[ci].fnum);
-        } else if (!new_keyon && s.ch[ci].key_on) {
-            // Key off: release both operators
-            env_key_off(s.ops[op_base + kChMod[ch_i]]);
-            env_key_off(s.ops[op_base + kChCar[ch_i]]);
+        // In rhythm mode, channels 6-8 of the primary bank are percussion.
+        // Key-on/off for those is controlled exclusively by 0xBD; ignore it here.
+        if (!(bank == 0 && s.rhythm && ch_i >= 6)) {
+            bool new_keyon = (val >> 5) & 1u;
+            if (new_keyon && !s.ch[ci].key_on) {
+                Opl3Op& mod = s.ops[op_base + kChMod[ch_i]];
+                Opl3Op& car = s.ops[op_base + kChCar[ch_i]];
+                env_key_on(mod, mod.ksr, s.ch[ci].block, s.ch[ci].fnum);
+                env_key_on(car, car.ksr, s.ch[ci].block, s.ch[ci].fnum);
+            } else if (!new_keyon && s.ch[ci].key_on) {
+                env_key_off(s.ops[op_base + kChMod[ch_i]]);
+                env_key_off(s.ops[op_base + kChCar[ch_i]]);
+            }
+            s.ch[ci].key_on = new_keyon;
         }
-        s.ch[ci].key_on = new_keyon;
         update_phase_inc(s, bank, ch_i);
         return;
     }
@@ -603,6 +640,9 @@ void opl3_compute_sample(Opl3State& s, int16_t& out_l, int16_t& out_r)
         int ch_base = bank * 9;
 
         for (int ch_i = 0; ch_i < 9; ++ch_i) {
+            // In rhythm mode, channels 6-8 of the primary bank are handled below.
+            if (bank == 0 && s.rhythm && ch_i >= 6) continue;
+
             Opl3Ch& ch  = s.ch[ch_base + ch_i];
             Opl3Op& mod = s.ops[op_base + kChMod[ch_i]];
             Opl3Op& car = s.ops[op_base + kChCar[ch_i]];
@@ -657,6 +697,143 @@ void opl3_compute_sample(Opl3State& s, int16_t& out_l, int16_t& out_r)
             // ---- Mix to stereo ----
             if (ch.out_l) sum_l += car_out;
             if (ch.out_r) sum_r += car_out;
+        }
+    }
+
+    // ---- Rhythm mode: percussion instruments (primary bank, ch 6-8) ----
+    //
+    // BD  (Bass Drum)   — ch6, op12 (mod) + op15 (car), key = 0xBD bit 4
+    //     Standard 2-op FM/additive channel; no special phase manipulation.
+    // HH  (Hi-Hat)      — op13, key = 0xBD bit 0
+    // SD  (Snare Drum)  — op16, key = 0xBD bit 3
+    // TT  (Tom-Tom)     — op14, key = 0xBD bit 2
+    // CY  (Cymbal)      — op17, key = 0xBD bit 1
+    //
+    // HH/SD/CY use a 1-bit "rm_xor" noise derived from specific phase bits of
+    // op13 (HH) and op17 (CY) to produce the metallic, noisy character.
+    // TT and BD use normal sine synthesis.
+
+    if (s.rhythm) {
+        uint32_t am_att = s.lfo_am_out;
+
+        // ---- Bass Drum: identical to a melody 2-op channel ----
+        {
+            Opl3Ch& ch  = s.ch[6];
+            Opl3Op& mod = s.ops[12];
+            Opl3Op& car = s.ops[15];
+            if (mod.env_state != Opl3Env::OFF || car.env_state != Opl3Env::OFF) {
+                uint32_t mod_sl = (uint32_t)mod.sl * (OPL3_ENV_MAX / 15u);
+                uint32_t car_sl = (uint32_t)car.sl * (OPL3_ENV_MAX / 15u);
+                env_advance(mod, ch.block, ch.fnum, (uint8_t)mod_sl);
+                env_advance(car, ch.block, ch.fnum, (uint8_t)car_sl);
+
+                uint32_t mod_inc = mod.phase_inc;
+                uint32_t car_inc = car.phase_inc;
+                if (mod.vibrato && s.lfo_vib_out != 0)
+                    mod_inc = (uint32_t)((int32_t)mod_inc + ((int32_t)mod_inc * s.lfo_vib_out) / 1024);
+                if (car.vibrato && s.lfo_vib_out != 0)
+                    car_inc = (uint32_t)((int32_t)car_inc + ((int32_t)car_inc * s.lfo_vib_out) / 1024);
+                mod.phase = (mod.phase + mod_inc) & 0xFFFFFu;
+                car.phase = (car.phase + car_inc) & 0xFFFFFu;
+
+                int32_t fb_mod = 0;
+                if (ch.feedback > 0u)
+                    fb_mod = ((int32_t)mod.out + (int32_t)mod.out_prev) >> (9 - (int)ch.feedback);
+
+                int16_t mod_out = op_output(mod, fb_mod, am_att, mod.tremolo);
+                int16_t car_out;
+                if (!ch.algo) {
+                    car_out = op_output(car, (int32_t)mod_out * 2, am_att, car.tremolo);
+                } else {
+                    car_out = op_output(car, 0, am_att, car.tremolo);
+                    car_out = (int16_t)((int32_t)mod_out + (int32_t)car_out);
+                }
+                sum_l += car_out;
+                sum_r += car_out;
+            }
+        }
+
+        // ---- Phase-noise bit for HH / SD / CY ----
+        // Derived from bits of the HH operator (op13) and CY operator (op17)
+        // phase accumulators.  This creates the metallic, inharmonic character
+        // of hi-hat and cymbal sounds.  Formula adapted from OPL2 die analysis.
+        uint32_t hh_ph = s.ops[13].phase >> 10;  // top 10 bits of 20-bit accumulator
+        uint32_t cy_ph = s.ops[17].phase >> 10;
+        uint32_t rm_xor = ((hh_ph >> 4) ^ (hh_ph >> 9) ^
+                           (cy_ph >> 1) ^ (cy_ph >> 7)) & 1u;
+
+        // ---- Hi-Hat (op13): advance normally, output with noise-modified phase ----
+        {
+            Opl3Op& op = s.ops[13];
+            Opl3Ch& ch = s.ch[7];
+            if (op.env_state != Opl3Env::OFF) {
+                uint32_t sl = (uint32_t)op.sl * (OPL3_ENV_MAX / 15u);
+                env_advance(op, ch.block, ch.fnum, (uint8_t)sl);
+                op.phase = (op.phase + op.phase_inc) & 0xFFFFFu;
+                // Flip bit 8 of the 10-bit phase index when rm_xor=1 to inject noise.
+                uint32_t ph10 = (op.phase >> 10) ^ (rm_xor ? 0x100u : 0u);
+                uint32_t saved = op.phase;
+                op.phase = (ph10 & 0x3FFu) << 10u;
+                int16_t sample = op_output(op, 0, am_att, op.tremolo);
+                op.phase = saved;
+                sum_l += sample;
+                sum_r += sample;
+            }
+        }
+
+        // ---- Snare Drum (op16): phase driven by HH sign + rm_xor ----
+        {
+            Opl3Op& op = s.ops[16];
+            Opl3Ch& ch = s.ch[7];
+            if (op.env_state != Opl3Env::OFF) {
+                uint32_t sl = (uint32_t)op.sl * (OPL3_ENV_MAX / 15u);
+                env_advance(op, ch.block, ch.fnum, (uint8_t)sl);
+                op.phase = (op.phase + op.phase_inc) & 0xFFFFFu;
+                // Phase based on HH sign bit (creates snare body) XOR noise (snare rattle)
+                uint32_t hh_sign = (s.ops[13].phase >> 19) & 1u;
+                uint32_t sd_ph10 = (hh_sign ? 0x200u : 0x000u) ^ (rm_xor ? 0x100u : 0x000u);
+                uint32_t saved = op.phase;
+                op.phase = sd_ph10 << 10u;
+                int16_t sample = op_output(op, 0, am_att, op.tremolo);
+                op.phase = saved;
+                sum_l += sample;
+                sum_r += sample;
+            }
+        }
+
+        // ---- Tom-Tom (op14): standard single-operator, no phase manipulation ----
+        {
+            Opl3Op& op = s.ops[14];
+            Opl3Ch& ch = s.ch[8];
+            if (op.env_state != Opl3Env::OFF) {
+                uint32_t sl = (uint32_t)op.sl * (OPL3_ENV_MAX / 15u);
+                env_advance(op, ch.block, ch.fnum, (uint8_t)sl);
+                op.phase = (op.phase + op.phase_inc) & 0xFFFFFu;
+                int16_t sample = op_output(op, 0, am_att, op.tremolo);
+                sum_l += sample;
+                sum_r += sample;
+            }
+        }
+
+        // ---- Cymbal (op17): phase combination of op17 + bit 8 from HH + rm_xor ----
+        {
+            Opl3Op& op = s.ops[17];
+            Opl3Ch& ch = s.ch[8];
+            if (op.env_state != Opl3Env::OFF) {
+                uint32_t sl = (uint32_t)op.sl * (OPL3_ENV_MAX / 15u);
+                env_advance(op, ch.block, ch.fnum, (uint8_t)sl);
+                op.phase = (op.phase + op.phase_inc) & 0xFFFFFu;
+                // Combine CY lower bits with HH bit 8 and noise for cymbal character
+                uint32_t cy_ph10 = (op.phase >> 10) & 0x1FFu;
+                uint32_t hh_bit8 = (s.ops[13].phase >> 18) & 1u;  // bit 8 of HH 10-bit
+                uint32_t cy_override = cy_ph10 ^ (hh_bit8 << 8u) ^ (rm_xor ? 0x200u : 0u);
+                uint32_t saved = op.phase;
+                op.phase = (cy_override & 0x3FFu) << 10u;
+                int16_t sample = op_output(op, 0, am_att, op.tremolo);
+                op.phase = saved;
+                sum_l += sample;
+                sum_r += sample;
+            }
         }
     }
 

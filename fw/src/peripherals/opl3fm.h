@@ -118,9 +118,10 @@ struct Opl3State {
     int8_t   lfo_vib_out;   // current vibrato value (-127..127)
     bool     deep_tremolo;  // 0=1.0dB, 1=4.8dB  (0xBD bit 7)
     bool     deep_vibrato;  // 0=7 cents, 1=14 cents (0xBD bit 6)
-    bool     rhythm;        // rhythm mode (0xBD bit 5)
-    uint8_t  rhythm_key;    // rhythm key-on bits [4:0] (0xBD bits 4:0)
-    bool     opl3_mode;     // OPL3 mode enable (0x105 bit 0)
+    bool     rhythm;           // rhythm mode (0xBD bit 5)
+    uint8_t  rhythm_key;       // rhythm key-on bits [4:0] (0xBD bits 4:0), current
+    uint8_t  rhythm_key_prev;  // previous value for rising/falling edge detection
+    bool     opl3_mode;        // OPL3 mode enable (0x105 bit 0)
     uint8_t  fourop_en;     // 4-op pair enable (0x104 bits 5:0)
     uint8_t  note_sel;      // NOTE-SEL (0x08 bit 6)
 };
