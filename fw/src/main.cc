@@ -290,8 +290,8 @@ int main() {
 
     // 9b. Wire RESET_TO_MENU callback: API service → MenuApp (Stage 18).
     // 9c. Bind ApiWindow to MenuApp for LAUNCH screen active-payload tracking (Stage 20).
-    static MenuApp* g_menu_app = &menu_app;
-    api_win.set_reset_menu_fn([]() { g_menu_app->request_reset_to_menu(); });
+    // menu_app is a static local — accessible from [] lambdas without capture.
+    api_win.set_reset_menu_fn([]() { menu_app.request_reset_to_menu(); });
     menu_app.bind_api_window(api_win);
 
     log_info("Menu mailbox initialised");

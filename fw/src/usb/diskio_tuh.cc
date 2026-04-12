@@ -39,7 +39,7 @@ static volatile bool     g_io_ok     = false;
 static bool read_complete_cb(uint8_t dev_addr,
                                tuh_msc_complete_data_t const* cb_data) {
     (void)dev_addr;
-    g_io_ok   = (cb_data->csw.status == 0);
+    g_io_ok   = (cb_data->csw->status == 0);
     g_io_done = true;
     return true;
 }

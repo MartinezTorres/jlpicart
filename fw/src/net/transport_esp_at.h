@@ -18,6 +18,7 @@
 // so service-level logic can be exercised without real hardware.
 
 #include "diag/diag.h"
+#include <cstddef>
 #include <cstdint>
 
 class TransportEspAt {

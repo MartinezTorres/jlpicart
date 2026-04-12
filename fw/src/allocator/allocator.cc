@@ -1,6 +1,7 @@
 // allocator.cc — Allocator implementation.
 
 #include "allocator/allocator.h"
+#include "allocator/hw_probe.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------
@@ -48,11 +49,7 @@ void LaunchPlan::add_failure(const char* cap_id, LaunchFailureKind kind, bool wa
 // ---------------------------------------------------------------------------
 
 bool Allocator::probe_hw_capability(const char* name) {
-    // Stage 8: probing not yet implemented.  Each peripheral's Stage 9+
-    // implementation will add a concrete probe here (e.g. AT command ping
-    // for net.wifi, I2C scan for ui.oled).
-    (void)name;
-    return true;
+    return hw_probe(name);
 }
 
 // ---------------------------------------------------------------------------

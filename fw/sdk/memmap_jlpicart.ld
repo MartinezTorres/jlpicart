@@ -23,7 +23,7 @@
 
 MEMORY
 {
-    FLASH(rx) :           ORIGIN = 0x10000000, LENGTH = 256k
+    FLASH(rx) :           ORIGIN = 0x10000000, LENGTH = 1024k
     FLASH1M(rx) :         ORIGIN = 0x10100000, LENGTH = 15m
      
     RAM(rwx) :            ORIGIN = 0x20000000, LENGTH = 256k

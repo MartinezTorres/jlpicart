@@ -15,6 +15,7 @@
 //     end-to-end crypto owned by RP2350 for those flows).
 
 #include "net/transport_esp_at.h"
+#include <cstdlib>
 #include <cstring>
 #include <cstdio>
 

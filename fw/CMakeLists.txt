@@ -98,8 +98,9 @@ add_executable(jlpicart
     src/storage/append_log.cc
     src/storage/storage_health.cc
 
-    # Allocator (Stage 8)
+    # Allocator (Stage 8 + gap #2 HW probes)
     src/allocator/allocator.cc
+    src/allocator/hw_probe.cc
     src/allocator/resource_model.cc
 
     # Activation (Stage 8)
@@ -186,7 +187,10 @@ target_compile_definitions(jlpicart PRIVATE
 
 target_link_libraries(jlpicart
     pico_stdlib
+    pico_multicore
     hardware_flash
+    hardware_i2c
+    hardware_pwm
     pico_unique_id
     pico_rand
 )

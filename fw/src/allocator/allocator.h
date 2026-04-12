@@ -101,7 +101,8 @@ public:
 
 private:
     // Probe a HW capability for presence/health.
-    // Stage 8: always returns true — real per-peripheral probing deferred
-    // to Stage 9+ when concrete peripheral drivers are implemented.
+    // Delegates to hw_probe() in allocator/hw_probe.cc, which performs
+    // real hardware checks (AT ping, I2C scan) on firmware and returns
+    // true unconditionally in host tests.
     static bool probe_hw_capability(const char* name);
 };

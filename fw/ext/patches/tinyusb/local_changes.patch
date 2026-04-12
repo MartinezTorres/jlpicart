@@ -154,7 +154,6 @@ index ce6e7fb2d..e73433535 100644
    (void) rhport;
 -  TU_VERIFY (MSC_SUBCLASS_SCSI == desc_itf->bInterfaceSubClass &&
 +
-+  printf_("WOW!\n");
 +  TU_VERIFY (
 +    (
 +      MSC_SUBCLASS_SCSI == desc_itf->bInterfaceSubClass ||

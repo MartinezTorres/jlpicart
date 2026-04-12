@@ -4,6 +4,7 @@
 
 #include "usb/usb_install_reader.h"
 #include "diag/diag.h"
+#include "crypto/sha256.h"
 #include "storage/flash_device.h"
 #include "storage/flash_layout.h"
 #include <cstring>
@@ -32,7 +33,7 @@ DiagStatus UsbInstallReader::read_file(const char* path, uint8_t* buf,
     FRESULT res = f_open(&fil, fpath, FA_READ);
     if (res != FR_OK) {
         *out_len = 0;
-        return diag_status(DiagCode::STORAGE_NOT_FOUND);
+        return DiagStatus::error(DiagCode::STORAGE_NOT_FOUND);
     }
 
     UINT bytes_read = 0;
@@ -41,11 +42,11 @@ DiagStatus UsbInstallReader::read_file(const char* path, uint8_t* buf,
 
     if (res != FR_OK) {
         *out_len = 0;
-        return diag_status(DiagCode::STORAGE_IO_ERROR);
+        return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
     }
 
     *out_len = bytes_read;
-    return diag_ok();
+    return DiagStatus::success();
 }
 
 DiagStatus UsbInstallReader::hash_file(const char* path,
@@ -56,10 +57,10 @@ DiagStatus UsbInstallReader::hash_file(const char* path,
     FIL fil;
     FRESULT res = f_open(&fil, fpath, FA_READ);
     if (res != FR_OK) {
-        return diag_status(DiagCode::STORAGE_NOT_FOUND);
+        return DiagStatus::error(DiagCode::STORAGE_NOT_FOUND);
     }
 
-    sha256_ctx ctx;
+    Sha256Ctx ctx;
     sha256_init(&ctx);
 
     uint8_t chunk[CHUNK_SIZE];
@@ -68,7 +69,7 @@ DiagStatus UsbInstallReader::hash_file(const char* path,
         res = f_read(&fil, chunk, sizeof(chunk), &bytes_read);
         if (res != FR_OK) {
             f_close(&fil);
-            return diag_status(DiagCode::STORAGE_IO_ERROR);
+            return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
         }
         if (bytes_read == 0) break;
         sha256_update(&ctx, chunk, bytes_read);
@@ -76,7 +77,7 @@ DiagStatus UsbInstallReader::hash_file(const char* path,
 
     f_close(&fil);
     sha256_final(&ctx, digest);
-    return diag_ok();
+    return DiagStatus::success();
 }
 
 bool UsbInstallReader::file_exists(const char* path) {
@@ -97,7 +98,7 @@ DiagStatus UsbInstallReader::copy_to_flash(const char* path,
     FIL fil;
     if (f_open(&fil, fpath, FA_READ) != FR_OK) {
         *out_size = 0;
-        return diag_status(DiagCode::STORAGE_NOT_FOUND);
+        return DiagStatus::error(DiagCode::STORAGE_NOT_FOUND);
     }
 
     uint8_t sector_buf[FLASH_SECTOR_SIZE];
@@ -110,7 +111,7 @@ DiagStatus UsbInstallReader::copy_to_flash(const char* path,
         if (res != FR_OK) {
             f_close(&fil);
             *out_size = total;
-            return diag_status(DiagCode::STORAGE_IO_ERROR);
+            return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
         }
         if (bytes_read == 0) break;
 
@@ -127,7 +128,7 @@ DiagStatus UsbInstallReader::copy_to_flash(const char* path,
 
     f_close(&fil);
     *out_size = total;
-    return diag_ok();
+    return DiagStatus::success();
 }
 
 #endif // JLPICART_HOST_TEST

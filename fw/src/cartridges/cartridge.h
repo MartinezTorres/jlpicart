@@ -18,13 +18,16 @@
 #include <cstring>
 #include <utility>  // std::pair
 
-// RAMFUNC: mark a function to run from SRAM (not flash) on hardware.
+// RAMFUNC(name): mark a function to run from SRAM (not flash) on hardware.
 // On hardware, bus callbacks run on Core 0 in the tight loop and must not
 // stall on flash XIP cache misses.  On host, the attribute is a no-op.
+//
+// Uses raw GCC attributes rather than the pico-sdk __no_inline_not_in_flash_func
+// wrapper so this header stays SDK-independent and safe to use in host tests.
 #ifdef JLPICART_HOST_TEST
-#  define RAMFUNC
+#  define RAMFUNC(name) name
 #else
-#  define RAMFUNC __no_inline_not_in_flash_func
+#  define RAMFUNC(name) __attribute__((noinline, section(".time_critical." #name))) name
 #endif
 
 struct Cartridge {
