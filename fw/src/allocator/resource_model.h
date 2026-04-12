@@ -24,12 +24,19 @@ static constexpr uint32_t RP2350_TOTAL_SRAM    = 520u * 1024u;  // 520 KB
 static constexpr uint8_t  RP2350_TOTAL_PIO_SMS = 12u;           // 3 PIOs × 4 SMs
 static constexpr uint8_t  RP2350_TOTAL_DMA_CH  = 16u;
 
-// System reserves: consumed by bus loop (Core 0 tight loop + PIO), Core 1
-// scheduler, API window buffer, menu mailbox page, and firmware stack.
-// Peripherals are allocated from the remainder.
+// System reserves: SRAM consumed by firmware infrastructure that is not
+// modelled as a capability resource:
+//   ~16 KB — menu mailbox page buffer (static in main.cc)
+//   ~17 KB — BUS::cartridges[8] × 2 184 B per Cartridge struct
+//   ~16 KB — Core 0 + Core 1 stacks (8 KB each)
+//   ~64 KB — linker .bss / .data / heap headroom, tinyusb stack, log buffer
+//   ──────
+//   ~113 KB → rounded up to 128 KB
+//
+// api.core, sw.psg, sw.scc, sw.opl4 declare their own SRAM above this floor.
 static constexpr uint32_t SYSTEM_SRAM_RESERVE   = 128u * 1024u;  // 128 KB
-static constexpr uint8_t  SYSTEM_PIO_SM_RESERVE = 4u;
-static constexpr uint8_t  SYSTEM_DMA_RESERVE    = 2u;
+static constexpr uint8_t  SYSTEM_PIO_SM_RESERVE = 4u;   // bus loop uses PIO0 SMs 0-3
+static constexpr uint8_t  SYSTEM_DMA_RESERVE    = 2u;   // reserved for future DMA use
 
 // Available budget for peripheral allocation.
 static constexpr uint32_t SRAM_ALLOC_BUDGET   = RP2350_TOTAL_SRAM    - SYSTEM_SRAM_RESERVE;
