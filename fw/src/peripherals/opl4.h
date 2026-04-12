@@ -55,6 +55,7 @@
 // See spec.md "Audio devices — OPL4" and bootstrapping.md Stage 30.
 
 #include "cartridges/cartridge.h"
+#include "peripherals/opl3fm.h"
 #include <cstdint>
 
 // ---------------------------------------------------------------------------
@@ -144,11 +145,17 @@ struct Opl4State {
     volatile uint8_t wave_regs[256];
     volatile uint8_t wave_addr;  // current wave register address
 
-    // ---- OPL3 FM section: register storage only ----
-    // Index [0..255] = primary (0x7E/0x7F), [256..511] = secondary.
+    // ---- OPL3 FM section: register mirror + live FM state ----
+    // Mirror index [0..255] = primary bank, [256..511] = secondary bank.
     volatile uint8_t opl3_regs[512];
-    volatile uint8_t opl3_addr_primary;    // last address written to 0x7E
-    volatile uint8_t opl3_addr_secondary;  // last address written to secondary port
+    volatile uint8_t opl3_addr_primary;    // last address written to 0x7E (port)
+    volatile uint8_t opl3_addr_secondary;  // last address written to 0xC4 (port)
+
+    // FM synthesis state — written by Core 0 (register writes) + Core 1 (synthesis).
+    Opl3State        opl3;
+
+    // ---- PCM LFO (global, set via wave reg 0x00) ----
+    uint32_t         pcm_lfo_acc;   // Q16 phase accumulator (wraps at 65536)
 
     // ---- Status / global ----
     volatile uint8_t mem_config;   // MEM_CONFIG register

@@ -132,6 +132,7 @@ add_executable(jlpicart
     src/peripherals/scc.cc
 
     # OPL4 (YMF278B) audio emulation (Stage 30)
+    src/peripherals/opl3fm.cc
     src/peripherals/opl4.cc
 
     # User Profiles (Stage 15)

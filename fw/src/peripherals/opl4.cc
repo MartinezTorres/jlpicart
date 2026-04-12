@@ -4,13 +4,15 @@
 //
 // PCM synthesis model (per sample):
 //   1. Key-on events: restart envelope + phase accumulator.
-//   2. Advance envelope ADSR state machine.
-//   3. Advance phase accumulator; read wave sample from ROM.
-//   4. Apply envelope attenuation + total level.
-//   5. Mix all 24 channels to a mono 8-bit output.
+//   2. Advance global PCM LFO counter (speed from wave reg 0x00).
+//   3. Advance envelope ADSR state machine.
+//   4. Advance phase accumulator; read wave sample with linear interpolation.
+//   5. Apply AM (tremolo) and VIB (vibrato) from LFO if channel flags set.
+//   6. Apply envelope attenuation + total level; mix with stereo pan.
+//   7. Mix FM (opl3_compute_sample) and PCM to a mono 8-bit output.
 //
 // Envelope attenuation is 10-bit (0=max, OPL4_ENV_MAX=silent).
-// Attack  decreases attenuation exponentially (simplified: linear ramp).
+// Attack  decreases attenuation (simplified linear ramp).
 // Decay1  increases attenuation at D1R rate until DL*OPL4_ENV_SCALE.
 // Decay2  continues increasing at D2R rate toward OPL4_ENV_MAX.
 // Release increases attenuation at RR  rate to OPL4_ENV_MAX.
@@ -18,6 +20,12 @@
 // Wave ROM format: 12-byte descriptors at ROM byte 0 (see opl4.h).
 // Supported formats: 8-bit signed PCM, 16-bit signed PCM.
 // 12-bit and ADPCM: limited support (ADPCM has a basic IMA decoder).
+//
+// PCM LFO (global, wave reg 0x00 bits [2:0]):
+//   Speed 0-7: 0.168, 0.337, 0.674, 1.011, 1.485, 2.359, 3.527, 7.066 Hz.
+//   Per-channel: AM (tremolo) and VIB (vibrato) flags at reg 0x68+ch.
+//   Per-channel LFO[1:0] selects depth: 0=none, 1=shallow, 2=medium, 3=deep.
+//   VIB depth: ~±0, ±3.4, ±6.7, ±13.4 cents. AM depth: ~0, 1.8, 2.5, 3.0 dB.
 
 #include "peripherals/opl4.h"
 #include "boards/gpio_defs.h"
@@ -46,6 +54,23 @@ static constexpr uint32_t kEnvStep[16] = {
 static constexpr uint32_t kAttStep[16] = {
     0, 2, 2, 4, 4, 8, 8, 16, 16, 32, 32, 64, 64, 128, 256, 512
 };
+
+// ---------------------------------------------------------------------------
+// PCM LFO constants
+// ---------------------------------------------------------------------------
+
+// PCM LFO Q16 increment per sample for speed 0-7.
+// Speed[s] = freq[s] * 65536 / 44100.
+// Frequencies: 0.168, 0.337, 0.674, 1.011, 1.485, 2.359, 3.527, 7.066 Hz.
+static const uint32_t kPcmLfoInc[8] = { 250, 500, 1001, 1503, 2205, 3504, 5239, 10506 };
+
+// AM (tremolo) depth in OPL4_ENV attenuation units for LFO[1:0]=0..3.
+// Units: 0=0, then ~1.8 dB, 2.5 dB, 3.0 dB — mapped to env scale (64 units/DL).
+static const uint32_t kAmDepth[4] = { 0, 19, 27, 32 };
+
+// VIB (vibrato) depth multiplier (parts per 1024 of F-number) for LFO[1:0]=0..3.
+// Corresponds to ±0, ±3.4, ±6.7, ±13.4 cents peak-to-peak.
+static const int32_t kVibDepth[4] = { 0, 4, 8, 16 };
 
 // ---------------------------------------------------------------------------
 // Wave ROM helpers
@@ -292,7 +317,10 @@ static std::pair<bool, uint8_t> RAMFUNC(opl4_wave_data_write)(Cartridge& c, uint
     uint8_t val   = (uint8_t)(bus >> GPIO_D0);
     s.wave_regs[reg] = val;
 
-    if (reg == 0x02u) {
+    if (reg == 0x00u) {
+        // LFO speed — reset accumulator on speed change (prevents phase glitch)
+        s.pcm_lfo_acc = 0u;
+    } else if (reg == 0x02u) {
         s.mem_config = val & 0x03u;
     } else {
         opl4_update_channel(s, reg, val);
@@ -315,11 +343,31 @@ static std::pair<bool, uint8_t> RAMFUNC(opl4_opl3_addr_write)(Cartridge& c, uint
     return {false, 0};
 }
 
-// Port 0x7F write: OPL3 primary data write (register store only).
+// Port 0x7F write: OPL3 primary data write.
 static std::pair<bool, uint8_t> RAMFUNC(opl4_opl3_data_write)(Cartridge& c, uint32_t bus)
 {
+    Opl4State& s  = *reinterpret_cast<Opl4State*>(c.ram_base);
+    uint8_t val   = (uint8_t)(bus >> GPIO_D0);
+    s.opl3_regs[s.opl3_addr_primary] = val;
+    opl3_write_reg(s.opl3, (uint16_t)s.opl3_addr_primary, val);
+    return {false, 0};
+}
+
+// Port 0xC4 write: OPL3 secondary register address.
+static std::pair<bool, uint8_t> RAMFUNC(opl4_opl3_sec_addr_write)(Cartridge& c, uint32_t bus)
+{
+    Opl4State& s        = *reinterpret_cast<Opl4State*>(c.ram_base);
+    s.opl3_addr_secondary = (uint8_t)(bus >> GPIO_D0);
+    return {false, 0};
+}
+
+// Port 0xC5 write: OPL3 secondary data write.
+static std::pair<bool, uint8_t> RAMFUNC(opl4_opl3_sec_data_write)(Cartridge& c, uint32_t bus)
+{
     Opl4State& s = *reinterpret_cast<Opl4State*>(c.ram_base);
-    s.opl3_regs[s.opl3_addr_primary] = (uint8_t)(bus >> GPIO_D0);
+    uint8_t val  = (uint8_t)(bus >> GPIO_D0);
+    s.opl3_regs[0x100u + s.opl3_addr_secondary] = val;
+    opl3_write_reg(s.opl3, (uint16_t)(0x100u | s.opl3_addr_secondary), val);
     return {false, 0};
 }
 
@@ -346,12 +394,14 @@ static std::pair<bool, uint8_t> RAMFUNC(opl4_mem_config_write)(Cartridge& c, uin
 void opl4_reset(Opl4State& state)
 {
     memset(&state, 0, sizeof(state));
-    // All channels start silent (envelope = OFF, full attenuation).
+    // All PCM channels start silent (envelope = OFF, full attenuation).
     for (int i = 0; i < 24; ++i) {
         state.channels[i].env_phase = Opl4EnvPhase::OFF;
         state.channels[i].env_level = OPL4_ENV_MAX;
         state.channels[i].tl        = 0x7Fu;  // maximum attenuation at reset
     }
+    // FM section reset (also initialises log-sin/pow2 tables on first call).
+    opl3_reset(state.opl3);
 }
 
 void opl4_setup(Cartridge& c, Opl4State& state,
@@ -364,10 +414,14 @@ void opl4_setup(Cartridge& c, Opl4State& state,
     c.name     = "opl4";
     c.ram_base = reinterpret_cast<uint8_t*>(&state);
 
-    // OPL3 FM section ports.
+    // OPL3 FM section ports (primary bank).
     c.io_write_callbacks[0x7Eu] = opl4_opl3_addr_write;
     c.io_write_callbacks[0x7Fu] = opl4_opl3_data_write;
     c.io_read_callbacks [0x7Fu] = opl4_opl3_data_read;
+
+    // OPL3 FM section ports (secondary bank — Moonsound ports 0xC4/0xC5).
+    c.io_write_callbacks[0xC4u] = opl4_opl3_sec_addr_write;
+    c.io_write_callbacks[0xC5u] = opl4_opl3_sec_data_write;
 
     // Wave/PCM section ports.
     c.io_write_callbacks[0xF5u] = opl4_mem_config_write;
@@ -382,7 +436,19 @@ void opl4_setup(Cartridge& c, Opl4State& state,
 
 uint8_t opl4_compute_sample(Opl4State& state)
 {
-    int32_t mixed = 0;
+    // ---- Global PCM LFO update ----
+    // Speed register is wave_regs[0x00] bits [2:0].
+    uint8_t lfo_speed = state.wave_regs[0x00u] & 0x07u;
+    state.pcm_lfo_acc += kPcmLfoInc[lfo_speed];
+    if (state.pcm_lfo_acc >= 65536u) state.pcm_lfo_acc -= 65536u;
+
+    // Triangular LFO wave: lfo_tri goes 0→255→0 over one cycle.
+    uint8_t lfo_tri = (uint8_t)(state.pcm_lfo_acc >> 8);
+    if (state.pcm_lfo_acc & 0x8000u) lfo_tri = 255u - lfo_tri;
+
+    // ---- PCM channel mix (stereo L/R separate accumulators) ----
+    int32_t pcm_l = 0;
+    int32_t pcm_r = 0;
 
     for (int i = 0; i < 24; ++i) {
         Opl4Channel& ch = state.channels[i];
@@ -404,16 +470,14 @@ uint8_t opl4_compute_sample(Opl4State& state)
         Opl4WaveDesc desc = {};
         if (!opl4_parse_wave_desc(state.wave_rom, state.wave_rom_size,
                                    ch.wave_num, desc)) {
-            // No ROM or out-of-range wave: treat as silence.
             ch.env_phase = Opl4EnvPhase::OFF;
             continue;
         }
 
-        // Compute step: step_fp16 = FN × 2^(oct_signed + 7)
-        // where oct_signed = OCT - 8, range -8..+7.
+        // Base step: FN × 2^(oct_signed + 7), oct_signed = OCT - 8.
         int32_t oct_signed = (int32_t)ch.oct - 8;
         uint32_t step_fp16;
-        int32_t shift = oct_signed + 7;  // = oct - 1
+        int32_t shift = oct_signed + 7;
         if (shift >= 0) {
             step_fp16 = (uint32_t)ch.fnum << shift;
         } else {
@@ -421,46 +485,64 @@ uint8_t opl4_compute_sample(Opl4State& state)
         }
         if (step_fp16 == 0u) step_fp16 = 1u;
 
+        // VIB (vibrato): modulate step by LFO triangular wave.
+        if (ch.vib && kVibDepth[ch.lfo] != 0) {
+            // lfo_tri is 0..255 triangle. Convert to ±127 centred.
+            int32_t signed_tri = (int32_t)lfo_tri - 128;
+            int32_t delta = ((int32_t)step_fp16 * signed_tri * kVibDepth[ch.lfo]) >> 17;
+            step_fp16 = (uint32_t)((int32_t)step_fp16 + delta);
+            if (step_fp16 == 0u) step_fp16 = 1u;
+        }
+
         // Advance phase accumulator.
         ch.phase_acc += step_fp16;
 
-        // Compute sample index (integer part of phase_acc).
+        // Compute sample index and fractional part for interpolation.
         uint32_t sample_idx = ch.phase_acc >> 16;
+        uint32_t frac       = ch.phase_acc & 0xFFFFu;  // Q16 fractional part
 
         // Handle loop / end.
         if (desc.loop_end > 0u && sample_idx >= desc.loop_end) {
-            // Wrap to loop start, preserving fractional part.
             uint32_t loop_len = desc.loop_end - desc.loop_start;
             if (loop_len == 0u) loop_len = 1u;
-            uint32_t frac = ch.phase_acc & 0xFFFFu;
             sample_idx = desc.loop_start + (sample_idx - desc.loop_end) % loop_len;
             ch.phase_acc = (sample_idx << 16) | frac;
         }
 
-        // Read wave sample.
+        // Read wave sample with linear interpolation between adjacent samples.
         int16_t raw_sample;
         if (desc.format == 3u) {
-            // ADPCM: each nibble is one sample; byte address = sample_idx / 2.
+            // ADPCM: fractional interpolation not meaningful, use direct decode.
             uint32_t byte_addr = desc.start_addr + sample_idx / 2u;
             if (state.wave_rom && byte_addr < state.wave_rom_size) {
                 uint8_t byte = state.wave_rom[byte_addr];
-                uint8_t nibble;
-                if ((sample_idx & 1u) == 0u) {
-                    nibble = (byte >> 4) & 0x0Fu;
-                } else {
-                    nibble = byte & 0x0Fu;
-                }
+                uint8_t nibble = ((sample_idx & 1u) == 0u)
+                                 ? (byte >> 4) & 0x0Fu
+                                 : byte & 0x0Fu;
                 raw_sample = adpcm_decode_nibble(nibble, ch.adpcm_pred, ch.adpcm_step);
             } else {
                 raw_sample = 0;
             }
         } else {
-            // For 16-bit PCM each sample is 2 bytes; compute actual byte address.
-            uint32_t byte_addr = (desc.format == 2u)
+            // PCM with linear interpolation.
+            uint32_t byte_addr0 = (desc.format == 2u)
                 ? desc.start_addr + sample_idx * 2u
                 : desc.start_addr + sample_idx;
-            raw_sample = read_wave_sample(state.wave_rom, state.wave_rom_size,
-                                           desc.format, byte_addr);
+            int16_t s0 = read_wave_sample(state.wave_rom, state.wave_rom_size,
+                                           desc.format, byte_addr0);
+            // Next sample index (clamped or looped).
+            uint32_t next_idx = sample_idx + 1u;
+            if (desc.loop_end > 0u && next_idx >= desc.loop_end) {
+                next_idx = desc.loop_start;
+            }
+            uint32_t byte_addr1 = (desc.format == 2u)
+                ? desc.start_addr + next_idx * 2u
+                : desc.start_addr + next_idx;
+            int16_t s1 = read_wave_sample(state.wave_rom, state.wave_rom_size,
+                                           desc.format, byte_addr1);
+            // Lerp: raw = s0 + (s1 - s0) * frac / 65536
+            raw_sample = (int16_t)((int32_t)s0 +
+                         (((int32_t)s1 - (int32_t)s0) * (int32_t)frac >> 16));
         }
 
         // Update envelope.
@@ -468,20 +550,46 @@ uint8_t opl4_compute_sample(Opl4State& state)
         if (dl_thresh > OPL4_ENV_MAX) dl_thresh = OPL4_ENV_MAX;
         opl4_env_update(ch, dl_thresh);
 
-        // Compute total attenuation: env_level + TL*8 (capped at OPL4_ENV_MAX).
-        uint32_t attenuation = ch.ld ? ((uint32_t)ch.tl * 8u) : (ch.env_level + (uint32_t)ch.tl * 8u);
+        // AM (tremolo): add LFO-driven attenuation offset.
+        uint32_t am_extra = 0u;
+        if (ch.am && kAmDepth[ch.lfo] > 0u) {
+            // lfo_tri 0..255 → attenuation 0..am_depth
+            am_extra = ((uint32_t)lfo_tri * kAmDepth[ch.lfo]) >> 8;
+        }
+
+        // Total attenuation: env_level + TL*8 + AM, capped at OPL4_ENV_MAX.
+        uint32_t attenuation = ch.ld
+            ? ((uint32_t)ch.tl * 8u + am_extra)
+            : (ch.env_level + (uint32_t)ch.tl * 8u + am_extra);
         if (attenuation > OPL4_ENV_MAX) attenuation = OPL4_ENV_MAX;
 
-        // Scale sample by (OPL4_ENV_MAX - attenuation) / OPL4_ENV_MAX.
-        // raw_sample is int16_t (-32768..32767) → scale to roughly ±127.
+        // Scale sample (raw_sample ≈ ±32768; shift right 8 → ±127 scale).
         int32_t scaled = ((int32_t)(raw_sample >> 8) *
                           (int32_t)(OPL4_ENV_MAX - attenuation)) / (int32_t)OPL4_ENV_MAX;
-        mixed += scaled;
+
+        // Stereo pan: pan 0=hard-L, 7=centre, 8=centre, 15=hard-R.
+        // For panning, derive L/R gain in [0, 256].
+        // pan=0: L=256,R=0; pan=7/8: L=256,R=256; pan=15: L=0,R=256.
+        uint8_t pan = ch.pan;
+        int32_t l_gain = (pan <= 7u)  ? 256  : ((int32_t)(15u - pan) * 256 / 7);
+        int32_t r_gain = (pan >= 8u)  ? 256  : ((int32_t)pan * 256 / 7);
+        pcm_l += (scaled * l_gain) >> 8;
+        pcm_r += (scaled * r_gain) >> 8;
     }
 
-    // 24 channels, each ±127 → mixed ±3048.
-    // Map to [0,255]: 128 + mixed/24 ≈ 128 + mixed/24.
-    int32_t output = 128 + mixed / 24;
+    // ---- FM synthesis (OPL3) ----
+    int16_t fm_l = 0;
+    int16_t fm_r = 0;
+    opl3_compute_sample(state.opl3, fm_l, fm_r);
+
+    // ---- Mix PCM + FM to mono output ----
+    // PCM: 24 channels each ±127 → sum /24 → ±127.
+    // FM: 18 channels each ±512 → sum /36 → ±256 max; scale down to ±128.
+    //     Use /32 (≈ /36) for slightly warmer FM level.
+    int32_t pcm_mono = (pcm_l + pcm_r) / (24 * 2);
+    int32_t fm_mono  = ((int32_t)fm_l + (int32_t)fm_r) / (32 * 2);
+
+    int32_t output = 128 + pcm_mono + fm_mono;
     if (output < 0)   output = 0;
     if (output > 255) output = 255;
     return (uint8_t)output;

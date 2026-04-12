@@ -224,7 +224,10 @@ set(SRC_BUS_MAP         "${FW_SRC}/bus/bus_map.cc")
 set(SRC_PERIPH_MGR      "${FW_SRC}/peripherals/peripheral_manager.cc")
 set(SRC_PSG             "${FW_SRC}/peripherals/psg.cc")
 set(SRC_SCC             "${FW_SRC}/peripherals/scc.cc")
-set(SRC_OPL4            "${FW_SRC}/peripherals/opl4.cc")
+set(SRC_OPL3FM          "${FW_SRC}/peripherals/opl3fm.cc")
+# opl4.cc references opl3fm symbols; always bundle together.
+set(SRC_OPL4            "${FW_SRC}/peripherals/opl3fm.cc"
+                        "${FW_SRC}/peripherals/opl4.cc")
 set(SRC_MAPPERS         "${FW_SRC}/mappers/mappers.cc")
 set(SRC_MAPPING_PLAN    "${FW_SRC}/bus/mapping_plan.cc")
 
