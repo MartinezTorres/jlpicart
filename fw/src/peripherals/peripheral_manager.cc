@@ -4,6 +4,7 @@
 #include "peripherals/psg.h"
 #include "peripherals/scc.h"
 #include "peripherals/opl4.h"
+#include "peripherals/sunrise_ide.h"
 #include "bus/bus_map.h"
 #include "mappers/mappers.h"
 #include "log/log.h"
@@ -134,6 +135,27 @@ void PeripheralManager::map_opl4(Opl4State& state,
     opl4_setup(dummy_slot, state, wave_rom, wave_rom_size);
 #endif
     log_info("OPL4 (YMF278B) wired at IO ports 0x7E/0x7F + 0xF5/0xF6/0xF7 (slot 5)");
+}
+
+void PeripheralManager::map_sunrise_ide(uint8_t slot, IdeState& state,
+                                         const uint8_t* nextor_rom, uint32_t nextor_size,
+                                         const uint8_t* disk_image, uint32_t disk_sectors)
+{
+    char buf[96];
+#ifndef JLPICART_HOST_TEST
+    ide_setup(BUS::cartridges[slot], state, nextor_rom, nextor_size,
+              disk_image, disk_sectors);
+#else
+    static Cartridge dummy_slot;
+    ide_setup(dummy_slot, state, nextor_rom, nextor_size, disk_image, disk_sectors);
+    (void)slot;
+#endif
+    snprintf(buf, sizeof(buf),
+             "Sunrise IDE wired: slot %u, nextor %s, disk %lu sectors",
+             slot,
+             nextor_rom ? "loaded" : "absent",
+             (unsigned long)disk_sectors);
+    log_info(buf);
 }
 
 void PeripheralManager::map_menu_page(uint8_t* page) {

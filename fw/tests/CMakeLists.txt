@@ -229,6 +229,7 @@ set(SRC_OPL3FM          "${FW_SRC}/peripherals/opl3fm.cc")
 # opl4.cc references opl3fm symbols; always bundle together.
 set(SRC_OPL4            "${FW_SRC}/peripherals/opl3fm.cc"
                         "${FW_SRC}/peripherals/opl4.cc")
+set(SRC_SUNRISE_IDE     "${FW_SRC}/peripherals/sunrise_ide.cc")
 set(SRC_MAPPERS         "${FW_SRC}/mappers/mappers.cc")
 set(SRC_MAPPING_PLAN    "${FW_SRC}/bus/mapping_plan.cc")
 
@@ -246,6 +247,7 @@ add_host_test(test_allocator
     ${SRC_PSG}
     ${SRC_SCC}
     ${SRC_OPL4}
+    ${SRC_SUNRISE_IDE}
     ${SRC_MAPPERS}
     ${SRC_MAPPING_PLAN}
     ${SRC_CAP_REG}
@@ -612,6 +614,12 @@ add_host_test(test_psg
 add_host_test(test_opl4
     host/test_opl4.cc
     ${SRC_OPL4}
+    ${SRC_DIAG}
+)
+
+add_host_test(test_sunrise_ide
+    host/test_sunrise_ide.cc
+    ${SRC_SUNRISE_IDE}
     ${SRC_DIAG}
 )
 

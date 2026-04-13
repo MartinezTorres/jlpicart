@@ -15,6 +15,7 @@
 #include "peripherals/psg.h"
 #include "peripherals/scc.h"
 #include "peripherals/opl4.h"
+#include "peripherals/sunrise_ide.h"
 #include "spine/capability_registry.h"
 #include <cstddef>
 #include <cstdint>
@@ -60,6 +61,18 @@ public:
     // opl4_reset() must have been called before this.
     void map_opl4(Opl4State& state,
                   const uint8_t* wave_rom, uint32_t wave_rom_size);
+
+    // Wire a Sunrise ATA-IDE compatible interface into a memory-mapped cartridge
+    // slot.  The slot serves a banked Nextor ROM at 0x4000–0x7FFF, with ATA
+    // task file registers and a sector data window overlaid at 0x7C00–0x7E0F.
+    //
+    // slot: BUS cartridge slot index (0–3) that will hold the IDE cartridge.
+    // nextor_rom / nextor_size: Nextor ROM image in XIP flash (null = no ROM).
+    // disk_image / disk_sectors: flat disk image in XIP flash (null = empty disk).
+    // ide_reset() must have been called on state before this.
+    void map_sunrise_ide(uint8_t slot, IdeState& state,
+                         const uint8_t* nextor_rom, uint32_t nextor_size,
+                         const uint8_t* disk_image, uint32_t disk_sectors);
 
     // Log a human-readable activation report via log_info/log_warn.
     void log_report(const LaunchPlan& plan) const;

@@ -136,6 +136,9 @@ add_executable(jlpicart
     src/peripherals/opl3fm.cc
     src/peripherals/opl4.cc
 
+    # Sunrise ATA-IDE emulation (Stage 34)
+    src/peripherals/sunrise_ide.cc
+
     # User Profiles (Stage 15)
     src/profiles/profile_store.cc
 

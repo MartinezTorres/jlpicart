@@ -48,6 +48,11 @@ const DriverDescriptor kDriverDescriptors[] = {
     // TransportEspAt is effectively a single initialized_ bool (≤ 4 B).
     // UART0 is HW and not a modelled resource.
     { "net.esp32", {} },
+
+    // Sunrise ATA-IDE compatible interface (Nextor mass storage).
+    // IdeState ≈ 560 B: 512-byte sector buffer + task file registers + state.
+    // Nextor ROM lives in XIP flash (zero SRAM); disk image also in XIP flash.
+    { "sw.sunrise_ide", { .sram_bytes = 1024u } },
 };
 
 const size_t kDriverDescriptorCount =
