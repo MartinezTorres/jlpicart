@@ -173,6 +173,32 @@ static const uint8_t kChMod[9] = { 0, 1, 2, 6, 7, 8, 12, 13, 14 };
 static const uint8_t kChCar[9] = { 3, 4, 5, 9, 10, 11, 15, 16, 17 };
 
 // ---------------------------------------------------------------------------
+// 4-op pair helpers
+//
+// fourop_en bits (register 0x104):
+//   bit 0 → bank-0 pair (ch0+ch3)
+//   bit 1 → bank-0 pair (ch1+ch4)
+//   bit 2 → bank-0 pair (ch2+ch5)
+//   bit 3 → bank-1 pair (ch0+ch3)
+//   bit 4 → bank-1 pair (ch1+ch4)
+//   bit 5 → bank-1 pair (ch2+ch5)
+//
+// Within a pair: ch_i 0-2 = leader (writes 0xBx trigger), ch_i 3-5 = follower.
+// ---------------------------------------------------------------------------
+
+static inline bool is_fourop_leader(const Opl3State& s, int bank, int ch_i)
+{
+    if (ch_i > 2) return false;
+    return (s.fourop_en >> (bank * 3 + ch_i)) & 1u;
+}
+
+static inline bool is_fourop_follower(const Opl3State& s, int bank, int ch_i)
+{
+    if (ch_i < 3 || ch_i > 5) return false;
+    return (s.fourop_en >> (bank * 3 + ch_i - 3)) & 1u;
+}
+
+// ---------------------------------------------------------------------------
 // Phase increment computation
 // ---------------------------------------------------------------------------
 
@@ -573,16 +599,31 @@ void opl3_write_reg(Opl3State& s, uint16_t reg, uint8_t val)
         s.ch[ci].block = (val >> 2) & 0x07u;
         // In rhythm mode, channels 6-8 of the primary bank are percussion.
         // Key-on/off for those is controlled exclusively by 0xBD; ignore it here.
-        if (!(bank == 0 && s.rhythm && ch_i >= 6)) {
+        // 4-op followers: key-on is driven by the leader's 0xBx write; ignore key bit.
+        if (!(bank == 0 && s.rhythm && ch_i >= 6) && !is_fourop_follower(s, bank, ch_i)) {
             bool new_keyon = (val >> 5) & 1u;
             if (new_keyon && !s.ch[ci].key_on) {
                 Opl3Op& mod = s.ops[op_base + kChMod[ch_i]];
                 Opl3Op& car = s.ops[op_base + kChCar[ch_i]];
                 env_key_on(mod, mod.ksr, s.ch[ci].block, s.ch[ci].fnum);
                 env_key_on(car, car.ksr, s.ch[ci].block, s.ch[ci].fnum);
+                if (is_fourop_leader(s, bank, ch_i)) {
+                    // Propagate key-on to the follower channel's operators.
+                    int hi_i  = ch_i + 3;
+                    int hi_ci = ch_base + hi_i;
+                    Opl3Op& hi_mod = s.ops[op_base + kChMod[hi_i]];
+                    Opl3Op& hi_car = s.ops[op_base + kChCar[hi_i]];
+                    env_key_on(hi_mod, hi_mod.ksr, s.ch[hi_ci].block, s.ch[hi_ci].fnum);
+                    env_key_on(hi_car, hi_car.ksr, s.ch[hi_ci].block, s.ch[hi_ci].fnum);
+                }
             } else if (!new_keyon && s.ch[ci].key_on) {
                 env_key_off(s.ops[op_base + kChMod[ch_i]]);
                 env_key_off(s.ops[op_base + kChCar[ch_i]]);
+                if (is_fourop_leader(s, bank, ch_i)) {
+                    int hi_i = ch_i + 3;
+                    env_key_off(s.ops[op_base + kChMod[hi_i]]);
+                    env_key_off(s.ops[op_base + kChCar[hi_i]]);
+                }
             }
             s.ch[ci].key_on = new_keyon;
         }
@@ -642,10 +683,88 @@ void opl3_compute_sample(Opl3State& s, int16_t& out_l, int16_t& out_r)
         for (int ch_i = 0; ch_i < 9; ++ch_i) {
             // In rhythm mode, channels 6-8 of the primary bank are handled below.
             if (bank == 0 && s.rhythm && ch_i >= 6) continue;
+            // 4-op follower: synthesized as part of the leader pass below.
+            if (is_fourop_follower(s, bank, ch_i)) continue;
 
             Opl3Ch& ch  = s.ch[ch_base + ch_i];
             Opl3Op& mod = s.ops[op_base + kChMod[ch_i]];
             Opl3Op& car = s.ops[op_base + kChCar[ch_i]];
+
+            uint32_t am_att = s.lfo_am_out;
+            int32_t  vib    = s.lfo_vib_out;  // ±4 (normal) or ±8 (deep)
+
+            // ---- 4-op leader: run 4-operator synthesis ----
+            if (is_fourop_leader(s, bank, ch_i)) {
+                int      hi_i  = ch_i + 3;
+                int      hi_ci = ch_base + hi_i;
+                Opl3Ch&  ch_hi = s.ch[hi_ci];
+                Opl3Op&  op2   = s.ops[op_base + kChMod[hi_i]];  // ch_hi modulator
+                Opl3Op&  op3   = s.ops[op_base + kChCar[hi_i]];  // ch_hi carrier
+
+                // All 4 operators silent → skip
+                if (mod.env_state == Opl3Env::OFF && car.env_state == Opl3Env::OFF &&
+                    op2.env_state == Opl3Env::OFF && op3.env_state == Opl3Env::OFF) continue;
+
+                // Advance envelopes
+                env_advance(mod, ch.block,    ch.fnum,    (uint8_t)((uint32_t)mod.sl * (OPL3_ENV_MAX / 15u)));
+                env_advance(car, ch.block,    ch.fnum,    (uint8_t)((uint32_t)car.sl * (OPL3_ENV_MAX / 15u)));
+                env_advance(op2, ch_hi.block, ch_hi.fnum, (uint8_t)((uint32_t)op2.sl * (OPL3_ENV_MAX / 15u)));
+                env_advance(op3, ch_hi.block, ch_hi.fnum, (uint8_t)((uint32_t)op3.sl * (OPL3_ENV_MAX / 15u)));
+
+                // Vibrato + phase advance
+                uint32_t mod_inc = mod.phase_inc;
+                uint32_t car_inc = car.phase_inc;
+                uint32_t op2_inc = op2.phase_inc;
+                uint32_t op3_inc = op3.phase_inc;
+                if (vib != 0) {
+                    if (mod.vibrato) mod_inc = (uint32_t)((int32_t)mod_inc + ((int32_t)mod_inc * vib) / 1024);
+                    if (car.vibrato) car_inc = (uint32_t)((int32_t)car_inc + ((int32_t)car_inc * vib) / 1024);
+                    if (op2.vibrato) op2_inc = (uint32_t)((int32_t)op2_inc + ((int32_t)op2_inc * vib) / 1024);
+                    if (op3.vibrato) op3_inc = (uint32_t)((int32_t)op3_inc + ((int32_t)op3_inc * vib) / 1024);
+                }
+                mod.phase = (mod.phase + mod_inc) & 0xFFFFFu;
+                car.phase = (car.phase + car_inc) & 0xFFFFFu;
+                op2.phase = (op2.phase + op2_inc) & 0xFFFFFu;
+                op3.phase = (op3.phase + op3_inc) & 0xFFFFFu;
+
+                // Feedback for op0 (ch_lo modulator)
+                int32_t fb_mod = 0;
+                if (ch.feedback > 0u) {
+                    fb_mod = ((int32_t)mod.out + (int32_t)mod.out_prev) >> (9 - (int)ch.feedback);
+                }
+
+                // 4-op synthesis chain.
+                // op1 (ch_lo carrier) ALWAYS feeds op2 (ch_hi modulator).
+                int16_t v0 = op_output(mod, fb_mod,             am_att, mod.tremolo);
+                int16_t v1 = op_output(car, (int32_t)v0 * 2,   am_att, car.tremolo);
+                int16_t v2 = op_output(op2, (int32_t)v1 * 2,   am_att, op2.tremolo);
+                int16_t v3;
+                if (!ch_hi.algo) {
+                    v3 = op_output(op3, (int32_t)v2 * 2, am_att, op3.tremolo);
+                } else {
+                    v3 = op_output(op3, 0,               am_att, op3.tremolo);
+                }
+
+                // Output mix from (ch_lo.algo, ch_hi.algo):
+                //   (0,0) → v3 only           (0,1) → v2 + v3
+                //   (1,0) → v1 + v3           (1,1) → v1 + v2 + v3
+                int16_t out_4op;
+                if (!ch.algo && !ch_hi.algo) {
+                    out_4op = v3;
+                } else if (ch.algo && !ch_hi.algo) {
+                    out_4op = (int16_t)((int32_t)v1 + v3);
+                } else if (!ch.algo && ch_hi.algo) {
+                    out_4op = (int16_t)((int32_t)v2 + v3);
+                } else {
+                    out_4op = (int16_t)((int32_t)v1 + v2 + v3);
+                }
+
+                if (ch.out_l) sum_l += out_4op;
+                if (ch.out_r) sum_r += out_4op;
+                continue;
+            }
+
+            // ---- Regular 2-op synthesis ----
 
             // Skip channel if both operators are idle (optimisation)
             if (mod.env_state == Opl3Env::OFF && car.env_state == Opl3Env::OFF) continue;
@@ -657,7 +776,6 @@ void opl3_compute_sample(Opl3State& s, int16_t& out_l, int16_t& out_r)
             env_advance(car, ch.block, ch.fnum, car_sl);
 
             // ---- Vibrato: modulate phase_inc ----
-            int32_t vib = s.lfo_vib_out;  // ±4 (normal) or ±8 (deep)
             uint32_t mod_inc = mod.phase_inc;
             uint32_t car_inc = car.phase_inc;
             if (mod.vibrato && vib != 0) {
@@ -670,8 +788,6 @@ void opl3_compute_sample(Opl3State& s, int16_t& out_l, int16_t& out_r)
             // ---- Advance phases ----
             mod.phase = (mod.phase + mod_inc) & 0xFFFFFu;
             car.phase = (car.phase + car_inc) & 0xFFFFFu;
-
-            uint32_t am_att = s.lfo_am_out;
 
             // ---- Operator feedback (op1 self-modulation) ----
             int32_t fb_mod = 0;

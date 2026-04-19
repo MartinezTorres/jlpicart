@@ -3,8 +3,8 @@
 //
 // The YMF278B is the sound chip in the Moonsound MSX cartridge.
 // It has two independent sections:
-//   1. OPL3 FM section (18 channel FM, YMF262-compatible) — register
-//      storage implemented; synthesis is a TODO (extremely complex).
+//   1. OPL3 FM section (18 channel FM, YMF262-compatible) — fully implemented:
+//      2-op melodic, rhythm mode (BD/HH/SD/TT/CY), 4-op paired channels.
 //   2. Wave/PCM section (24-channel wavetable) — fully implemented.
 //
 // ─────────────────────────────────────────────────────────────────

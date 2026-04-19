@@ -490,6 +490,238 @@ static void test_adpcm_nibble_decode() {
 }
 
 // ---------------------------------------------------------------------------
+// OPL3 FM synthesis tests
+// ---------------------------------------------------------------------------
+
+// Helpers: write an OPL3 register directly (bypass the cartridge port layer)
+static void fm_write(Opl3State& s, uint16_t reg, uint8_t val) {
+    opl3_write_reg(s, reg, val);
+}
+
+// Set up a basic 2-op melodic channel on ch0 in bank 0.
+// AR=15, DR=0, SL=0, RR=15, TL=0, MULTI=1, no KSL, sine wave (WS=0).
+static void fm_setup_ch0(Opl3State& s) {
+    // Enable OPL3 mode (0x105)
+    fm_write(s, 0x105, 0x01);
+    // Modulator slot 0 (reg offset 0x00): AM=0, VIB=0, EG=1, KSR=0, MULTI=1
+    fm_write(s, 0x0020, 0x21);
+    // Modulator TL = 0 (max vol)
+    fm_write(s, 0x0040, 0x00);
+    // Modulator AR=15, DR=0
+    fm_write(s, 0x0060, 0xF0);
+    // Modulator SL=0, RR=15
+    fm_write(s, 0x0080, 0x0F);
+    // Carrier slot 3 (reg offset 0x03): EG=1, MULTI=1
+    fm_write(s, 0x0023, 0x21);
+    fm_write(s, 0x0043, 0x00);
+    fm_write(s, 0x0063, 0xF0);
+    fm_write(s, 0x0083, 0x0F);
+    // Channel 0: left+right, no feedback, FM (algo=0)
+    fm_write(s, 0x00C0, 0xC0);
+    // F-number 512, block 3 (≈ 440 Hz equivalent)
+    fm_write(s, 0x00A0, 0x00);       // fnum[7:0] = 0
+    fm_write(s, 0x00B0, (3 << 2) | 2); // block=3, fnum[9:8]=2 (fnum=512)
+    // Key-on: write 0xB0 with keyon bit
+    fm_write(s, 0x00B0, 0x20 | (3 << 2) | 2);
+}
+
+// test_opl3_fm_2op_produces_audio:
+// A keyed-on 2-op channel must produce non-zero samples within a few hundred
+// iterations once the attack has completed.
+static void test_opl3_fm_2op_produces_audio() {
+    Opl3State s;
+    opl3_reset(s);
+    fm_setup_ch0(s);
+
+    bool got_audio = false;
+    for (int i = 0; i < 1000 && !got_audio; ++i) {
+        int16_t l = 0, r = 0;
+        opl3_compute_sample(s, l, r);
+        if (l != 0 || r != 0) got_audio = true;
+    }
+    CHECK(got_audio);
+}
+
+// test_opl3_fm_keyoff_silences:
+// After key-off, channel must eventually reach silence (all zeros).
+static void test_opl3_fm_keyoff_silences() {
+    Opl3State s;
+    opl3_reset(s);
+    fm_setup_ch0(s);
+
+    // Let it play briefly.
+    for (int i = 0; i < 200; ++i) {
+        int16_t l, r; opl3_compute_sample(s, l, r);
+    }
+
+    // Key-off: clear keyon bit
+    fm_write(s, 0x00B0, (3 << 2) | 2);
+
+    // Within a reasonable release time (RR=15 → very fast) it should silence.
+    bool silenced = false;
+    for (int i = 0; i < 2000 && !silenced; ++i) {
+        int16_t l = 0, r = 0;
+        opl3_compute_sample(s, l, r);
+        if (l == 0 && r == 0) silenced = true;
+    }
+    CHECK(silenced);
+}
+
+// test_opl3_rhythm_bd_produces_audio:
+// Bass Drum (key 0xBD bit4) must produce audio when rhythm mode is enabled.
+static void test_opl3_rhythm_bd_produces_audio() {
+    Opl3State s;
+    opl3_reset(s);
+
+    // Enable OPL3 mode
+    fm_write(s, 0x105, 0x01);
+
+    // Set up BD operators (ch6: mod=op12 slot 0x10, car=op15 slot 0x13).
+    fm_write(s, 0x0030, 0x21); // mod AR+EG
+    fm_write(s, 0x0050, 0x00); // mod TL=0
+    fm_write(s, 0x0070, 0xF0); // mod AR=15,DR=0
+    fm_write(s, 0x0090, 0x0F); // mod SL=0,RR=15
+    fm_write(s, 0x0033, 0x21); // car
+    fm_write(s, 0x0053, 0x00);
+    fm_write(s, 0x0073, 0xF0);
+    fm_write(s, 0x0093, 0x0F);
+    // ch6 fnum/block (0xB6)
+    fm_write(s, 0x00A6, 0x00);
+    fm_write(s, 0x00B6, (3 << 2) | 2); // block=3 fnum=512 (no keyon — rhythm controls it)
+    // ch6 stereo output
+    fm_write(s, 0x00C6, 0xC0);
+
+    // Enter rhythm mode, key BD on (bit 4).
+    fm_write(s, 0x00BD, 0x20 | 0x10);  // rhythm=1, BD=1
+
+    bool got_audio = false;
+    for (int i = 0; i < 1000 && !got_audio; ++i) {
+        int16_t l = 0, r = 0;
+        opl3_compute_sample(s, l, r);
+        if (l != 0 || r != 0) got_audio = true;
+    }
+    CHECK(got_audio);
+}
+
+// test_opl3_rhythm_melodic_ch6_blocked:
+// In rhythm mode, writing key-on to 0xB6 must NOT key on ch6 operators;
+// only 0xBD controls them.  Verify by writing 0xB6 with keyon first,
+// then enabling rhythm mode — output should stay zero.
+static void test_opl3_rhythm_melodic_ch6_blocked() {
+    Opl3State s;
+    opl3_reset(s);
+    fm_write(s, 0x105, 0x01);
+
+    // Instrument setup for ch6
+    fm_write(s, 0x0030, 0x21); fm_write(s, 0x0050, 0x00);
+    fm_write(s, 0x0070, 0xF0); fm_write(s, 0x0090, 0x0F);
+    fm_write(s, 0x0033, 0x21); fm_write(s, 0x0053, 0x00);
+    fm_write(s, 0x0073, 0xF0); fm_write(s, 0x0093, 0x0F);
+    fm_write(s, 0x00C6, 0xC0);
+    fm_write(s, 0x00A6, 0x00);
+
+    // Enable rhythm mode, do NOT set BD key bit — only rhythm mode enabled.
+    // Also write keyon bit in 0xB6 (should be ignored while in rhythm mode).
+    fm_write(s, 0x00BD, 0x20);             // rhythm=1, BD=0
+    fm_write(s, 0x00B6, 0x20 | (3<<2) | 2); // keyon via 0xB6: must be ignored
+
+    // No samples should be non-zero since BD key is not set.
+    bool got_audio = false;
+    for (int i = 0; i < 500; ++i) {
+        int16_t l = 0, r = 0;
+        opl3_compute_sample(s, l, r);
+        if (l != 0 || r != 0) got_audio = true;
+    }
+    CHECK(!got_audio);
+}
+
+// test_opl3_4op_leader_keys_follower:
+// When the 4-op pair ch0+ch3 is enabled and ch0 receives key-on, all 4
+// operators (ch0 mod+car, ch3 mod+car) must be keyed on.
+static void test_opl3_4op_leader_keys_follower() {
+    Opl3State s;
+    opl3_reset(s);
+    fm_write(s, 0x105, 0x01);
+    // Enable pair ch0+ch3 (fourop_en bit 0)
+    fm_write(s, 0x104, 0x01);
+
+    // Set up all 4 operators: loud, fast attack, sustain hold.
+    // ch0 mod=slot0 (0x00), car=slot3 (0x03)
+    // ch3 mod=slot6 (0x08), car=slot9 (0x0B? — wait, kSlotToOp mapping)
+    // Actually according to opl3fm.cc: kChMod[3]=6, kChCar[3]=9
+    // slot offsets: op6 = slot offset 8, op9 = slot offset 9+2=0x0B? Let me check.
+    // slot_to_op: 0→0,1→1,2→2,3→3,4→4,5→5, 8→6,9→7,0xA→8,0xB→9,0xC→10,0xD→11
+    // op6 = slot 8 → reg offset 0x28 for ch3 modulator
+    // op9 = slot 0xB → reg offset 0x2B for ch3 carrier
+    const uint8_t regs[] = { 0x00, 0x03, 0x08, 0x0B }; // slot offsets
+    for (uint8_t slot : regs) {
+        fm_write(s, 0x0020 + slot, 0x21); // EG=1, MULTI=1
+        fm_write(s, 0x0040 + slot, 0x00); // TL=0
+        fm_write(s, 0x0060 + slot, 0xF0); // AR=15,DR=0
+        fm_write(s, 0x0080 + slot, 0x0F); // SL=0,RR=15
+    }
+    fm_write(s, 0x00C0, 0xC0); // ch0: L+R
+    fm_write(s, 0x00C3, 0xC0); // ch3: L+R
+
+    // F-number for both channels
+    fm_write(s, 0x00A0, 0x00); fm_write(s, 0x00B0, (3 << 2) | 2);
+    fm_write(s, 0x00A3, 0x00); fm_write(s, 0x00B3, (3 << 2) | 2);
+
+    // Key-on via the LEADER (ch0)
+    fm_write(s, 0x00B0, 0x20 | (3 << 2) | 2);
+
+    // The follower operators (ch3 mod+car, ops 6+9 = bank-0 ops 6,9) should
+    // now be in ATTACK or later.  Any carrier output from them is non-zero.
+    bool got_audio = false;
+    for (int i = 0; i < 1000 && !got_audio; ++i) {
+        int16_t l = 0, r = 0;
+        opl3_compute_sample(s, l, r);
+        if (l != 0 || r != 0) got_audio = true;
+    }
+    CHECK(got_audio);
+
+    // Verify follower ops were keyed on: check env_state not OFF.
+    // op6 (ch3 mod) and op9 (ch3 car) are primary bank ops.
+    CHECK(s.ops[6].env_state != Opl3Env::OFF);
+    CHECK(s.ops[9].env_state != Opl3Env::OFF);
+}
+
+// test_opl3_4op_follower_keyon_ignored:
+// Writing key-on to the FOLLOWER channel (ch3) directly must NOT key on ops.
+static void test_opl3_4op_follower_keyon_ignored() {
+    Opl3State s;
+    opl3_reset(s);
+    fm_write(s, 0x105, 0x01);
+    fm_write(s, 0x104, 0x01); // enable ch0+ch3 pair
+
+    // Instrument setup
+    const uint8_t regs[] = { 0x08, 0x0B }; // ch3 mod, car slot offsets
+    for (uint8_t slot : regs) {
+        fm_write(s, 0x0020 + slot, 0x21);
+        fm_write(s, 0x0040 + slot, 0x00);
+        fm_write(s, 0x0060 + slot, 0xF0);
+        fm_write(s, 0x0080 + slot, 0x0F);
+    }
+    fm_write(s, 0x00C3, 0xC0);
+    fm_write(s, 0x00A3, 0x00); fm_write(s, 0x00B3, (3 << 2) | 2);
+
+    // Write key-on to the FOLLOWER (ch3) — should be ignored in 4-op mode.
+    fm_write(s, 0x00B3, 0x20 | (3 << 2) | 2);
+
+    // No audio expected
+    bool got_audio = false;
+    for (int i = 0; i < 500; ++i) {
+        int16_t l = 0, r = 0;
+        opl3_compute_sample(s, l, r);
+        if (l != 0 || r != 0) got_audio = true;
+    }
+    CHECK(!got_audio);
+    // Follower ops should still be OFF
+    CHECK(s.ops[6].env_state == Opl3Env::OFF);
+    CHECK(s.ops[9].env_state == Opl3Env::OFF);
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
@@ -506,6 +738,13 @@ int main() {
     test_wave_reg_readback();
     test_16bit_pcm_read();
     test_adpcm_nibble_decode();
+    // OPL3 FM synthesis
+    test_opl3_fm_2op_produces_audio();
+    test_opl3_fm_keyoff_silences();
+    test_opl3_rhythm_bd_produces_audio();
+    test_opl3_rhythm_melodic_ch6_blocked();
+    test_opl3_4op_leader_keys_follower();
+    test_opl3_4op_follower_keyon_ignored();
 
     return test_summary();
 }

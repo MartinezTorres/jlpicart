@@ -46,9 +46,9 @@ static constexpr uint8_t  DMA_CH_ALLOC_BUDGET = RP2350_TOTAL_DMA_CH  - SYSTEM_DM
 // Resource requirements declared by a peripheral descriptor.
 // Zero means "no extra resources needed" — safe default for existing entries.
 struct ResourceRequirements {
-    uint32_t sram_bytes;    // quantifiable: SRAM consumed while active
-    uint8_t  pio_sms;       // exclusive: PIO state machines needed
-    uint8_t  dma_channels;  // exclusive: DMA channels needed
+    uint32_t sram_bytes   = 0;  // quantifiable: SRAM consumed while active
+    uint8_t  pio_sms      = 0;  // exclusive: PIO state machines needed
+    uint8_t  dma_channels = 0;  // exclusive: DMA channels needed
 };
 
 class ResourceModel {
