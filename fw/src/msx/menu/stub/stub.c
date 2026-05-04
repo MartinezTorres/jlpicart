@@ -1,4 +1,4 @@
-/* stub.c — Z80 menu stub: minimum conformance per spec.md §8.
+/* stub.c — Z80 menu stub.
  *
  * Compiled with SDCC for Z80 target.  No standard library; all BIOS access
  * via inline assembly.  Structs are laid out by-hand to match the packed
@@ -60,6 +60,7 @@
 #define CMD_PUT_TEXT       0x0004u
 #define CMD_READ_INPUT     0x0005u
 #define CMD_IDLE           0x000Au
+#define CMD_LAUNCH         0x000Bu
 
 #define MENU_OK            0x0000u
 #define MENU_E_UNSUPPORTED 0x0001u
@@ -290,6 +291,15 @@ static void dispatch(void)
     case CMD_PUT_TEXT:      cmd_put_text();                  break;
     case CMD_READ_INPUT:    cmd_read_input();                break;
     case CMD_IDLE:          cmd_idle();                      break;
+    case CMD_LAUNCH:
+        /* ROM has been remapped by RP2350.  Acknowledge before jumping so
+         * the RP2350 sees the response — the poll loop is never reached again. */
+        MBX_STATUS   = MENU_OK;
+        MBX_RESP_SEQ = MBX_CMD_SEQ;
+        __asm
+            jp 0x0000
+        __endasm;
+        break; /* unreachable; suppresses SDCC fallthrough warning */
     default:                MBX_STATUS = MENU_E_UNSUPPORTED; break;
     }
 }

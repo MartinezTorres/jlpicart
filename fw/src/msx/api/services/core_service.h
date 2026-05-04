@@ -3,7 +3,6 @@
 //
 // Handles: GET_API_INFO, GET_DEVICE_ID, GET_CAPS, GET_RANDOM, RESET_TO_MENU,
 //          GET_SECURITY_INFO, GET_POLICY_FLAGS.
-// Spec reference: spec.md §5.1 "System service (0x00)".
 
 #include "msx/api/api_types.h"
 #include "spine/security_posture.h"

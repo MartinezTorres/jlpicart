@@ -11,14 +11,11 @@
 
 #include "crypto/smk.h"
 #include "identity/device_identity.h"
-#include "storage/kv_store.h"
-#include "storage/flash_device.h"
-#include "storage/flash_layout.h"
+#include "fat_test_env.h"
+#include "storage/fat_util.h"
 #include "test_helpers.h"
 #include <cstring>
 #include <cstdio>
-
-static constexpr uint32_t TEST_FLASH_SIZE = FLASH_SECTOR_SIZE * 32u;
 
 // ---------------------------------------------------------------------------
 // test_hkdf_rfc5869_vector — RFC 5869 Appendix A.1 test case
@@ -126,9 +123,7 @@ static void test_smk_ns_keys_differ()
 
 static void test_dik_wrap_roundtrip()
 {
-    FlashDevice flash(TEST_FLASH_SIZE);
-    KvStore     kv;
-    kv.init(flash, 0u, TEST_FLASH_SIZE);
+    FatTestEnv env;
 
     uint8_t smk[32], wrap_key[32];
     // Non-zero OTP secret for a "provisioned" simulation.
@@ -142,20 +137,17 @@ static void test_dik_wrap_roundtrip()
     smk_derive_ns_key(smk, "dik.priv", wrap_key);
 
     DeviceIdentity dik1;
-    CHECK(dik1.init_or_load(kv, wrap_key).ok());
+    CHECK(dik1.init_or_load(wrap_key).ok());
 
     uint8_t pub1[32] = {};
     dik1.public_key(pub1);
 
-    // Verify dik.priv is stored in encrypted format (104 bytes).
-    uint16_t priv_len = 0u;
-    uint8_t  priv_buf[104];
-    CHECK(kv.get(KV_DIK_PRIV, priv_buf, &priv_len, sizeof(priv_buf)).ok());
-    CHECK(priv_len == 104u);
+    // Verify dik.bin is stored on FAT.
+    CHECK(fat_file_size("1:/system/dik.bin") > 0u);
 
     // Reload with the same key → same public key.
     DeviceIdentity dik2;
-    CHECK(dik2.init_or_load(kv, wrap_key).ok());
+    CHECK(dik2.init_or_load(wrap_key).ok());
 
     uint8_t pub2[32] = {};
     dik2.public_key(pub2);
@@ -169,9 +161,7 @@ static void test_dik_wrap_roundtrip()
 
 static void test_dik_wrong_key_regenerates()
 {
-    FlashDevice flash(TEST_FLASH_SIZE);
-    KvStore     kv;
-    kv.init(flash, 0u, TEST_FLASH_SIZE);
+    FatTestEnv env;
 
     uint8_t key_a[32] = {};
     uint8_t key_b[32] = {};
@@ -187,13 +177,13 @@ static void test_dik_wrong_key_regenerates()
 
     // Generate with key_a.
     DeviceIdentity dik1;
-    CHECK(dik1.init_or_load(kv, key_a).ok());
+    CHECK(dik1.init_or_load(key_a).ok());
     uint8_t pub_a[32] = {};
     dik1.public_key(pub_a);
 
     // Reload with key_b (wrong key) → decrypt fails → regenerates.
     DeviceIdentity dik2;
-    CHECK(dik2.init_or_load(kv, key_b).ok());
+    CHECK(dik2.init_or_load(key_b).ok());
     uint8_t pub_b[32] = {};
     dik2.public_key(pub_b);
 

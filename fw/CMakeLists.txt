@@ -94,9 +94,7 @@ add_executable(jlpicart
 
     # Storage substrate (Stage 6)
     src/storage/flash_device.cc
-    src/storage/kv_store.cc
     src/storage/append_log.cc
-    src/storage/storage_health.cc
 
     # Allocator (Stage 8 + gap #2 HW probes)
     src/allocator/allocator.cc
@@ -111,7 +109,11 @@ add_executable(jlpicart
 
     # Bus loop (Stage 9)
     src/bus/bus.cc
+    src/bus/bus_state.cc
     src/bus/mapping_plan.cc
+
+    # Platform HAL (RP2350 implementation)
+    src/platform/platform_rp2350.cc
 
     # Collections (Stage 7 + Stage 31 signature verification)
     src/content/manifest_parser.cc
@@ -148,6 +150,14 @@ add_executable(jlpicart
     src/usb/usb_install_scanner.cc
     src/usb/diskio_tuh.cc
 
+    # USB device / config mode
+    src/usb/usb_device.cc
+
+    # FAT volume on internal flash
+    src/storage/diskio_flash.cc
+    src/storage/diskio.cc
+    src/storage/fat_volume.cc
+
     # FatFs (Stage 14) — from bundled tinyusb lib
     ext/tinyusb/lib/fatfs/source/ff.c
     ext/tinyusb/lib/fatfs/source/ffsystem.c
@@ -172,14 +182,23 @@ target_include_directories(tinyusb_config INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/src/usb
 )
 
-# tinyusb host + MSC + rp2040 HCD sources (firmware only, not host tests).
+# tinyusb host + device + MSC + rp2040 HCD/DCD sources (firmware only, not host tests).
+# Both stacks are compiled in; the application selects one at runtime via
+# Platform::msx_clock_present() — calling tuh_init() or tud_init() as appropriate.
 target_sources(jlpicart PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/tusb.c
     ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/common/tusb_fifo.c
+    # Host stack
     ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/host/usbh.c
     ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/host/hub.c
     ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/class/msc/msc_host.c
     ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/portable/raspberrypi/rp2040/hcd_rp2040.c
+    # Device stack
+    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/device/usbd.c
+    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/device/usbd_control.c
+    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/class/msc/msc_device.c
+    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/portable/raspberrypi/rp2040/dcd_rp2040.c
+    # Shared RP2040 USB core (used by both HCD and DCD)
     ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/portable/raspberrypi/rp2040/rp2040_usb.c
 )
 target_link_libraries(jlpicart tinyusb_config)

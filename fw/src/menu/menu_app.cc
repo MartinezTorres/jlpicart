@@ -1,11 +1,9 @@
-// menu_app.cc — RP2350-side menu application (Stages 16–20).
+// menu_app.cc — RP2350-side menu application.
 //
 // Non-blocking state machine.  Each tick() issues at most one mailbox command.
 // Screen handlers advance step_ by 1 per completed command; when READ_INPUT
 // completes, the "process" step decodes input and resets step_=0 (re-render)
 // or calls switch_screen() to transition.
-//
-// See bootstrapping.md Stages 16–20 for step-by-step design notes.
 
 #include "menu/menu_app.h"
 #include "menu/input_decoder.h"
@@ -20,13 +18,11 @@
 // init
 // ---------------------------------------------------------------------------
 
-void MenuApp::init(MenuMailbox& mbx, KvStore& kv, ProfileStore& ps)
+void MenuApp::init(MenuMailbox& mbx, ProfileStore& ps)
 {
     mbx_          = &mbx;
-    kv_           = &kv;
     ps_           = &ps;
     ss_           = nullptr;
-    saves_kv_     = nullptr;
     api_win_      = nullptr;
     screen_       = Screen::BOOT;
     step_         = 0;
@@ -35,10 +31,9 @@ void MenuApp::init(MenuMailbox& mbx, KvStore& kv, ProfileStore& ps)
     initialized_  = true;
 }
 
-void MenuApp::bind_settings_store(SystemSettingsStore& ss, KvStore& saves_kv)
+void MenuApp::bind_settings_store(SystemSettingsStore& ss)
 {
-    ss_       = &ss;
-    saves_kv_ = &saves_kv;
+    ss_ = &ss;
 }
 
 void MenuApp::request_reset_to_menu()
@@ -49,6 +44,12 @@ void MenuApp::request_reset_to_menu()
 void MenuApp::bind_api_window(ApiWindow& win)
 {
     api_win_ = &win;
+}
+
+void MenuApp::set_launch_fn(void* ctx, void (*fn)(void*, const char*))
+{
+    launch_fn_ctx_ = ctx;
+    launch_fn_     = fn;
 }
 
 // ---------------------------------------------------------------------------
@@ -79,6 +80,7 @@ void MenuApp::tick()
         case Screen::PROFILES:    tick_profiles();    break;
         case Screen::SETTINGS:    tick_settings();    break;
         case Screen::LAUNCH:      tick_launch();      break;
+        case Screen::RUNNING:     tick_running();     break;
     }
 }
 
@@ -111,7 +113,7 @@ bool MenuApp::put_text(uint8_t col, uint8_t row, const char* text)
 
 void MenuApp::load_collection_data()
 {
-    ContentStore cs(*kv_);
+    ContentStore cs;
     has_collection_ = cs.has_active_collection();
     if (has_collection_) {
         if (!cs.load_collection(col_record_).ok()) {
@@ -251,10 +253,14 @@ void MenuApp::tick_main()
 //   2: PUT_TEXT row 2 — title or "no collection"
 //   3: PUT_TEXT row 3 — version + publisher, or install hint
 //   4: PUT_TEXT row 5 — payload count or blank
-//   5: PUT_TEXT row 7 — "Back"
-//   6: PUT_TEXT row 22 — footer
-//   7: READ_INPUT
-//   8: process input (any key → MAIN)
+//   5: PUT_TEXT row 7 — "Launch" (only when has_collection_)
+//   6: PUT_TEXT row 8 — "Back"
+//   7: PUT_TEXT row 22 — footer
+//   8: READ_INPUT
+//   9: process input
+//
+// Cursor items when has_collection_:  0=Launch, 1=Back
+// Cursor items when !has_collection_: 0=Back
 
 void MenuApp::tick_collections()
 {
@@ -299,18 +305,31 @@ void MenuApp::tick_collections()
         step_ = 5;
         break;
     case 5:
-        put_text(0u, 7u, " > Back");
+        if (has_collection_) {
+            snprintf(fmt_, sizeof(fmt_), " %c Launch", cursor_ == 0 ? '>' : ' ');
+            put_text(0u, 7u, fmt_);
+        } else {
+            put_text(0u, 7u, "");
+        }
         step_ = 6;
         break;
-    case 6:
-        put_text(0u, 22u, "  RETURN:Back");
+    case 6: {
+        int back_item = has_collection_ ? 1 : 0;
+        snprintf(fmt_, sizeof(fmt_), " %c Back", cursor_ == back_item ? '>' : ' ');
+        put_text(0u, 8u, fmt_);
         step_ = 7;
         break;
+    }
     case 7:
-        mbx_->send_command(MENU_CMD_READ_INPUT);
+        put_text(0u, 22u, has_collection_ ? "  UP/DN:Move  RETURN:Select  ESC:Back"
+                                           : "  RETURN:Back");
         step_ = 8;
         break;
     case 8:
+        mbx_->send_command(MENU_CMD_READ_INPUT);
+        step_ = 9;
+        break;
+    case 9:
         handle_collections_input();
         break;
     }
@@ -560,8 +579,44 @@ void MenuApp::handle_main_input()
 
 void MenuApp::handle_collections_input()
 {
-    // Any key returns to MAIN.
-    switch_screen(Screen::MAIN);
+    InputSnapshot inp = {};
+    if (mbx_->last_out_len() >= sizeof(InputSnapshot)) {
+        memcpy(&inp, mbx_->data_buf(), sizeof(InputSnapshot));
+    }
+
+    const int item_count = has_collection_ ? 2 : 1;  // [Launch, Back] or [Back]
+    const int back_item  = item_count - 1;
+
+    if (key_down(inp) || joy1_down(inp)) {
+        cursor_ = (cursor_ + 1) % item_count;
+        step_ = 5;  // re-render cursor
+        return;
+    }
+    if (key_up(inp) || joy1_up(inp)) {
+        cursor_ = (cursor_ - 1 + item_count) % item_count;
+        step_ = 5;
+        return;
+    }
+    if (key_esc(inp)) {
+        switch_screen(Screen::MAIN);
+        return;
+    }
+    if (key_return(inp) || joy1_trig(inp)) {
+        if (has_collection_ && cursor_ == 0) {
+            // "Launch" selected: transition to LAUNCH screen.
+            strncpy(launch_title_,      col_record_.title,             sizeof(launch_title_) - 1u);
+            strncpy(launch_payload_id_, col_record_.default_payload_id, sizeof(launch_payload_id_) - 1u);
+            launch_title_[sizeof(launch_title_) - 1u]           = '\0';
+            launch_payload_id_[sizeof(launch_payload_id_) - 1u] = '\0';
+            switch_screen(Screen::LAUNCH);
+        } else if (cursor_ == back_item) {
+            switch_screen(Screen::MAIN);
+        }
+        return;
+    }
+
+    // No recognised input: re-render to keep polling.
+    step_ = 8;
 }
 
 void MenuApp::handle_profiles_input()
@@ -624,8 +679,8 @@ void MenuApp::handle_settings_input()
     if (wipe_confirm_) {
         if (key_return(inp) || joy1_trig(inp)) {
             // Confirmed: execute wipe.
-            if (saves_kv_) {
-                ss_->wipe_user_data(*saves_kv_, *ps_);
+            if (ss_) {
+                ss_->wipe_user_data(*ps_);
             }
         }
         // Any other key (or after wipe): cancel/clear confirmation and re-render.
@@ -664,7 +719,9 @@ void MenuApp::handle_settings_input()
 //   1: PUT_TEXT 0,0 "  Launching <title>..."
 //   2: PUT_TEXT 0,2 "  (press any key to cancel)"
 //   3: READ_INPUT
-//   4: process — any key cancels → MAIN; otherwise loop to step 3
+//   4: process input — any key cancels → MAIN; no key → call launch_fn_ → step 5
+//   5: send MENU_CMD_LAUNCH (ROM already remapped by launch_fn_)
+//   6: wait for stub ACK → RUNNING
 
 void MenuApp::tick_launch()
 {
@@ -692,6 +749,14 @@ void MenuApp::tick_launch()
     case 4:
         handle_launch_input();
         break;
+    case 5:
+        if (!mbx_->send_command(MENU_CMD_LAUNCH)) return;
+        step_ = 6;
+        break;
+    case 6:
+        if (mbx_->pending()) return;
+        switch_screen(Screen::RUNNING);
+        break;
     }
 }
 
@@ -711,6 +776,19 @@ void MenuApp::handle_launch_input()
         return;
     }
 
-    // No key: loop back to READ_INPUT.
-    step_ = 3;
+    // No key: remap ROM then proceed to send MENU_CMD_LAUNCH.
+    if (launch_fn_) {
+        launch_fn_(launch_fn_ctx_, launch_payload_id_);
+    }
+    step_ = 5;
+}
+
+// ---------------------------------------------------------------------------
+// tick_running — game ROM is live; stub has jumped to 0x0000.
+// The menu is no longer in control; we simply idle.
+// ---------------------------------------------------------------------------
+
+void MenuApp::tick_running()
+{
+    // Nothing to do — the Z80 is running the game.
 }

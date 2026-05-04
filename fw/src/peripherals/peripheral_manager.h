@@ -7,7 +7,10 @@
 //      via apply_mapping() once a MappingPlan has been computed from the
 //      active payload's manifest.
 //
-// See spec.md §5.2 "Launch workflow contract (v1)" and bootstrapping.md Stage 9.
+// Owns all peripheral state (PsgState, Opl4State, SccState) so that main.cc
+// stays device-agnostic.  Adding a new device means adding map_X() +
+// updating service_all() here, not touching main.cc.
+//
 // Thread safety: NOT thread-safe. Use only from the boot/preflight path.
 
 #include "allocator/allocator.h"
@@ -27,7 +30,7 @@ public:
     // Must not be called more than once on the same manager instance.
     bool apply(const LaunchPlan& plan, CapabilityRegistry& registry);
 
-    // Apply the mapping plan: configure BUS::cartridges[] from the mapping.
+    // Apply the mapping plan: configure BUS::subslots[] from the mapping.
     // On hardware: calls mapper_setup_XXX() for entries with rom_data set.
     // If rom_data is nullptr, logs that ROM loading is deferred.
     // Returns true on success (including the deferred case).
@@ -44,35 +47,10 @@ public:
     // from the Z80 are silently discarded by the bus loop.
     void map_api_window(const uint8_t* buf);
 
-    // Wire PSG (AY-3-8910) IO callbacks into the bus at slot 4 (IO-only).
-    // Calls psg_setup(); the caller must have already called psg_reset().
-    // On hardware: also calls psg_audio_init() to start PWM output.
-    void map_psg(PsgState& state);
-
-    // Wire SCC wavetable synthesiser into the Konami SCC mapper on a cartridge
-    // slot.  Caller owns the SccState and the ROM data; both must outlive the
-    // Cartridge.  scc_reset() must have been called before this.
-    // slot: BUS cartridge slot index (0–3) that holds the SCC cartridge.
-    void map_scc(uint8_t slot, const uint8_t* rom_data, SccState& state);
-
-    // Wire OPL4 (YMF278B) PCM section into the bus at slot 5 (IO-only).
-    // wave_rom/wave_rom_size: pointer and byte length of the YMF278B wave ROM
-    // (may be null; opl4_setup() handles missing ROM gracefully).
-    // opl4_reset() must have been called before this.
-    void map_opl4(Opl4State& state,
-                  const uint8_t* wave_rom, uint32_t wave_rom_size);
-
-    // Wire a Sunrise ATA-IDE compatible interface into a memory-mapped cartridge
-    // slot.  The slot serves a banked Nextor ROM at 0x4000–0x7FFF, with ATA
-    // task file registers and a sector data window overlaid at 0x7C00–0x7E0F.
-    //
-    // slot: BUS cartridge slot index (0–3) that will hold the IDE cartridge.
-    // nextor_rom / nextor_size: Nextor ROM image in XIP flash (null = no ROM).
-    // disk_image / disk_sectors: flat disk image in XIP flash (null = empty disk).
-    // ide_reset() must have been called on state before this.
-    void map_sunrise_ide(uint8_t slot, IdeState& state,
-                         const uint8_t* nextor_rom, uint32_t nextor_size,
-                         const uint8_t* disk_image, uint32_t disk_sectors);
+    // Service all active peripherals once.
+    // Order: SCC → OPL4 → PSG (PSG mixes SCC and OPL4 samples).
+    // Call from the Core 1 / host service loop.
+    void service_all();
 
     // Log a human-readable activation report via log_info/log_warn.
     void log_report(const LaunchPlan& plan) const;
@@ -80,18 +58,32 @@ public:
     bool   launch_ok()       const { return launch_ok_; }
     size_t activated_count() const { return activated_count_; }
 
-    // Returns the SCC state that was wired by apply_mapping() for the
-    // KONAMI_SCC slot, or nullptr if no KONAMI_SCC mapping has been applied.
-    // Core 1 must use this to service the correct SccState instance.
+    // Returns the SCC state wired by apply_mapping() for a KONAMI_SCC slot,
+    // or nullptr if no such mapping has been applied.
     SccState* active_scc() { return active_scc_; }
 
 private:
+    void map_psg();
+    void map_opl4(const char* wave_payload_id);
+    void map_sunrise_ide(uint8_t slot, IdeState& state,
+                         const uint8_t* nextor_rom, uint32_t nextor_size,
+                         const uint8_t* disk_image, uint32_t disk_sectors);
+
     bool      launch_ok_       = false;
     size_t    activated_count_ = 0;
 
-    // SCC states for each subslot (0–MAPPING_MAX_ENTRIES-1).
-    // apply_mapping() uses these instead of static locals so the instances
-    // persist after apply_mapping() returns and Core 1 can service them.
+    // Next available IO-only subslot index (starts at MEMORY_SUBSLOT_COUNT = 4).
+    size_t    next_io_subslot_ = 4u;
+
+    // Per-device state and active flags.  map_X() sets the flag; service_all()
+    // checks it.  Adding a device means adding state + flag here, not in main.cc.
+    PsgState  psg_state_  = {};
+    bool      psg_active_ = false;
+
+    Opl4State opl4_state_  = {};
+    bool      opl4_active_ = false;
+
+    // SCC states for each memory subslot (wired by apply_mapping KONAMI_SCC case).
     SccState  scc_states_[MAPPING_MAX_ENTRIES] = {};
     SccState* active_scc_ = nullptr;
 };

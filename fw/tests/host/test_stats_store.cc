@@ -2,11 +2,9 @@
 
 #include "stats/stats_store.h"
 #include "identity/device_identity.h"
-#include "storage/kv_store.h"
 #include <openssl/evp.h>
-#include "storage/flash_device.h"
-#include "storage/flash_layout.h"
 #include "profiles/profile_store.h"
+#include "storage/store.h"
 #include "msx/api/api_window.h"
 #include "msx/api/api_types.h"
 #include "spine/security_posture.h"
@@ -15,23 +13,24 @@
 #include "boards/board_descriptor.h"
 #include "drivers/driver_descriptor.h"
 
+#include "fat_test_env.h"
+#include "storage/fat_util.h"
 #include "test_helpers.h"
 #include <cstring>
 #include <cstdio>
 
-static constexpr uint32_t TEST_FLASH_SIZE = FLASH_SECTOR_SIZE * 64u;
-
 struct StatsFixture {
-    FlashDevice  kv_flash;
-    FlashDevice  ps_flash;
-    KvStore      kv;
+    FatTestEnv   env;
+    Store        store;
     ProfileStore ps;
     StatsStore   ss;
 
-    StatsFixture() : kv_flash(TEST_FLASH_SIZE), ps_flash(TEST_FLASH_SIZE) {
-        kv.init(kv_flash, 0u, TEST_FLASH_SIZE);
-        ps.init(ps_flash, 0u, TEST_FLASH_SIZE);
-        ss.init(kv, ps);
+    StatsFixture() {
+        store.init();
+        ps.bind_store(store);
+        ps.init();
+        ss.bind_store(store);
+        ss.init(ps);
     }
 };
 
@@ -107,18 +106,16 @@ static void test_ach_unlock()
     // Unlock achievement 5.
     CHECK(f.ss.ach_unlock(1u, "game-001", 5u).ok());
 
-    // Verify by reading the KV key directly.
-    char key[64];
-    snprintf(key, sizeof(key), "st.0001.game-001.a.0005");
-    uint8_t  val  = 0u;
-    uint16_t vlen = 0u;
-    CHECK(f.kv.get(key, &val, &vlen, 1u).ok());
-    CHECK(val == 1u);
+    // Verify via ach_get (achievements are Store-backed, not FAT files).
+    bool unlocked = false;
+    CHECK(f.ss.ach_get(1u, "game-001", 5u, &unlocked).ok());
+    CHECK(unlocked);
 
     // Re-unlock is idempotent.
     CHECK(f.ss.ach_unlock(1u, "game-001", 5u).ok());
-    CHECK(f.kv.get(key, &val, &vlen, 1u).ok());
-    CHECK(val == 1u);
+    unlocked = false;
+    CHECK(f.ss.ach_get(1u, "game-001", 5u, &unlocked).ok());
+    CHECK(unlocked);
 }
 
 // ---------------------------------------------------------------------------
@@ -136,15 +133,11 @@ static void test_leaderboard_submit()
 
     CHECK(f.ss.leader_submit(handle, 9999u, 0u, nullptr, 0u).ok());
 
-    // Entry should be stored in KV.
-    char key[64];
-    snprintf(key, sizeof(key), "st.0001.game-001.l.0002");
+    // Entry should be stored on FAT.
     LeaderEntry entry = {};
-    uint16_t vlen = 0u;
-    CHECK(f.kv.get(key,
-                   reinterpret_cast<uint8_t*>(&entry),
-                   &vlen,
-                   static_cast<uint16_t>(sizeof(entry))).ok());
+    size_t actual = 0u;
+    CHECK(fat_read_file("1:/saves/0001/st_game-001_l_0002.bin", &entry, sizeof(entry), &actual));
+    CHECK(actual == sizeof(LeaderEntry));
     CHECK(entry.score == 9999u);
 
     // Handle should be freed: try to allocate it again.
@@ -174,9 +167,8 @@ static void test_stats_profile_isolation()
 // ---------------------------------------------------------------------------
 
 struct StatsApiFixture {
-    FlashDevice        kv_flash;
-    FlashDevice        ps_flash;
-    KvStore            kv;
+    FatTestEnv         env;
+    Store              store;
     ProfileStore       ps;
     StatsStore         ss;
     SecurityPosture    posture;
@@ -184,13 +176,12 @@ struct StatsApiFixture {
     CapabilityRegistry registry;
     ApiWindow          win;
 
-    StatsApiFixture()
-        : kv_flash(TEST_FLASH_SIZE)
-        , ps_flash(TEST_FLASH_SIZE)
-    {
-        kv.init(kv_flash, 0u, TEST_FLASH_SIZE);
-        ps.init(ps_flash, 0u, TEST_FLASH_SIZE);
-        ss.init(kv, ps);
+    StatsApiFixture() {
+        store.init();
+        ps.bind_store(store);
+        ps.init();
+        ss.bind_store(store);
+        ss.init(ps);
         posture = {};
         policy_store.load(posture);
         registry.init(BoardDescriptor::for_current_board(),
@@ -293,22 +284,18 @@ static bool ed25519_verify(const uint8_t* msg, size_t msg_len,
 
 static void test_leaderboard_signed()
 {
-    // StatsStore KV + ProfileStore.
-    FlashDevice  kv_flash(TEST_FLASH_SIZE);
-    FlashDevice  ps_flash(TEST_FLASH_SIZE);
-    KvStore      kv;
+    FatTestEnv   env;
+    Store        store;
     ProfileStore ps;
     StatsStore   ss;
-    kv.init(kv_flash, 0u, TEST_FLASH_SIZE);
-    ps.init(ps_flash, 0u, TEST_FLASH_SIZE);
-    ss.init(kv, ps);
+    store.init();
+    ps.bind_store(store);
+    ps.init();
+    ss.bind_store(store);
+    ss.init(ps);
 
-    // DIK stored in its own KV partition.
-    FlashDevice  dik_flash(TEST_FLASH_SIZE);
-    KvStore      dik_kv;
-    dik_kv.init(dik_flash, 0u, TEST_FLASH_SIZE);
     DeviceIdentity dik;
-    CHECK(dik.init_or_load(dik_kv).ok());
+    CHECK(dik.init_or_load().ok());
     CHECK(dik.initialized());
 
     uint8_t token[STATS_TOKEN_LEN] = {};
@@ -321,17 +308,15 @@ static void test_leaderboard_signed()
     const uint32_t score = 88888u;
     CHECK(ss.leader_submit(handle, score, 0u, nullptr, 0u, &dik).ok());
 
-    // Read back the stored entry.
-    char key[64];
-    snprintf(key, sizeof(key), "st.%04x.game-002.l.%04x",
+    // Read back the stored entry from FAT.
+    char path[64];
+    snprintf(path, sizeof(path), "1:/saves/%04x/st_game-002_l_%04x.bin",
              static_cast<unsigned>(profile_id),
              static_cast<unsigned>(lb_id));
     LeaderEntry entry = {};
-    uint16_t vlen = 0u;
-    CHECK(kv.get(key,
-                  reinterpret_cast<uint8_t*>(&entry),
-                  &vlen,
-                  static_cast<uint16_t>(sizeof(entry))).ok());
+    size_t actual = 0u;
+    CHECK(fat_read_file(path, &entry, sizeof(entry), &actual));
+    CHECK(actual == sizeof(LeaderEntry));
     CHECK(entry.score == score);
 
     // Signature must be non-zero.

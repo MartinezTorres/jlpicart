@@ -1,48 +1,50 @@
 #pragma once
-// profile_format.h — Persistent profile records for JLPiCart.
-//
-// Profiles are stored in PROFILES_KV (flash_layout.h) via a KvStore.
-// All on-flash data uses these packed structs.
-//
-// KV layout (within PROFILES_KV):
-//   KV_PROF_INDEX  → ProfileIndex (up to PROF_MAX_PROFILES entries)
-//   KV_PROF_ACTIVE → uint16_t profile_id (active profile; PROF_ID_NONE = none)
-//
-// Spec reference: spec.md §4.5, §6.2 (jlpicart.profile.v1)
+// profile_format.h — Persistent profile record format.
 
+#include "storage/uuid.h"
 #include <cstdint>
+#include <cstddef>
 
 static constexpr uint8_t  PROF_MAX_PROFILES = 8u;
-static constexpr uint8_t  PROF_NAME_MAX     = 32u;  // display name, null-terminated
-static constexpr uint8_t  PROF_LANG_MAX     = 8u;   // language tag, e.g. "en"
+static constexpr uint16_t PROF_ID_NONE      = 0x0000u;
+static constexpr uint16_t PROF_ID_GUEST     = 0xFFFFu;
+static constexpr uint8_t  PROF_NAME_MAX     = 32u;
+static constexpr uint8_t  PROF_LANG_MAX     = 8u;
 
-static constexpr uint16_t PROF_ID_NONE  = 0x0000u;  // no active profile
-static constexpr uint16_t PROF_ID_GUEST = 0xFFFFu;  // ephemeral guest session
-
-// KV keys (in PROFILES_KV store)
-static constexpr const char* KV_PROF_INDEX  = "prof.index";   // ProfileIndex bytes
-static constexpr const char* KV_PROF_ACTIVE = "prof.active";  // uint16_t, little-endian
-
-#pragma pack(push, 1)
-
-// One profile slot.
-// 44 bytes: 2 + 32 + 8 + 1 + 1
+// API-visible profile record.  Returned by ProfileStore::list/get.
+// Not serialized directly — see ProfileManifest for the FAT format.
 struct ProfileRecord {
-    uint16_t profile_id;          // 1..0xFFFE  (PROF_ID_NONE and PROF_ID_GUEST reserved)
-    char     name[PROF_NAME_MAX]; // display name, null-terminated
-    char     lang[PROF_LANG_MAX]; // IETF language tag, null-terminated
-    uint8_t  flags;               // reserved, MUST be 0
-    uint8_t  _pad;                // padding to even size
+    uint16_t profile_id;            // wire-protocol slot ID (1..0xFFFE)
+    Uuid     uuid;                  // persistent global identity for sync
+    char     name[PROF_NAME_MAX];
+    char     lang[PROF_LANG_MAX];
+    uint8_t  flags;
+    uint8_t  _pad;
 };
-static_assert(sizeof(ProfileRecord) == 44, "ProfileRecord must be 44 bytes");
 
-// All profiles on the device, as stored in KV_PROF_INDEX.
-// 2 + 8×44 = 354 bytes ≤ KV_MAX_VAL_LEN (512).
-struct ProfileIndex {
-    uint8_t       count;                        // 0..PROF_MAX_PROFILES
-    uint8_t       _pad;
-    ProfileRecord entries[PROF_MAX_PROFILES];
+// Payload written to Store for PROFILE records.  Fits in STORE_INLINE_MAX=64.
+struct ProfilePayload {
+    char    name[PROF_NAME_MAX];    // 32 bytes
+    char    lang[PROF_LANG_MAX];    // 8 bytes
+    uint8_t flags;
+    uint8_t _pad[23];
 };
-static_assert(sizeof(ProfileIndex) == 354, "ProfileIndex must be 354 bytes");
+static_assert(sizeof(ProfilePayload) == 64u, "ProfilePayload must be 64 bytes");
 
-#pragma pack(pop)
+// FAT manifest: 1:/system/profiles.bin — atomic single-file write.
+// Maps uint16_t slot → UUID + name/lang/flags, plus active slot.
+struct ProfileManifest {
+    uint16_t active_id;
+    uint8_t  count;
+    uint8_t  _pad;
+    struct Entry {
+        uint16_t profile_id;
+        Uuid     uuid;
+        char     name[PROF_NAME_MAX];
+        char     lang[PROF_LANG_MAX];
+        uint8_t  flags;
+        uint8_t  _pad2;
+    } entries[PROF_MAX_PROFILES];
+};
+static_assert(sizeof(ProfileManifest::Entry) == 60u,
+              "ProfileManifest::Entry must be 60 bytes");

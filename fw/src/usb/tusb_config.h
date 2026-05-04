@@ -13,16 +13,16 @@
 // ---------------------------------------------------------------------------
 
 #define CFG_TUSB_MCU          OPT_MCU_RP2040   // same USB core as RP2040
-#define BOARD_TUH_RHPORT      0u               // RP2350 USB FS port
+#define BOARD_TUH_RHPORT      0u               // USB FS port — host mode
+#define BOARD_TUD_RHPORT      0u               // USB FS port — device mode
+
+// Note: CFG_TUSB_RHPORT0_MODE is omitted intentionally.  Both host and device
+// stacks are compiled in; the application selects one at runtime by calling
+// either tuh_init(BOARD_TUH_RHPORT) or tud_init(BOARD_TUD_RHPORT) based on
+// Platform::msx_clock_present() at early boot.
 
 // ---------------------------------------------------------------------------
-// Operating mode: host-only on port 0
-// ---------------------------------------------------------------------------
-
-#define CFG_TUSB_RHPORT0_MODE OPT_MODE_HOST
-
-// ---------------------------------------------------------------------------
-// OS: cooperative (no RTOS — tuh_task() polled from Core 1 service loop)
+// OS: cooperative (no RTOS)
 // ---------------------------------------------------------------------------
 
 #define CFG_TUSB_OS           OPT_OS_NONE
@@ -34,18 +34,22 @@
 #define CFG_TUSB_DEBUG        0
 
 // ---------------------------------------------------------------------------
-// Host: enable MSC only (no hub, no CDC, no HID)
+// Host stack: MSC only (USB flash drives)
 // ---------------------------------------------------------------------------
 
-#define CFG_TUH_ENABLED       1
-#define CFG_TUH_MSC           1
-#define CFG_TUH_HUB           0
-#define CFG_TUH_CDC           0
-#define CFG_TUH_HID           0
-#define CFG_TUH_VENDOR        0
-
-// ---------------------------------------------------------------------------
-// Enumeration buffer (bytes) — large enough for full device/config descriptor
-// ---------------------------------------------------------------------------
-
+#define CFG_TUH_ENABLED             1
+#define CFG_TUH_MSC                 1
+#define CFG_TUH_HUB                 0
+#define CFG_TUH_CDC                 0
+#define CFG_TUH_HID                 0
+#define CFG_TUH_VENDOR              0
 #define CFG_TUH_ENUMERATION_BUFSIZE 256
+
+// ---------------------------------------------------------------------------
+// Device stack: MSC on internal flash (USB config/programming mode)
+// ---------------------------------------------------------------------------
+
+#define CFG_TUD_ENABLED             1
+#define CFG_TUD_MSC                 1
+#define CFG_TUD_ENDPOINT0_SIZE      64
+#define CFG_TUD_MSC_EP_BUFSIZE      512

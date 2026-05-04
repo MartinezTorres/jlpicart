@@ -3,7 +3,6 @@
 //
 // Handles: LIST_PROFILES, SET_ACTIVE_PROFILE, GET_ACTIVE_PROFILE,
 //          GUEST_BEGIN (stub), GUEST_END (stub).
-// Spec reference: spec.md §7.1 "Identity service (0x03)".
 
 #include "msx/api/api_types.h"
 #include "profiles/profile_store.h"

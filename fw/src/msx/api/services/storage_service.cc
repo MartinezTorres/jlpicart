@@ -1,6 +1,4 @@
-// storage_service.cc — Storage service (0x01) implementation (Stage 19).
-//
-// Spec reference: spec.md §7.2 "Storage service (0x01)".
+// storage_service.cc — Storage service (0x01) implementation.
 
 #include "msx/api/services/storage_service.h"
 #include "msx/api/api_window.h"

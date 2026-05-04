@@ -11,17 +11,16 @@
 #include "usb/usb_host.h"
 #include "usb/usb_install_scanner.h"
 #include "content/collection_format.h"
+#include "content/content_store.h"
 #include "content/manifest.h"
 #include "content/installer.h"
-#include "storage/flash_device.h"
-#include "storage/flash_layout.h"
-#include "storage/kv_store.h"
-#include "storage/append_log.h"
+#include "storage/fat_util.h"
 #include "spine/policy_store.h"
 #include "spine/security_posture.h"
 #include "security/otp_reader.h"
 #include "crypto/sha256.h"
 
+#include "fat_test_env.h"
 #include "test_helpers.h"
 #include <cassert>
 #include <cstring>
@@ -30,9 +29,6 @@
 // ---------------------------------------------------------------------------
 // Harness
 // ---------------------------------------------------------------------------
-
-static constexpr uint32_t TEST_KV_SIZE  = FLASH_SECTOR_SIZE * 4;
-static constexpr uint32_t TEST_LOG_SIZE = FLASH_SECTOR_SIZE * 4;
 
 static PolicyStore make_open_policy() {
     static const uint8_t kZeroOtp[256] = {};
@@ -192,9 +188,7 @@ static void test_scan_not_mounted() {
     FakeUsbHost* host_ptr = &usb_host;
 
     PolicyStore policy = make_open_policy();
-    FlashDevice flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-    KvStore kv;  kv.init(flash, 0, TEST_KV_SIZE);
-    AppendLog event_log; event_log.init(flash, TEST_KV_SIZE, TEST_LOG_SIZE);
+    FatTestEnv env;
 
     MemoryInstallReader reader;
     reader.add_text("manifest.json", kManifestA);
@@ -204,12 +198,10 @@ static void test_scan_not_mounted() {
 
     UsbInstallScanner scanner(*host_ptr);
     // scan() should check is_msc_mounted() and return without calling run_scan().
-    scanner.scan(kv, event_log, policy);
+    scanner.scan(policy);
 
-    // Nothing was written to KvStore (open_count is only tracked by dirs
-    // which we never passed to scan() — verify KvStore stays empty).
-    CHECK(!kv.contains(KV_COL_STATE));
-    CHECK(!kv.contains(KV_COL_RECORD));
+    // Nothing was written — active.txt must be absent.
+    CHECK(!fat_file_exists("1:/collections/active.txt"));
 }
 
 // ---------------------------------------------------------------------------
@@ -227,24 +219,19 @@ static void test_scan_installs_each_dir() {
 
     FakeUsbHost usb_host(true);
     PolicyStore policy = make_open_policy();
-    FlashDevice flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-    KvStore kv;  kv.init(flash, 0, TEST_KV_SIZE);
-    AppendLog event_log; event_log.init(flash, TEST_KV_SIZE, TEST_LOG_SIZE);
+    FatTestEnv env;
 
     UsbInstallScanner scanner(usb_host);
-    scanner.run_scan(dirs, kv, event_log, policy);
+    scanner.run_scan(dirs, policy);
 
     // Both dirs should have been opened.
     CHECK(dirs.open_count == 2u);
 
     // Last install (beta) should be active.
-    uint8_t state_val[16] = {}; uint16_t state_len = 0;
-    kv.get(KV_COL_STATE, state_val, &state_len, sizeof(state_val));
-    CHECK(memcmp(state_val, COL_STATE_ACTIVE, strlen(COL_STATE_ACTIVE)) == 0);
-
-    CollectionRecord rec = {}; uint16_t rec_len = 0;
-    kv.get(KV_COL_RECORD,
-           reinterpret_cast<uint8_t*>(&rec), &rec_len, sizeof(rec));
+    CHECK(fat_file_exists("1:/collections/active.txt"));
+    ContentStore cs;
+    CollectionRecord rec = {};
+    cs.load_collection(rec);
     CHECK(strcmp(rec.collection_id, "com.test.beta") == 0);
 }
 
@@ -258,9 +245,7 @@ static void test_scan_skips_already_installed() {
 
     FakeUsbHost usb_host(true);
     PolicyStore policy = make_open_policy();
-    FlashDevice flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-    KvStore kv;  kv.init(flash, 0, TEST_KV_SIZE);
-    AppendLog event_log; event_log.init(flash, TEST_KV_SIZE, TEST_LOG_SIZE);
+    FatTestEnv env;
 
     MemInstallDirSource dirs;
     dirs.add_dir("alpha", &reader);
@@ -268,22 +253,25 @@ static void test_scan_skips_already_installed() {
     UsbInstallScanner scanner(usb_host);
 
     // First scan: installs the collection.
-    scanner.run_scan(dirs, kv, event_log, policy);
+    scanner.run_scan(dirs, policy);
     CHECK(dirs.open_count == 1u);
-    CHECK(kv.contains(KV_COL_RECORD));
-
-    size_t kv_count_after_first = kv.live_count();
+    CHECK(fat_file_exists("1:/collections/active.txt"));
 
     // Second scan: same dir, same manifest.
     // open_reader is still called (manifest is read for skip check),
-    // but Installer::run() should NOT be called, so no new KvStore entries.
+    // but Installer::run() should NOT be called again.
     MemInstallDirSource dirs2;
     dirs2.add_dir("alpha", &reader);
-    scanner.run_scan(dirs2, kv, event_log, policy);
+    scanner.run_scan(dirs2, policy);
 
     CHECK(dirs2.open_count == 1u);  // open_reader was called once
-    // No new keys should have been written.
-    CHECK(kv.live_count() == kv_count_after_first);
+
+    // Collection should still be active and unchanged.
+    ContentStore cs;
+    CHECK(cs.has_active_collection());
+    CollectionRecord rec = {};
+    cs.load_collection(rec);
+    CHECK(strcmp(rec.collection_id, "com.test.alpha") == 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -310,12 +298,10 @@ static void test_scan_max_dirs_limit() {
 
     FakeUsbHost usb_host(true);
     PolicyStore policy = make_open_policy();
-    FlashDevice flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-    KvStore kv;  kv.init(flash, 0, TEST_KV_SIZE);
-    AppendLog event_log; event_log.init(flash, TEST_KV_SIZE, TEST_LOG_SIZE);
+    FatTestEnv env;
 
     UsbInstallScanner scanner(usb_host);
-    scanner.run_scan(dirs, kv, event_log, policy);
+    scanner.run_scan(dirs, policy);
 
     // Exactly INSTALL_SCAN_MAX_DIRS readers should have been opened.
     CHECK(dirs.open_count == INSTALL_SCAN_MAX_DIRS);

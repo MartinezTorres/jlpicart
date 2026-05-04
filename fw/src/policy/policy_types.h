@@ -4,12 +4,11 @@
 // policy_types.h — policy flags and metadata for JLPiCart.
 //
 // Policy flags are mutable operational rules stored in flash, authenticated
-// by HMAC-SHA256 (Stage 3: dev key in firmware; Stage 10: OTP-backed key).
-// Bit assignments are normative per spec.md §10.
+// by HMAC-SHA256 with an OTP-backed key.
 
 using PolicyFlags = uint64_t;
 
-// Normative bit assignments (spec.md §10 — Policy flags bit assignments v1)
+// Bit assignments (v1):
 static constexpr PolicyFlags POLICY_ALLOW_USB_COLLECTION_INSTALL     = (1ULL << 0);
 static constexpr PolicyFlags POLICY_ALLOW_NETWORK_COLLECTION_INSTALL = (1ULL << 1);
 static constexpr PolicyFlags POLICY_ALLOW_UNSIGNED_COLLECTIONS       = (1ULL << 2);
@@ -20,10 +19,7 @@ static constexpr PolicyFlags POLICY_ALLOW_BOOT_KEY_REVOCATION        = (1ULL << 
 static constexpr PolicyFlags POLICY_EXPOSE_STABLE_DEVICE_ID          = (1ULL << 7);
 // bits 8..31: reserved, MUST be zero in v1.
 
-// Safe defaults applied when policy is missing or invalid.
-// All permissive actions disabled; device is maximally restrictive.
-// spec.md §10: "If the policy document is missing or invalid, the platform
-// MUST fall back to a safe default (no unsigned installs; no key enrollment)."
+// Safe defaults when policy is missing or invalid: all permissive actions disabled.
 static constexpr PolicyFlags POLICY_SAFE_DEFAULTS = 0ULL;
 
 // Permissive defaults for DEV mode (secure_boot not enforced).

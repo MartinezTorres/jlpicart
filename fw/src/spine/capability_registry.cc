@@ -123,7 +123,7 @@ size_t CapabilityRegistry::activated_count() const {
 }
 
 bool CapabilityRegistry::is_masked_by_policy(const char* name, const PolicyInfo& policy) {
-    // net.esp32 requires POLICY_ALLOW_NETWORK_COLLECTION_INSTALL (spec.md §5.1).
+    // net.esp32 is gated on network install policy.
     if (strcmp(name, "net.esp32") == 0) {
         return !(policy.flags & POLICY_ALLOW_NETWORK_COLLECTION_INSTALL);
     }

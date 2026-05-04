@@ -8,8 +8,6 @@
 //   - Add new codes at the end of each range.
 //   - Keep diag_code_to_string() in sync with this enum.
 //
-// See fw/spec.md §13 (Diagnostics and conformance).
-
 enum class DiagCode : uint16_t {
     // --- General ---
     OK                          = 0,

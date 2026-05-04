@@ -9,8 +9,6 @@
 //
 // The switch callbacks defined in mappers.cc are annotated with RAMFUNC so
 // they run from SRAM on hardware and never stall on XIP cache misses.
-//
-// See spec.md §5.1, bootstrapping.md Stage 9.
 
 #include "cartridges/cartridge.h"
 #include "peripherals/scc.h"

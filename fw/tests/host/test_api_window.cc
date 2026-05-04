@@ -105,7 +105,7 @@ static void test_header_fields() {
     CHECK(h.rsp_ring_ofs == API_RSP_RING_OFS);
     CHECK(h.rsp_ring_len == API_RSP_RING_LEN);
     CHECK(h.max_frame   == API_MAX_FRAME);
-    CHECK(h.feature_bits == API_FEATURES_STAGE4);
+    CHECK(h.feature_bits == API_FEATURES_CURRENT);
     CHECK(h.reserved0   == 0);
     CHECK(h.reserved1   == 0);
 }
@@ -407,7 +407,7 @@ static void test_service_once_bad_req_nonzero_status() {
 }
 
 static void test_service_once_bad_req_seq_zero() {
-    // spec.md §5.1: seq MUST be nonzero.
+    // seq MUST be nonzero.
     TestFixture f;
 
     uint8_t msg[sizeof(MsgHeader)] = {};
@@ -428,8 +428,7 @@ static void test_service_once_bad_req_seq_zero() {
 }
 
 static void test_service_once_bad_arg_scratch_out_of_bounds() {
-    // spec.md §5.1: if scratch_ofs != 0xFFFF, scratch_ofs + scratch_len MUST
-    // fit within the h2c scratch buffer (API_H2C_SCRATCH_LEN).
+    // scratch_ofs + scratch_len must fit within h2c scratch (API_H2C_SCRATCH_LEN).
     TestFixture f;
 
     uint8_t msg[sizeof(MsgHeader)] = {};

@@ -5,9 +5,6 @@
 // and scoped device ID derivation via GET_DEVICE_ID.
 
 #include "identity/device_identity.h"
-#include "storage/kv_store.h"
-#include "storage/flash_device.h"
-#include "storage/flash_layout.h"
 #include "msx/api/api_window.h"
 #include "msx/api/api_types.h"
 #include "spine/security_posture.h"
@@ -19,19 +16,16 @@
 // ed25519 verify via OpenSSL (host only).
 #include <openssl/evp.h>
 
+#include "fat_test_env.h"
+#include "storage/fat_util.h"
 #include "test_helpers.h"
 #include <cstring>
 #include <cstdio>
 
-static constexpr uint32_t TEST_FLASH_SIZE = FLASH_SECTOR_SIZE * 32u;
-
 struct DikFixture {
-    FlashDevice kv_flash;
-    KvStore     kv;
+    FatTestEnv env;
 
-    DikFixture() : kv_flash(TEST_FLASH_SIZE) {
-        kv.init(kv_flash, 0u, TEST_FLASH_SIZE);
-    }
+    DikFixture() {}
 };
 
 // Verify an ed25519 signature using OpenSSL (host-test only helper).
@@ -56,7 +50,7 @@ static bool ed25519_verify(const uint8_t* msg, size_t msg_len,
 }
 
 // ---------------------------------------------------------------------------
-// test_dik_generate — fresh KV → keygen; public key and private key stored
+// test_dik_generate — fresh FAT volume → keygen; key file stored
 // ---------------------------------------------------------------------------
 
 static void test_dik_generate()
@@ -64,7 +58,7 @@ static void test_dik_generate()
     DikFixture f;
 
     DeviceIdentity dik;
-    CHECK(dik.init_or_load(f.kv).ok());
+    CHECK(dik.init_or_load().ok());
     CHECK(dik.initialized());
 
     uint8_t pub[DIK_PUB_KEY_LEN];
@@ -77,10 +71,8 @@ static void test_dik_generate()
     }
     CHECK(!all_zero);
 
-    // dik.pub and dik.priv should be stored in KV.
-    CHECK(f.kv.contains(KV_DIK_PUB));
-    CHECK(f.kv.contains(KV_DIK_PRIV));
-    CHECK(f.kv.contains(KV_DIK_FLAGS));
+    // Key material should be stored at the expected FAT path.
+    CHECK(fat_file_exists("1:/system/dik.bin"));
 }
 
 // ---------------------------------------------------------------------------
@@ -93,13 +85,13 @@ static void test_dik_reload()
 
     // Generate and capture public key.
     DeviceIdentity dik1;
-    CHECK(dik1.init_or_load(f.kv).ok());
+    CHECK(dik1.init_or_load().ok());
     uint8_t pub1[DIK_PUB_KEY_LEN];
     dik1.public_key(pub1);
 
-    // Reload from same KV.
+    // Reload from same FAT volume.
     DeviceIdentity dik2;
-    CHECK(dik2.init_or_load(f.kv).ok());
+    CHECK(dik2.init_or_load().ok());
     uint8_t pub2[DIK_PUB_KEY_LEN];
     dik2.public_key(pub2);
 
@@ -107,7 +99,7 @@ static void test_dik_reload()
 }
 
 // ---------------------------------------------------------------------------
-// test_dik_idempotent — call init_or_load() twice on same instance + same KV
+// test_dik_idempotent — call init_or_load() twice on same instance + same volume
 // ---------------------------------------------------------------------------
 
 static void test_dik_idempotent()
@@ -115,13 +107,13 @@ static void test_dik_idempotent()
     DikFixture f;
 
     DeviceIdentity dik;
-    CHECK(dik.init_or_load(f.kv).ok());
+    CHECK(dik.init_or_load().ok());
     uint8_t pub1[DIK_PUB_KEY_LEN];
     dik.public_key(pub1);
 
-    // Second instance from same KV.
+    // Second instance from same FAT volume.
     DeviceIdentity dik2;
-    CHECK(dik2.init_or_load(f.kv).ok());
+    CHECK(dik2.init_or_load().ok());
     uint8_t pub2[DIK_PUB_KEY_LEN];
     dik2.public_key(pub2);
 
@@ -137,7 +129,7 @@ static void test_dik_sign_verify()
     DikFixture f;
 
     DeviceIdentity dik;
-    CHECK(dik.init_or_load(f.kv).ok());
+    CHECK(dik.init_or_load().ok());
 
     const char* msg = "Hello, ed25519!";
     uint8_t sig[DIK_SIG_LEN] = {};
@@ -163,7 +155,7 @@ static void test_get_device_id_scoped()
     DikFixture f;
 
     DeviceIdentity dik;
-    CHECK(dik.init_or_load(f.kv).ok());
+    CHECK(dik.init_or_load().ok());
 
     uint8_t pub[DIK_PUB_KEY_LEN];
     dik.public_key(pub);
@@ -180,9 +172,7 @@ static void test_get_device_id_scoped()
 // ---------------------------------------------------------------------------
 
 struct DikApiFixture {
-    FlashDevice        kv_flash;
-    FlashDevice        ps_flash;
-    KvStore            kv;
+    FatTestEnv         env;
     ProfileStore       ps;
     SecurityPosture    posture;
     PolicyStore        policy_store;
@@ -191,11 +181,8 @@ struct DikApiFixture {
     DeviceIdentity     dik;
 
     DikApiFixture()
-        : kv_flash(TEST_FLASH_SIZE)
-        , ps_flash(TEST_FLASH_SIZE)
     {
-        kv.init(kv_flash, 0u, TEST_FLASH_SIZE);
-        ps.init(ps_flash, 0u, TEST_FLASH_SIZE);
+        ps.init();
         posture = {};
         policy_store.load(posture);
         registry.init(BoardDescriptor::for_current_board(),
@@ -203,7 +190,7 @@ struct DikApiFixture {
                       policy_store.info());
         win.init(posture, policy_store, registry);
         win.bind_profile_store(ps);
-        dik.init_or_load(kv);
+        dik.init_or_load();
         win.bind_device_identity(dik);
     }
 

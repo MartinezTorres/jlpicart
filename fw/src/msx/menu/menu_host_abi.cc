@@ -2,8 +2,6 @@
 //
 // Implements the RP2350 half of the command/response protocol.
 // The Z80 stub (fw/src/msx/menu/stub/) implements the other half.
-//
-// Spec reference: spec.md §8 (Menu Host ABI).
 
 #include "msx/menu/menu_host_abi.h"
 #include "msx/menu/menu_stub_bin.h"  // kMenuStubBin, kMenuStubBin_SIZE
@@ -15,7 +13,7 @@
 void MenuMailbox::init(uint8_t* page, uint16_t /*stub_entry_ignored*/)
 {
     // stub_entry parameter is ignored: always use MENU_STUB_OFS so that stub
-    // code never overlaps the data exchange buffer (spec §8 design note).
+    // code never overlaps the data exchange buffer.
     static_assert(kMenuStubBin_SIZE <= 2048u,
                   "menu stub exceeds 2 KB slot at MENU_STUB_OFS");
 
@@ -69,7 +67,7 @@ bool MenuMailbox::send_command(uint16_t cmd_id,
         return false; // would overflow the usable data buffer (stub code lives at top)
     }
 
-    // Write all command fields before advancing cmd_seq (spec §8 ordering rule).
+    // Write all command fields before advancing cmd_seq (ordering rule: seq last).
     mbx_->cmd_id = cmd_id;
     mbx_->arg0   = arg0;
     mbx_->arg1   = arg1;

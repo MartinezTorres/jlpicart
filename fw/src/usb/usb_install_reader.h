@@ -4,20 +4,16 @@
 // Reads files from a single Install Intent directory on the USB stick
 // (e.g. "0:/JLPICART/INSTALL/com.example.game/").
 //
-// Compiled for firmware only (not in JLPICART_HOST_TEST builds).
-// Tests use MemInstallReader from tests/host/test_helpers.h instead.
+// Hardware-only: not compiled in JLPICART_HOST_TEST builds.
 
 #ifndef JLPICART_HOST_TEST
 
 #include "content/installer.h"
 #include "crypto/sha256.h"
 #include <cstddef>
-#include <cstdint>
 
 class UsbInstallReader : public InstallReader {
 public:
-    // root must include the trailing slash, e.g.
-    //   "0:/JLPICART/INSTALL/com.example.game/"
     explicit UsbInstallReader(const char* root);
 
     DiagStatus read_file(const char* path, uint8_t* buf,
@@ -28,19 +24,17 @@ public:
 
     bool file_exists(const char* path) override;
 
-    // Stream a payload file to flash in FLASH_SECTOR_SIZE chunks.
-    // Erases one sector before each write chunk.
-    DiagStatus copy_to_flash(const char* path, FlashDevice& flash,
-                              uint32_t flash_offset, size_t* out_size) override;
+    // Copy a payload file from the USB drive (drive "0:") to a FAT path
+    // on the internal flash drive (drive "1:").
+    DiagStatus copy_to_fat(const char* src_path, const char* dst_path,
+                            size_t* out_size) override;
 
 private:
-    // Full FatFs path = root_ + path.  root_ is always <= 64 chars.
-    static constexpr size_t ROOT_MAX  = 80;
-    static constexpr size_t CHUNK_SIZE = 512;   // hash streaming chunk
+    static constexpr size_t ROOT_MAX   = 80;
+    static constexpr size_t CHUNK_SIZE = 512;
 
     char root_[ROOT_MAX];
 
-    // Build the full path into buf (buf must be at least ROOT_MAX + path_len).
     void full_path(char* buf, size_t buf_size, const char* path) const;
 };
 

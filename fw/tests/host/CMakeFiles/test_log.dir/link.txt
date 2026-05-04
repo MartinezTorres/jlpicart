@@ -1,0 +1,1 @@
+/usr/bin/c++ -g CMakeFiles/test_log.dir/test_log.cc.o CMakeFiles/test_log.dir/home/claude/repos/jlpicart/fw/src/log/log.cc.o -o test_log  /usr/lib/x86_64-linux-gnu/libcrypto.so 

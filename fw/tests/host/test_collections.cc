@@ -1,18 +1,16 @@
 // test_collections.cc — Host tests for Stage 7 collection format, manifest
-// parsing, install pipeline, and receipts.
+// parsing, and install pipeline.
 
 #include "content/collection_format.h"
 #include "content/manifest.h"
 #include "content/manifest_parser.h"
 #include "content/installer.h"
-#include "content/receipts.h"
-#include "storage/flash_device.h"
-#include "storage/flash_layout.h"
-#include "storage/kv_store.h"
-#include "storage/append_log.h"
+#include "content/content_store.h"
+#include "storage/fat_util.h"
 #include "spine/policy_store.h"
 #include "spine/security_posture.h"
 #include "crypto/sha256.h"
+#include "fat_test_env.h"
 
 #include <cassert>
 #include <cstdio>
@@ -38,9 +36,6 @@ static int g_fail = 0;
 #define CHECK_EQ(a, b) CHECK((a) == (b))
 #define CHECK_OK(s)    CHECK((s).ok())
 #define CHECK_FAIL(s)  CHECK(!(s).ok())
-
-static constexpr uint32_t TEST_KV_SIZE  = FLASH_SECTOR_SIZE * 4;
-static constexpr uint32_t TEST_LOG_SIZE = FLASH_SECTOR_SIZE * 4;
 
 // ---------------------------------------------------------------------------
 // Minimal manifests for testing
@@ -340,15 +335,11 @@ static void test_bundle_hash_verification_pass() {
 
     // Use open policy so signature check is skipped.
     PolicyStore policy = make_open_policy();
-    FlashDevice flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-    KvStore kv;
-    kv.init(flash, 0, TEST_KV_SIZE);
-    AppendLog log;
-    log.init(flash, TEST_KV_SIZE, TEST_LOG_SIZE);
+    FatTestEnv env;
 
     Installer installer;
     InstallResult result = {};
-    CHECK_OK(installer.run(reader, kv, log, policy, result));
+    CHECK_OK(installer.run(reader, policy, result));
     CHECK(result.installed);
 }
 
@@ -384,13 +375,11 @@ static void test_bundle_hash_verification_fail() {
     reader.add_text("bundle.sig", sig_json);
 
     PolicyStore policy = make_open_policy();
-    FlashDevice flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-    KvStore kv;  kv.init(flash, 0, TEST_KV_SIZE);
-    AppendLog log; log.init(flash, TEST_KV_SIZE, TEST_LOG_SIZE);
+    FatTestEnv env;
 
     Installer installer;
     InstallResult result = {};
-    DiagStatus s = installer.run(reader, kv, log, policy, result);
+    DiagStatus s = installer.run(reader, policy, result);
     CHECK_FAIL(s);
     CHECK(!result.installed);
     CHECK(s.code == DiagCode::COLLECTION_HASH_MISMATCH);
@@ -405,28 +394,19 @@ static void test_install_success() {
     reader.add_text("manifest.json", kMinimalManifest);
 
     PolicyStore policy = make_open_policy();
-    FlashDevice flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-    KvStore kv;  kv.init(flash, 0, TEST_KV_SIZE);
-    AppendLog log; log.init(flash, TEST_KV_SIZE, TEST_LOG_SIZE);
+    FatTestEnv env;
 
     Installer installer;
     InstallResult result = {};
-    CHECK_OK(installer.run(reader, kv, log, policy, result));
+    CHECK_OK(installer.run(reader, policy, result));
     CHECK(result.installed);
     CHECK(strcmp(result.collection_id, "com.example.test") == 0);
     CHECK(strcmp(result.version, "1.0.0") == 0);
 
-    // col.state must be "active".
-    uint8_t state_val[16] = {}; uint16_t state_len = 0;
-    CHECK_OK(kv.get(KV_COL_STATE, state_val, &state_len, sizeof(state_val)));
-    CHECK(memcmp(state_val, COL_STATE_ACTIVE, strlen(COL_STATE_ACTIVE)) == 0);
-
-    // col.record must be present and correctly populated.
+    ContentStore cs;
+    CHECK(cs.has_active_collection());
     CollectionRecord rec = {};
-    uint16_t rec_len = 0;
-    CHECK_OK(kv.get(KV_COL_RECORD,
-                    reinterpret_cast<uint8_t*>(&rec), &rec_len, sizeof(rec)));
-    CHECK_EQ(rec_len, sizeof(rec));
+    CHECK_OK(cs.load_collection(rec));
     CHECK(strcmp(rec.collection_id, "com.example.test") == 0);
     CHECK(strcmp(rec.version, "1.0.0") == 0);
     CHECK(strcmp(rec.publisher_id, "com.example") == 0);
@@ -435,100 +415,24 @@ static void test_install_success() {
 }
 
 static void test_install_survives_reinit() {
-    FlashDevice flash(TEST_KV_SIZE + TEST_LOG_SIZE);
+    FatTestEnv env;
 
     // Install.
     {
         MemoryInstallReader reader;
         reader.add_text("manifest.json", kMinimalManifest);
         PolicyStore policy = make_open_policy();
-        KvStore kv;  kv.init(flash, 0, TEST_KV_SIZE);
-        AppendLog log; log.init(flash, TEST_KV_SIZE, TEST_LOG_SIZE);
         Installer installer;
         InstallResult result = {};
-        CHECK_OK(installer.run(reader, kv, log, policy, result));
+        CHECK_OK(installer.run(reader, policy, result));
     }
 
-    // Reinit — same flash device.
-    KvStore kv2;
-    CHECK_OK(kv2.init(flash, 0, TEST_KV_SIZE));
-
-    uint8_t state_val[16] = {}; uint16_t state_len = 0;
-    CHECK_OK(kv2.get(KV_COL_STATE, state_val, &state_len, sizeof(state_val)));
-    CHECK(memcmp(state_val, COL_STATE_ACTIVE, strlen(COL_STATE_ACTIVE)) == 0);
-
-    CollectionRecord rec = {}; uint16_t rec_len = 0;
-    CHECK_OK(kv2.get(KV_COL_RECORD,
-                     reinterpret_cast<uint8_t*>(&rec), &rec_len, sizeof(rec)));
+    // Reinit — second ContentStore reads same FAT volume (still mounted).
+    ContentStore cs2;
+    CHECK(cs2.has_active_collection());
+    CollectionRecord rec = {};
+    CHECK_OK(cs2.load_collection(rec));
     CHECK(strcmp(rec.collection_id, "com.example.test") == 0);
-}
-
-static void test_install_power_loss_before_commit() {
-    // Inject power loss after writing the CollectionRecord (step b) but before
-    // writing the "active" state (step c). The install must not be visible on reinit.
-    //
-    // Record sizes in the KvStore log:
-    //   "col.state" = 9 chars key + "pending"(7) + hdr(8) = 24 bytes  → first write
-    //   "col.record" = 10 chars key + 357 bytes val + hdr(8) = 375 bytes → second write
-    //   "col.state" update = another 24 bytes → third write (we cut here)
-    //
-    // We allow 24 + 375 = 399 bytes, cutting off just before the commit.
-    FlashDevice flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-
-    // Allow all bytes for "col.state"="pending" (24 B) + "col.record" (375 B),
-    // then cut before the "active" commit write (third put, another 24 B).
-    //   "col.state"="pending": hdr(8) + key(9) + val(7) = 24 bytes
-    //   "col.record"=record:   hdr(8) + key(10) + val(357) = 375 bytes
-    {
-        flash.inject_power_loss_after(399);
-
-        MemoryInstallReader reader;
-        reader.add_text("manifest.json", kMinimalManifest);
-        PolicyStore policy = make_open_policy();
-        KvStore kv;  kv.init(flash, 0, TEST_KV_SIZE);
-        AppendLog log; log.init(flash, TEST_KV_SIZE, TEST_LOG_SIZE);
-        Installer installer;
-        InstallResult result = {};
-        installer.run(reader, kv, log, policy, result); // may fail — that's expected
-    }
-
-    // Reinit — must see NO active collection.
-    KvStore kv3;
-    CHECK_OK(kv3.init(flash, 0, TEST_KV_SIZE));
-
-    uint8_t state_val[16] = {}; uint16_t state_len = 0;
-    DiagStatus s = kv3.get(KV_COL_STATE, state_val, &state_len, sizeof(state_val));
-    // Either key is absent (STORAGE_NOT_FOUND) or state is "pending" — never "active".
-    bool no_active_collection =
-        !s.ok() || memcmp(state_val, COL_STATE_ACTIVE, strlen(COL_STATE_ACTIVE)) != 0;
-    CHECK(no_active_collection);
-}
-
-static void test_install_receipt_appended() {
-    MemoryInstallReader reader;
-    reader.add_text("manifest.json", kMinimalManifest);
-
-    PolicyStore policy = make_open_policy();
-    FlashDevice flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-    KvStore kv;  kv.init(flash, 0, TEST_KV_SIZE);
-    AppendLog log; log.init(flash, TEST_KV_SIZE, TEST_LOG_SIZE);
-
-    Installer installer;
-    InstallResult result = {};
-    CHECK_OK(installer.run(reader, kv, log, policy, result));
-
-    // The event log must have at least one INSTALL record.
-    struct Ctx { int install_count; };
-    Ctx ctx = {};
-    log.iterate([](uint8_t type, uint32_t, const uint8_t* data, uint16_t len, void* cx) -> bool {
-        auto* c = static_cast<Ctx*>(cx);
-        if (type == ALOG_TYPE_INSTALL && data && len == sizeof(InstallReceiptData)) {
-            const auto* rec = reinterpret_cast<const InstallReceiptData*>(data);
-            if (rec->installed == 1u) ++c->install_count;
-        }
-        return true;
-    }, &ctx);
-    CHECK(ctx.install_count >= 1);
 }
 
 static void test_install_rejected_bad_manifest() {
@@ -536,28 +440,13 @@ static void test_install_rejected_bad_manifest() {
     reader.add_text("manifest.json", kMissingCollectionIdManifest);
 
     PolicyStore policy = make_open_policy();
-    FlashDevice flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-    KvStore kv;  kv.init(flash, 0, TEST_KV_SIZE);
-    AppendLog log; log.init(flash, TEST_KV_SIZE, TEST_LOG_SIZE);
+    FatTestEnv env;
 
     Installer installer;
     InstallResult result = {};
-    DiagStatus s = installer.run(reader, kv, log, policy, result);
+    DiagStatus s = installer.run(reader, policy, result);
     CHECK_FAIL(s);
     CHECK(!result.installed);
-
-    // A failure receipt should be in the log.
-    struct Ctx { int reject_count; };
-    Ctx ctx = {};
-    log.iterate([](uint8_t type, uint32_t, const uint8_t* data, uint16_t len, void* cx) -> bool {
-        auto* c = static_cast<Ctx*>(cx);
-        if (type == ALOG_TYPE_INSTALL && data && len == sizeof(InstallReceiptData)) {
-            const auto* rec = reinterpret_cast<const InstallReceiptData*>(data);
-            if (rec->installed == 0u) ++c->reject_count;
-        }
-        return true;
-    }, &ctx);
-    CHECK(ctx.reject_count >= 1);
 }
 
 static void test_install_direct_boot_persisted() {
@@ -565,17 +454,15 @@ static void test_install_direct_boot_persisted() {
     reader.add_text("manifest.json", kDirectBootManifest);
 
     PolicyStore policy = make_open_policy();
-    FlashDevice flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-    KvStore kv;  kv.init(flash, 0, TEST_KV_SIZE);
-    AppendLog log; log.init(flash, TEST_KV_SIZE, TEST_LOG_SIZE);
+    FatTestEnv env;
 
     Installer installer;
     InstallResult result = {};
-    CHECK_OK(installer.run(reader, kv, log, policy, result));
+    CHECK_OK(installer.run(reader, policy, result));
 
-    CollectionRecord rec = {}; uint16_t rec_len = 0;
-    CHECK_OK(kv.get(KV_COL_RECORD,
-                    reinterpret_cast<uint8_t*>(&rec), &rec_len, sizeof(rec)));
+    ContentStore cs;
+    CollectionRecord rec = {};
+    CHECK_OK(cs.load_collection(rec));
     CHECK_EQ(rec.boot_mode, 1u);  // direct
     CHECK(strcmp(rec.default_payload_id, "game") == 0);
     CHECK(strcmp(rec.version, "2.0.0") == 0);
@@ -606,8 +493,6 @@ int main()
     // Installer integration
     test_install_success();
     test_install_survives_reinit();
-    test_install_power_loss_before_commit();
-    test_install_receipt_appended();
     test_install_rejected_bad_manifest();
     test_install_direct_boot_persisted();
 

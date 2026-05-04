@@ -11,8 +11,8 @@
 //   - Maximum combined command length is ~1 KB; large URLs or bodies will
 //     be rejected with NET_PARSE_ERROR.
 //   - HTTPS uses TLS on the ESP32 (not the RP2350).  Do NOT use for
-//     identity, entitlement, or score traffic (spec.md §12 requires
-//     end-to-end crypto owned by RP2350 for those flows).
+//     identity, entitlement, or score traffic — those flows require
+//     end-to-end crypto owned by the RP2350, not TLS on the ESP32.
 
 #include "net/transport_esp_at.h"
 #include <cstdlib>

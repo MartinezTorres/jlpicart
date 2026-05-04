@@ -1,44 +1,39 @@
 #pragma once
-// content_store.h — Read-side view of the installed collection and its payloads.
+// content_store.h — Read-side view of the installed collection from FAT.
 //
-// ContentStore wraps a KvStore and provides typed accessors for the records
-// written by Installer::run() and populate_flash.py.
+// FAT file layout:
+//   1:/collections/active.txt                       — "active" or absent/other
+//   1:/collections/{col_id}/collection.bin          — CollectionRecord
+//   1:/collections/{col_id}/payload_{id}.bin        — PayloadRecord
 //
-// Key layout in SYSTEM_KV:
-//   KV_COL_STATE      → "active" | "pending"
-//   KV_COL_RECORD     → CollectionRecord (357 bytes, packed)
-//   "pl.<payload_id>" → PayloadRecord    (100 bytes, packed)
-//
-// Thread safety: NOT thread-safe. Use only from the boot/preflight path.
-// See bootstrapping.md Stage 10.
+// FatVolume must be mounted. Thread safety: NOT thread-safe.
 
 #include "content/collection_format.h"
-#include "storage/kv_store.h"
 #include "diag/diag.h"
 
 class ContentStore {
 public:
-    explicit ContentStore(KvStore& kv) : kv_(kv) {}
+    ContentStore() = default;
 
-    // Returns true if KV_COL_STATE == "active" (a committed collection is present).
+    // Returns true if the active collection marker is present.
     bool has_active_collection() const;
 
-    // Read the installed CollectionRecord.
-    // Returns STORAGE_NOT_FOUND if the KV_COL_RECORD key is absent.
-    // Does NOT check col.state; call has_active_collection() first if needed.
+    // Read the installed CollectionRecord from FAT.
     DiagStatus load_collection(CollectionRecord& out) const;
 
     // Read a PayloadRecord by payload_id.
-    // Returns STORAGE_NOT_FOUND if the key "pl.<payload_id>" is absent.
     DiagStatus load_payload(const char* payload_id, PayloadRecord& out) const;
 
     // Load the default payload for the active collection.
-    // Reads CollectionRecord.default_payload_id, then calls load_payload().
-    // Returns STORAGE_NOT_FOUND if the collection record is absent,
-    // default_payload_id is empty, or the PayloadRecord has not been written.
-    // Does NOT check col.state; call has_active_collection() first if needed.
     DiagStatus load_default_payload(PayloadRecord& out) const;
 
 private:
-    KvStore& kv_;
+    static constexpr const char* ACTIVE_PATH = "1:/collections/active.txt";
+    static constexpr const char* COL_DIR     = "1:/collections";
+
+    // Build paths for the active collection (reads active.txt first).
+    static bool active_col_id(char* id_out, size_t id_sz);
+    static void col_record_path(const char* col_id, char* out, size_t sz);
+    static void payload_path(const char* col_id, const char* payload_id,
+                              char* out, size_t sz);
 };

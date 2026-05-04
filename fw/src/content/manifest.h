@@ -1,6 +1,5 @@
 #pragma once
 // manifest.h — In-memory representation of a parsed Collection Manifest.
-// See spec.md §6.2 and §6.3.1 (Collection manifest JSON Schema).
 
 #include "content/collection_format.h"
 #include <cstdint>
@@ -10,28 +9,34 @@
 static constexpr size_t PAYLOAD_CAPS_MAX    = 4;
 static constexpr size_t PAYLOAD_CAP_ID_MAX  = 64;
 
-// PAYLOAD_MAPPER_TYPE_MAX is defined in collection_format.h (Stage 10: moved there
-// so PayloadRecord and PayloadEntry share the same constant without circular includes).
+// PAYLOAD_MAPPER_TYPE_MAX and PAYLOAD_DEVICES_MAX are defined in collection_format.h.
+
+// One device entry parsed from a payload's "devices" array in the manifest.
+struct ManifestDeviceEntry {
+    DeviceType type;                    // device chip type
+    uint8_t    subslot;                 // MSX subslot (0–3); for memory-mapped devices
+    bool       optional;                // true → user may choose to deactivate
+    char       params[PAYLOAD_ID_MAX];  // device-specific; OPL4: wave_payload_id
+};
 
 struct PayloadEntry {
     char payload_id[PAYLOAD_ID_MAX];
     char path[PAYLOAD_PATH_MAX];
     char title[COL_TITLE_MAX];
 
-    // Capability requirements (Stage 8).  Parsed from payload JSON fields
-    // "required_capabilities" and "optional_capabilities" (arrays of strings).
-    // Hard requirements cause launch failure if not activated.
+    // Capability requirements.  Hard requirements cause launch failure if not activated.
     char    required_capabilities[PAYLOAD_CAPS_MAX][PAYLOAD_CAP_ID_MAX];
     uint8_t required_cap_count;
     char    optional_capabilities[PAYLOAD_CAPS_MAX][PAYLOAD_CAP_ID_MAX];
     uint8_t optional_cap_count;
 
-    // Mapper configuration (Stage 9).  Parsed from payload JSON fields
-    // "mapper_type" (string) and "subslot" (integer 0–3).
-    // mapper_type="" and subslot=0 are the defaults (no mapper configured).
-    // See bus/mapping_plan.h for MapperType and mapper_plan_from_manifest().
+    // Mapper configuration.  mapper_type="" and subslot=0 are defaults.
     char    mapper_type[PAYLOAD_MAPPER_TYPE_MAX];  // "" = not specified (NONE)
     uint8_t subslot;                               // 0–3 (default 0)
+
+    // Collection devices.  Parsed from payload JSON field "devices".
+    ManifestDeviceEntry devices[PAYLOAD_DEVICES_MAX];
+    uint8_t device_count;
 };
 
 struct CollectionManifest {

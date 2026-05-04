@@ -9,7 +9,7 @@
  * - No interrupts are assumed or enabled.
  * - Runs on MSX1 or later; no model-specific features required.
  *
- * Spec reference: spec.md §5.1 (ring framing), §5.1 "System service (0x00)".
+ * Uses ring-framed request/response (see api_window.cc) and System service 0x00.
  */
 
 #include <stdint.h>
@@ -25,7 +25,7 @@
 #define WIN_REQ_RING_OFS     0x0060u
 #define WIN_RSP_RING_OFS     0x0268u
 
-/* Ring header layout (spec.md RingHeader, 8 bytes). */
+/* Ring header layout (RingHeader, 8 bytes). */
 #define RING_HEAD_OFS  0u
 #define RING_TAIL_OFS  2u
 #define RING_SIZE_OFS  4u

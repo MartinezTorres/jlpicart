@@ -4,7 +4,7 @@
 
 // sha256.h — minimal SHA-256 and HMAC-SHA256 implementation.
 // Self-contained, no external dependencies. Works on both firmware and host.
-// Used for policy verification and bundle hashing. See spec.md §10.
+// Used for policy verification and bundle hashing.
 
 static constexpr size_t SHA256_DIGEST_SIZE = 32;
 

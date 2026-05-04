@@ -404,6 +404,10 @@ void opl4_reset(Opl4State& state)
     opl3_reset(state.opl3);
 }
 
+static void opl4_reset_fn(Subslot& c) {
+    opl4_reset(*reinterpret_cast<Opl4State*>(c.ram_base));
+}
+
 void opl4_setup(Cartridge& c, Opl4State& state,
                 const uint8_t* wave_rom, uint32_t wave_rom_size)
 {
@@ -413,6 +417,7 @@ void opl4_setup(Cartridge& c, Opl4State& state,
     c.clear();
     c.name     = "opl4";
     c.ram_base = reinterpret_cast<uint8_t*>(&state);
+    c.reset_fn = opl4_reset_fn;
 
     // OPL3 FM section ports (primary bank).
     c.io_write_callbacks[0x7Eu] = opl4_opl3_addr_write;

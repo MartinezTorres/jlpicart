@@ -21,26 +21,17 @@
 #include "content/installer.h"
 #include "content/manifest.h"
 #include "content/collection_format.h"
-#include "storage/flash_device.h"
-#include "storage/flash_layout.h"
-#include "storage/kv_store.h"
-#include "storage/append_log.h"
+#include "content/content_store.h"
+#include "storage/fat_util.h"
 #include "usb/usb_host.h"
 #include "usb/usb_install_scanner.h"
 #include "crypto/sha256.h"
 #include "profiles/profile_store.h"
 
+#include "fat_test_env.h"
 #include "test_helpers.h"
 #include <cstring>
 #include <cstdio>
-
-// ---------------------------------------------------------------------------
-// Common sizes
-// ---------------------------------------------------------------------------
-
-static constexpr uint32_t TEST_FLASH_SIZE = FLASH_SECTOR_SIZE * 8u;
-static constexpr uint32_t TEST_KV_SIZE    = FLASH_SECTOR_SIZE * 4u;
-static constexpr uint32_t TEST_LOG_SIZE   = FLASH_SECTOR_SIZE * 4u;
 
 // ---------------------------------------------------------------------------
 // PolicyStore factory — DEV posture, explicit flags (HMAC skipped in DEV mode)
@@ -141,9 +132,7 @@ static const char kManifest[] =
 // ---------------------------------------------------------------------------
 
 struct PolicyApiFixture {
-    FlashDevice        kv_flash;
-    FlashDevice        ps_flash;
-    KvStore            kv;
+    FatTestEnv         env;
     ProfileStore       ps;
     SecurityPosture    posture;
     PolicyStore        policy_store;
@@ -152,11 +141,8 @@ struct PolicyApiFixture {
     DeviceIdentity     dik;
 
     explicit PolicyApiFixture(PolicyFlags flags)
-        : kv_flash(TEST_FLASH_SIZE)
-        , ps_flash(TEST_FLASH_SIZE)
     {
-        kv.init(kv_flash, 0u, TEST_FLASH_SIZE);
-        ps.init(ps_flash, 0u, TEST_FLASH_SIZE);
+        ps.init();
         posture      = {};
         policy_store = make_policy(flags);
         registry.init(BoardDescriptor::for_current_board(),
@@ -164,7 +150,7 @@ struct PolicyApiFixture {
                       policy_store.info());
         win.init(posture, policy_store, registry);
         win.bind_profile_store(ps);
-        dik.init_or_load(kv);
+        dik.init_or_load();
         win.bind_device_identity(dik);
     }
 
@@ -249,9 +235,7 @@ static void test_usb_install_blocked_without_flag()
     PolicyStore policy = make_policy(POLICY_ALLOW_UNSIGNED_COLLECTIONS);
     // No POLICY_ALLOW_USB_COLLECTION_INSTALL
 
-    FlashDevice flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-    KvStore kv;  kv.init(flash, 0u, TEST_KV_SIZE);
-    AppendLog log; log.init(flash, TEST_KV_SIZE, TEST_LOG_SIZE);
+    FatTestEnv env;
 
     MemoryInstallReader reader;
     reader.add_text("manifest.json", kManifest);
@@ -261,11 +245,10 @@ static void test_usb_install_blocked_without_flag()
 
     FakeUsbHost usb_host;
     UsbInstallScanner scanner(usb_host);
-    scanner.run_scan(dirs, kv, log, policy);
+    scanner.run_scan(dirs, policy);
 
-    // Nothing installed — KV_COL_STATE must be absent.
-    CHECK(!kv.contains(KV_COL_STATE));
-    CHECK(!kv.contains(KV_COL_RECORD));
+    // Nothing installed — active.txt must be absent.
+    CHECK(!fat_file_exists("1:/collections/active.txt"));
 }
 
 // ---------------------------------------------------------------------------
@@ -278,9 +261,7 @@ static void test_usb_install_allowed_with_flag()
     PolicyStore policy = make_policy(POLICY_ALLOW_USB_COLLECTION_INSTALL |
                                      POLICY_ALLOW_UNSIGNED_COLLECTIONS);
 
-    FlashDevice flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-    KvStore kv;  kv.init(flash, 0u, TEST_KV_SIZE);
-    AppendLog log; log.init(flash, TEST_KV_SIZE, TEST_LOG_SIZE);
+    FatTestEnv env;
 
     MemoryInstallReader reader;
     reader.add_text("manifest.json", kManifest);
@@ -290,15 +271,15 @@ static void test_usb_install_allowed_with_flag()
 
     FakeUsbHost usb_host;
     UsbInstallScanner scanner(usb_host);
-    scanner.run_scan(dirs, kv, log, policy);
+    scanner.run_scan(dirs, policy);
 
     // Collection should be installed and active.
-    CHECK(kv.contains(KV_COL_STATE));
-    CHECK(kv.contains(KV_COL_RECORD));
+    ContentStore cs;
+    CHECK(cs.has_active_collection());
 
-    uint8_t state[16] = {}; uint16_t slen = 0;
-    kv.get(KV_COL_STATE, state, &slen, sizeof(state));
-    CHECK(memcmp(state, COL_STATE_ACTIVE, strlen(COL_STATE_ACTIVE)) == 0);
+    CollectionRecord rec = {};
+    cs.load_collection(rec);
+    CHECK(strcmp(rec.collection_id, "com.test.enforce") == 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -311,9 +292,7 @@ static void test_unsigned_collection_blocked_without_flag()
     PolicyStore policy = make_policy(POLICY_ALLOW_USB_COLLECTION_INSTALL);
     // No POLICY_ALLOW_UNSIGNED_COLLECTIONS
 
-    FlashDevice flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-    KvStore kv;  kv.init(flash, 0u, TEST_KV_SIZE);
-    AppendLog log; log.init(flash, TEST_KV_SIZE, TEST_LOG_SIZE);
+    FatTestEnv env;
 
     MemoryInstallReader reader;
     reader.add_text("manifest.json", kManifest);
@@ -321,7 +300,7 @@ static void test_unsigned_collection_blocked_without_flag()
 
     Installer installer;
     InstallResult result = {};
-    DiagStatus s = installer.run(reader, kv, log, policy, result);
+    DiagStatus s = installer.run(reader, policy, result);
 
     CHECK(!s.ok());
     CHECK(!result.installed);
@@ -338,9 +317,7 @@ static void test_unsigned_collection_allowed_with_flag()
     PolicyStore policy = make_policy(POLICY_ALLOW_UNSIGNED_COLLECTIONS |
                                      POLICY_ALLOW_USB_COLLECTION_INSTALL);
 
-    FlashDevice flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-    KvStore kv;  kv.init(flash, 0u, TEST_KV_SIZE);
-    AppendLog log; log.init(flash, TEST_KV_SIZE, TEST_LOG_SIZE);
+    FatTestEnv env;
 
     MemoryInstallReader reader;
     reader.add_text("manifest.json", kManifest);
@@ -348,7 +325,7 @@ static void test_unsigned_collection_allowed_with_flag()
 
     Installer installer;
     InstallResult result = {};
-    DiagStatus s = installer.run(reader, kv, log, policy, result);
+    DiagStatus s = installer.run(reader, policy, result);
 
     CHECK(s.ok());
     CHECK(result.installed);

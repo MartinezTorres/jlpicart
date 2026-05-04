@@ -6,10 +6,8 @@
 // policy_verify.h — authenticate a PolicyDocument before use.
 //
 // Verification uses HMAC-SHA256 with a development key embedded in firmware.
-// In DEV mode (secure_boot_enabled = false), signature checking is skipped
-// and POLICY_DEV_DEFAULTS are used — per spec.md §10 "unsealed-first".
-//
-// Only PolicyStore calls policy_verify(). See bootstrapping.md Appendix.
+// In DEV mode (secure_boot_enabled = false), signature checking is skipped.
+// Only PolicyStore calls policy_verify().
 
 // Returns DiagStatus::success() if:
 //   - posture.secure_boot_enabled == false  (DEV mode, skip verification), OR

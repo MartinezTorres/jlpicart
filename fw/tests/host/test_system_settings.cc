@@ -5,20 +5,13 @@
 
 #include "settings/system_settings_store.h"
 #include "settings/system_settings.h"
-#include "storage/kv_store.h"
-#include "storage/flash_device.h"
-#include "storage/flash_layout.h"
 #include "profiles/profile_store.h"
 
+#include "fat_test_env.h"
+#include "storage/fat_util.h"
 #include "test_helpers.h"
 #include <cstring>
 #include <cstdio>
-
-// ---------------------------------------------------------------------------
-// Fixture helpers
-// ---------------------------------------------------------------------------
-
-static constexpr uint32_t TEST_FLASH_SIZE = FLASH_SECTOR_SIZE * 32u; // 128 KB
 
 // ---------------------------------------------------------------------------
 // test_settings_defaults — fresh store yields canonical defaults
@@ -26,12 +19,10 @@ static constexpr uint32_t TEST_FLASH_SIZE = FLASH_SECTOR_SIZE * 32u; // 128 KB
 
 static void test_settings_defaults()
 {
-    FlashDevice flash(TEST_FLASH_SIZE);
-    KvStore kv;
-    kv.init(flash, 0u, TEST_FLASH_SIZE);
+    FatTestEnv env;
 
     SystemSettingsStore store;
-    store.init(kv);
+    store.init();
 
     const SystemSettings& cfg = store.get();
     CHECK(cfg.wifi_ssid[0] == '\0');
@@ -52,9 +43,7 @@ static void test_settings_defaults()
 
 static void test_settings_roundtrip()
 {
-    FlashDevice flash(TEST_FLASH_SIZE);
-    KvStore kv;
-    kv.init(flash, 0u, TEST_FLASH_SIZE);
+    FatTestEnv env;
 
     SystemSettings s = SystemSettingsStore::defaults();
     strncpy(s.wifi_ssid, "MyNetwork", sizeof(s.wifi_ssid) - 1u);
@@ -66,15 +55,15 @@ static void test_settings_roundtrip()
 
     {
         SystemSettingsStore store;
-        store.init(kv);
+        store.init();
         DiagStatus ds = store.set(s);
         CHECK(ds.ok());
     }
 
-    // Reload from same KV (simulates reboot using same flash device).
+    // Reload from same FAT volume (simulates reboot using same flash device).
     {
         SystemSettingsStore store2;
-        store2.init(kv);
+        store2.init();
         const SystemSettings& cfg = store2.get();
         CHECK(strcmp(cfg.wifi_ssid, "MyNetwork") == 0);
         CHECK(strcmp(cfg.wifi_pass, "hunter2")   == 0);
@@ -86,20 +75,18 @@ static void test_settings_roundtrip()
 }
 
 // ---------------------------------------------------------------------------
-// test_settings_missing_key — absent KV key → defaults applied; no crash
+// test_settings_missing_key — absent file → defaults applied; no crash
 // ---------------------------------------------------------------------------
 
 static void test_settings_missing_key()
 {
-    FlashDevice flash(TEST_FLASH_SIZE);
-    KvStore kv;
-    kv.init(flash, 0u, TEST_FLASH_SIZE);
+    FatTestEnv env;
 
     // Don't write anything; just init the store.
     SystemSettingsStore store;
     DiagStatus init_status = DiagStatus::success(); // init() calls load() internally
-    store.init(kv);
-    // init() succeeds even with a missing key (load() returns NOT_FOUND internally).
+    store.init();
+    // init() succeeds even with a missing file (load() returns NOT_FOUND internally).
     CHECK(store.initialized());
 
     // Explicit load() should return STORAGE_NOT_FOUND.
@@ -120,16 +107,15 @@ static void test_settings_missing_key()
 
 static void test_settings_corrupt()
 {
-    FlashDevice flash(TEST_FLASH_SIZE);
-    KvStore kv;
-    kv.init(flash, 0u, TEST_FLASH_SIZE);
+    FatTestEnv env;
 
     // Write a blob that is too short to be a valid SystemSettings.
     uint8_t garbage[4] = {0xDE, 0xAD, 0xBE, 0xEF};
-    kv.put(KV_SYS_SETTINGS, garbage, sizeof(garbage));
+    fat_ensure_dir("1:/system");
+    fat_write_file("1:/system/settings.bin", garbage, sizeof(garbage));
 
     SystemSettingsStore store;
-    store.init(kv);
+    store.init();
 
     // load() should detect wrong size and apply defaults.
     DiagStatus s = store.load();
@@ -140,27 +126,19 @@ static void test_settings_corrupt()
 }
 
 // ---------------------------------------------------------------------------
-// test_wipe_user_data — profiles and saves are wiped; system settings intact
+// test_wipe_user_data — profiles are wiped; system settings intact
 // ---------------------------------------------------------------------------
 
 static void test_wipe_user_data()
 {
-    FlashDevice sys_flash(TEST_FLASH_SIZE);
-    FlashDevice saves_flash(TEST_FLASH_SIZE);
-    FlashDevice prof_flash(TEST_FLASH_SIZE);
-
-    KvStore sys_kv;
-    sys_kv.init(sys_flash, 0u, TEST_FLASH_SIZE);
-
-    KvStore saves_kv;
-    saves_kv.init(saves_flash, 0u, TEST_FLASH_SIZE);
+    FatTestEnv env;
 
     ProfileStore profiles;
-    profiles.init(prof_flash, 0u, TEST_FLASH_SIZE);
+    profiles.init();
 
     // Write a system settings value.
     SystemSettingsStore store;
-    store.init(sys_kv);
+    store.init();
     SystemSettings cfg = SystemSettingsStore::defaults();
     strncpy(cfg.language, "de", sizeof(cfg.language) - 1u);
     store.set(cfg);
@@ -170,21 +148,13 @@ static void test_wipe_user_data()
     CHECK(profiles.create("Alice", "en", &pid).ok());
     CHECK(profiles.count() == 1u);
 
-    // Write a save blob.
-    uint8_t save_val[8] = {1, 2, 3, 4, 5, 6, 7, 8};
-    saves_kv.put("sav.0001.0001", save_val, sizeof(save_val));
-    CHECK(saves_kv.contains("sav.0001.0001"));
-
     // Wipe user data.
-    DiagStatus ws = store.wipe_user_data(saves_kv, profiles);
+    DiagStatus ws = store.wipe_user_data(profiles);
     CHECK(ws.ok());
 
     // Profiles should be gone.
     CHECK(profiles.count() == 0u);
     CHECK(profiles.active() == PROF_ID_NONE);
-
-    // Save blob should be gone.
-    CHECK(!saves_kv.contains("sav.0001.0001"));
 
     // System settings should still be present.
     store.load();
@@ -197,21 +167,13 @@ static void test_wipe_user_data()
 
 static void test_full_wipe()
 {
-    FlashDevice sys_flash(TEST_FLASH_SIZE);
-    FlashDevice saves_flash(TEST_FLASH_SIZE);
-    FlashDevice prof_flash(TEST_FLASH_SIZE);
-
-    KvStore sys_kv;
-    sys_kv.init(sys_flash, 0u, TEST_FLASH_SIZE);
-
-    KvStore saves_kv;
-    saves_kv.init(saves_flash, 0u, TEST_FLASH_SIZE);
+    FatTestEnv env;
 
     ProfileStore profiles;
-    profiles.init(prof_flash, 0u, TEST_FLASH_SIZE);
+    profiles.init();
 
     SystemSettingsStore store;
-    store.init(sys_kv);
+    store.init();
 
     // Write non-default settings.
     SystemSettings cfg = SystemSettingsStore::defaults();
@@ -220,51 +182,14 @@ static void test_full_wipe()
     CHECK(strcmp(store.get().language, "ja") == 0);
 
     // Full wipe.
-    DiagStatus ws = store.full_wipe(saves_kv, profiles);
+    DiagStatus ws = store.full_wipe(profiles);
     CHECK(ws.ok());
 
     // After reload, settings should be defaults again.
     DiagStatus ls = store.load();
-    // Key is gone — STORAGE_NOT_FOUND expected.
+    // File is gone — STORAGE_NOT_FOUND expected.
     CHECK(ls.code == DiagCode::STORAGE_NOT_FOUND);
     CHECK(strcmp(store.get().language, "en") == 0);
-}
-
-// ---------------------------------------------------------------------------
-// test_wipe_includes_stats — wipe_user_data removes "st.*" keys (bug regression)
-// ---------------------------------------------------------------------------
-
-static void test_wipe_includes_stats()
-{
-    FlashDevice sys_flash(TEST_FLASH_SIZE);
-    FlashDevice saves_flash(TEST_FLASH_SIZE);
-    FlashDevice prof_flash(TEST_FLASH_SIZE);
-
-    KvStore sys_kv;
-    sys_kv.init(sys_flash, 0u, TEST_FLASH_SIZE);
-    KvStore saves_kv;
-    saves_kv.init(saves_flash, 0u, TEST_FLASH_SIZE);
-    ProfileStore profiles;
-    profiles.init(prof_flash, 0u, TEST_FLASH_SIZE);
-
-    SystemSettingsStore store;
-    store.init(sys_kv);
-
-    // Write a stat, an achievement, and a leaderboard entry into the saves KV.
-    uint8_t one = 1u;
-    saves_kv.put("st.0001.game.s.0001", &one, 1u);
-    saves_kv.put("st.0001.game.a.0005", &one, 1u);
-    saves_kv.put("st.0001.game.l.0002", &one, 1u);
-    CHECK(saves_kv.contains("st.0001.game.s.0001"));
-    CHECK(saves_kv.contains("st.0001.game.a.0005"));
-    CHECK(saves_kv.contains("st.0001.game.l.0002"));
-
-    CHECK(store.wipe_user_data(saves_kv, profiles).ok());
-
-    // All three must be gone after wipe.
-    CHECK(!saves_kv.contains("st.0001.game.s.0001"));
-    CHECK(!saves_kv.contains("st.0001.game.a.0005"));
-    CHECK(!saves_kv.contains("st.0001.game.l.0002"));
 }
 
 // ---------------------------------------------------------------------------
@@ -279,7 +204,6 @@ int main()
     test_settings_corrupt();
     test_wipe_user_data();
     test_full_wipe();
-    test_wipe_includes_stats();
 
     return test_summary();
 }

@@ -1,11 +1,11 @@
 #pragma once
-// allocator.h — Deterministic Launch Plan computer (Stage 8).
+// allocator.h — Deterministic Launch Plan computer.
 //
 // Given a CapabilityRegistry (declared/allowed) and a RequestedCapabilities
 // set (derived from a Payload Manifest), produces a LaunchPlan that specifies
 // which capabilities are Activated and which failed (with reasons).
 //
-// Algorithm (spec.md §5.1 "Deterministic algorithm"):
+// Algorithm:
 //   1. Collect all declared/allowed capabilities.
 //   2. Sort candidates by capability_id (stable alphabetical order).
 //   3. For each requested capability, in sorted order:

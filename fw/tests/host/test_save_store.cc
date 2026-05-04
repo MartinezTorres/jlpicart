@@ -1,9 +1,6 @@
 // test_save_store.cc — host tests for SaveStore and Storage service (Stage 19).
 
 #include "storage/save_store.h"
-#include "storage/kv_store.h"
-#include "storage/flash_device.h"
-#include "storage/flash_layout.h"
 #include "profiles/profile_store.h"
 #include "msx/api/api_window.h"
 #include "msx/api/api_types.h"
@@ -13,23 +10,19 @@
 #include "boards/board_descriptor.h"
 #include "drivers/driver_descriptor.h"
 
+#include "fat_test_env.h"
 #include "test_helpers.h"
 #include <cstring>
 #include <cstdio>
 
-static constexpr uint32_t TEST_FLASH_SIZE = FLASH_SECTOR_SIZE * 64u; // 256 KB
-
 struct SaveFixture {
-    FlashDevice kv_flash;
-    FlashDevice ps_flash;
-    KvStore     kv;
+    FatTestEnv   env;
     ProfileStore ps;
-    SaveStore   ss;
+    SaveStore    ss;
 
-    SaveFixture() : kv_flash(TEST_FLASH_SIZE), ps_flash(TEST_FLASH_SIZE) {
-        kv.init(kv_flash, 0u, TEST_FLASH_SIZE);
-        ps.init(ps_flash, 0u, TEST_FLASH_SIZE);
-        ss.init(kv, ps);
+    SaveFixture() {
+        ps.init();
+        ss.init(ps);
     }
 
     uint8_t begin(uint16_t profile_id, uint16_t blob_id,
@@ -173,23 +166,17 @@ static void test_save_concurrent_writes()
 // ---------------------------------------------------------------------------
 
 struct ApiFixture2 {
-    FlashDevice kv_flash;
-    FlashDevice ps_flash;
-    KvStore     kv;
-    ProfileStore ps;
-    SaveStore   ss;
+    FatTestEnv        env;
+    ProfileStore      ps;
+    SaveStore         ss;
     SecurityPosture   posture;
     PolicyStore       policy_store;
     CapabilityRegistry registry;
-    ApiWindow   win;
+    ApiWindow         win;
 
-    ApiFixture2()
-        : kv_flash(TEST_FLASH_SIZE)
-        , ps_flash(TEST_FLASH_SIZE)
-    {
-        kv.init(kv_flash, 0u, TEST_FLASH_SIZE);
-        ps.init(ps_flash, 0u, TEST_FLASH_SIZE);
-        ss.init(kv, ps);
+    ApiFixture2() {
+        ps.init();
+        ss.init(ps);
         posture = {};
         policy_store.load(posture);
         registry.init(BoardDescriptor::for_current_board(),

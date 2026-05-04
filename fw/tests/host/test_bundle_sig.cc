@@ -1,7 +1,7 @@
 // test_bundle_sig.cc — Stage 31: bundle ed25519 signature verification tests.
 //
 // Verifies:
-//   1. policy_get_publisher_anchor() — KvStore lookup round-trip
+//   1. policy_get_publisher_anchor() — FAT file round-trip
 //   2. bundle_sig_verify() — valid ed25519 signature accepted
 //   3. bundle_sig_verify() — wrong signature rejected
 //   4. bundle_sig_verify() — wrong algorithm rejected
@@ -12,22 +12,13 @@
 
 #include "content/bundle_sig_verify.h"
 #include "content/collection_format.h"
-#include "storage/kv_store.h"
-#include "storage/flash_device.h"
 #include "crypto/monocypher/monocypher.h"
 #include <cassert>
 #include <cstring>
 #include <cstdio>
 
-// ---------------------------------------------------------------------------
-// Flash and KvStore helpers
-// ---------------------------------------------------------------------------
-
-static constexpr size_t TEST_KV_SIZE = 8192u;
-
-static FlashDevice make_flash() {
-    return FlashDevice(TEST_KV_SIZE);
-}
+#include "fat_test_env.h"
+#include "storage/fat_util.h"
 
 // ---------------------------------------------------------------------------
 // Helper: build a BundleSigEnvelope with the given alg and signature
@@ -71,22 +62,21 @@ int main() {
     crypto_eddsa_sign(valid_sig, secret_key, manifest_hash, 32u);
 
     // -----------------------------------------------------------------------
-    // 1. policy_get_publisher_anchor() — round-trip via KvStore
+    // 1. policy_get_publisher_anchor() — round-trip via FAT file
     // -----------------------------------------------------------------------
     {
-        FlashDevice flash = make_flash();
-        KvStore kv;
-        kv.init(flash, 0u, TEST_KV_SIZE);
+        FatTestEnv env;
 
         uint8_t anchor_out[32] = {};
         // Key absent → returns false.
-        ASSERT(!policy_get_publisher_anchor(kv, anchor_out));
+        ASSERT(!policy_get_publisher_anchor(anchor_out));
 
         // Store the public key.
-        kv.put("pub.anchor", public_key, 32u);
+        fat_ensure_dir("1:/system");
+        fat_write_file("1:/system/pub_anchor.bin", public_key, 32u);
 
         // Now retrieval succeeds and matches.
-        ASSERT(policy_get_publisher_anchor(kv, anchor_out));
+        ASSERT(policy_get_publisher_anchor(anchor_out));
         ASSERT(memcmp(anchor_out, public_key, 32u) == 0);
     }
 
@@ -145,24 +135,21 @@ int main() {
     //    (already tested in case 1 above, confirmed here explicitly)
     // -----------------------------------------------------------------------
     {
-        FlashDevice flash = make_flash();
-        KvStore kv;
-        kv.init(flash, 0u, TEST_KV_SIZE);
+        FatTestEnv env;
         uint8_t out[32] = {};
-        ASSERT(!policy_get_publisher_anchor(kv, out));
+        ASSERT(!policy_get_publisher_anchor(out));
     }
 
     // -----------------------------------------------------------------------
     // 8. policy_get_publisher_anchor() — wrong-length value returns false.
     // -----------------------------------------------------------------------
     {
-        FlashDevice flash = make_flash();
-        KvStore kv;
-        kv.init(flash, 0u, TEST_KV_SIZE);
+        FatTestEnv env;
         uint8_t short_key[16] = {};
-        kv.put("pub.anchor", short_key, 16u);
+        fat_ensure_dir("1:/system");
+        fat_write_file("1:/system/pub_anchor.bin", short_key, 16u);
         uint8_t out[32] = {};
-        ASSERT(!policy_get_publisher_anchor(kv, out));
+        ASSERT(!policy_get_publisher_anchor(out));
     }
 
     if (failures == 0) {

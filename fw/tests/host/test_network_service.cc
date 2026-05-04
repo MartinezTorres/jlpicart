@@ -19,16 +19,11 @@
 #include "boards/board_descriptor.h"
 #include "drivers/driver_descriptor.h"
 #include "security/otp_reader.h"
-#include "storage/flash_device.h"
-#include "storage/kv_store.h"
-#include "storage/flash_layout.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------
 // Fixture
 // ---------------------------------------------------------------------------
-
-static constexpr uint32_t TEST_FLASH_SIZE = FLASH_SECTOR_SIZE * 32u;
 
 static const BoardCapabilityDecl kNetTestCaps[] = {
     { "bus.msx",  false },

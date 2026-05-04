@@ -5,9 +5,7 @@
 // cartridge UI.  It is non-blocking: each tick() call issues at most one
 // command to the mailbox and returns immediately.
 //
-// Screens: BOOT → BOOT_INFO → MAIN ↔ COLLECTIONS / PROFILES / SETTINGS / LAUNCH
-//
-// See bootstrapping.md Stages 16–20 for the full design spec.
+// Screens: BOOT → BOOT_INFO → MAIN ↔ COLLECTIONS / PROFILES / SETTINGS / LAUNCH → RUNNING
 
 #include "msx/menu/menu_host_abi.h"   // MenuMailbox, HostInfo, InputSnapshot
 #include "content/collection_format.h" // CollectionRecord
@@ -15,22 +13,18 @@
 #include <cstdint>
 
 // Forward declarations — full types are only needed in the .cc file.
-class KvStore;
 class ProfileStore;
 class SystemSettingsStore;
 class ApiWindow;
 
 class MenuApp {
 public:
-    // Attach the subsystem references and enter BOOT state.
-    // kv is used (read-only at runtime) to query the active collection.
-    void init(MenuMailbox& mbx, KvStore& kv, ProfileStore& ps);
+    // Attach subsystem references and enter BOOT state.
+    void init(MenuMailbox& mbx, ProfileStore& ps);
 
     // Bind the system settings store (Stage 17+).
-    // Must be called after init().  If not called, the Settings screen shows
-    // a placeholder and the wipe function is unavailable.
-    // saves_kv is the KvStore for the SAVES_KV partition (used by wipe operations).
-    void bind_settings_store(SystemSettingsStore& ss, KvStore& saves_kv);
+    // Must be called after init().
+    void bind_settings_store(SystemSettingsStore& ss);
 
     // Request a transition to the MAIN screen (Stage 18).
     // Thread-safe-enough for Core 1 service loop: sets a flag read by tick().
@@ -40,6 +34,14 @@ public:
     // when transitioning to/from the LAUNCH screen (Stage 20).
     // Must be called after init().  Optional: if not set, active_payload is not updated.
     void bind_api_window(ApiWindow& win);
+
+    // Set the launch callback invoked just before MENU_CMD_LAUNCH is sent.
+    // The callback must remap the ROM for payload_id by calling apply_mapping().
+    // ctx is an opaque pointer passed through to fn.  Both are stored by reference;
+    // they must remain valid for the lifetime of this MenuApp.
+    // If not set, LAUNCH still sends MENU_CMD_LAUNCH (BIOS cold start) but with
+    // whatever ROM was already mapped.
+    void set_launch_fn(void* ctx, void (*fn)(void*, const char* payload_id));
 
     bool initialized() const { return initialized_; }
 
@@ -56,6 +58,7 @@ private:
         PROFILES,
         SETTINGS,
         LAUNCH,     // active payload running; stub shows "Launching…" (Stage 20)
+        RUNNING,    // game ROM is live; stub has jumped to 0x0000; mailbox silent
     };
 
     // --- Core state ---
@@ -84,11 +87,13 @@ private:
 
     // --- Subsystem references ---
     MenuMailbox*          mbx_       = nullptr;
-    KvStore*              kv_        = nullptr;
     ProfileStore*         ps_        = nullptr;
     SystemSettingsStore*  ss_        = nullptr;  // nullptr until bind_settings_store()
-    KvStore*              saves_kv_  = nullptr;  // nullptr until bind_settings_store()
     ApiWindow*            api_win_   = nullptr;  // nullptr until bind_api_window()
+
+    // Launch callback (optional; set by set_launch_fn)
+    void*  launch_fn_ctx_ = nullptr;
+    void (*launch_fn_)(void*, const char*) = nullptr;
 
     // Scratch buffer for formatted strings
     char fmt_[64] = {};
@@ -101,6 +106,7 @@ private:
     void tick_profiles();
     void tick_settings();
     void tick_launch();
+    void tick_running();
 
     // --- Data loaders ---
     void load_collection_data();

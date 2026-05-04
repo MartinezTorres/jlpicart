@@ -6,7 +6,6 @@
 // Any schema violation (wrong type, missing required field, bad value)
 // returns COLLECTION_BAD_MANIFEST.
 //
-// See spec.md §6.2 (Manifest and configuration schema contract v1).
 
 #include "diag/diag.h"
 #include "content/manifest.h"

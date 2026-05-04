@@ -1,0 +1,1 @@
+/usr/bin/c++ -g CMakeFiles/test_security_posture.dir/test_security_posture.cc.o CMakeFiles/test_security_posture.dir/home/claude/repos/jlpicart/fw/src/spine/security_posture.cc.o -o test_security_posture  /usr/lib/x86_64-linux-gnu/libcrypto.so 

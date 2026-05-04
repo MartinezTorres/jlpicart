@@ -1,39 +1,27 @@
 // test_rom_loading.cc — Stage 28: ROM write-through during USB install.
 //
-// Verifies that Installer::run() with a non-null FlashDevice:
-//   1. Calls copy_to_flash() for each payload with a path.
+// Verifies that Installer::run() with a RomInstallReader (FAT-backed):
+//   1. Calls copy_to_fat() for each payload with a path.
 //   2. Stores data_size > 0 in the PayloadRecord after install.
 //   3. mapping_plan_from_payload_record() produces a valid entry.
 //
-// Also verifies that flash=nullptr leaves data_size == 0 (old behaviour,
-// backwards-compatible with test suites that pass no flash device).
+// Also verifies that a plain MemoryInstallReader (default copy_to_fat no-op)
+// leaves data_size == 0.
 
 #include "content/installer.h"
 #include "content/content_store.h"
 #include "bus/mapping_plan.h"
-#include "storage/flash_device.h"
-#include "storage/flash_layout.h"
-#include "storage/kv_store.h"
-#include "storage/append_log.h"
+#include "storage/fat_util.h"
 #include "spine/policy_store.h"
 #include "spine/security_posture.h"
 #include "security/otp_reader.h"
 #include "crypto/sha256.h"
 
+#include "fat_test_env.h"
 #include "test_helpers.h"
 #include <cassert>
 #include <cstring>
 #include <cstdio>
-
-// ---------------------------------------------------------------------------
-// Sizing
-// ---------------------------------------------------------------------------
-
-static constexpr uint32_t TEST_KV_SIZE    = FLASH_SECTOR_SIZE * 4;
-static constexpr uint32_t TEST_LOG_SIZE   = FLASH_SECTOR_SIZE * 4;
-// Content flash must be large enough to hold CONTENT_DATA at 0x600000.
-static constexpr size_t   CONTENT_FLASH_SIZE =
-    static_cast<size_t>(FLASH_CONTENT_DATA_OFS) + FLASH_SECTOR_SIZE * 4u;
 
 // ---------------------------------------------------------------------------
 // Fake ROM payload — 32 bytes with recognisable header bytes.
@@ -79,10 +67,10 @@ static PolicyStore make_open_policy() {
 }
 
 // ---------------------------------------------------------------------------
-// RomInstallReader — in-memory files + real copy_to_flash() implementation.
+// RomInstallReader — in-memory files + real copy_to_fat() implementation.
 //
 // Unlike the plain MemoryInstallReader used in other tests, this version
-// overrides copy_to_flash() to actually erase and write sectors so that
+// overrides copy_to_fat() to write the payload into the FAT volume so that
 // the Installer sees a non-zero data_size in the PayloadRecord.
 // ---------------------------------------------------------------------------
 
@@ -132,40 +120,19 @@ public:
         return find(path, &d, &n);
     }
 
-    // Stream the file to flash in FLASH_SECTOR_SIZE chunks (erase + write).
-    DiagStatus copy_to_flash(const char* path, FlashDevice& flash,
-                              uint32_t flash_offset,
-                              size_t* out_size) override {
+    // Write the in-memory payload to the destination FAT path.
+    DiagStatus copy_to_fat(const char* src_path, const char* dst_path,
+                            size_t* out_size) override {
         const uint8_t* d = nullptr; size_t n = 0;
-        if (!find(path, &d, &n)) {
+        if (!find(src_path, &d, &n)) {
             *out_size = 0;
             return DiagStatus::error(DiagCode::STORAGE_NOT_FOUND);
         }
-
-        uint8_t sector_buf[FLASH_SECTOR_SIZE];
-        size_t  written   = 0;
-        size_t  remaining = n;
-        uint32_t offset   = flash_offset;
-
-        while (remaining > 0) {
-            size_t chunk = (remaining < FLASH_SECTOR_SIZE) ? remaining
-                                                            : FLASH_SECTOR_SIZE;
-            memcpy(sector_buf, d + written, chunk);
-            if (chunk < FLASH_SECTOR_SIZE)
-                memset(sector_buf + chunk, 0xFF, FLASH_SECTOR_SIZE - chunk);
-
-            DiagStatus s = flash.erase(offset, 1u);
-            if (!s.ok()) { *out_size = written; return s; }
-
-            s = flash.write(offset, sector_buf, chunk);
-            if (!s.ok()) { *out_size = written; return s; }
-
-            written   += chunk;
-            offset    += FLASH_SECTOR_SIZE;
-            remaining -= chunk;
+        if (!fat_write_file(dst_path, d, n)) {
+            *out_size = 0;
+            return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
         }
-
-        *out_size = written;
+        *out_size = n;
         return DiagStatus::success();
     }
 
@@ -189,74 +156,106 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// test_payload_written_to_flash
-//
-// Installing with a non-null FlashDevice must:
-//   - Write ROM bytes to FLASH_CONTENT_DATA_OFS.
-//   - Store data_size == kRomSize in the PayloadRecord.
-//   - Store data_flash_offset == FLASH_CONTENT_DATA_OFS.
+// MemoryInstallReader — plain reader with default no-op copy_to_fat().
 // ---------------------------------------------------------------------------
 
-static void test_payload_written_to_flash() {
-    FlashDevice kv_flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-    FlashDevice content_flash(CONTENT_FLASH_SIZE);
+struct MemFile { const char* path; const uint8_t* data; size_t len; };
 
-    KvStore   kv;        kv.init(kv_flash, 0, TEST_KV_SIZE);
-    AppendLog event_log; event_log.init(kv_flash, TEST_KV_SIZE, TEST_LOG_SIZE);
+class MemoryInstallReader : public InstallReader {
+public:
+    void add_text(const char* path, const char* text) {
+        files_[count_++] = {path,
+                             reinterpret_cast<const uint8_t*>(text),
+                             strlen(text)};
+    }
+    DiagStatus read_file(const char* path, uint8_t* buf,
+                          size_t max_len, size_t* out_len) override {
+        const MemFile* f = find(path);
+        if (!f) { *out_len = 0; return DiagStatus::error(DiagCode::STORAGE_IO_ERROR); }
+        if (f->len > max_len) { *out_len = f->len; return DiagStatus::error(DiagCode::STORAGE_IO_ERROR); }
+        memcpy(buf, f->data, f->len);
+        *out_len = f->len;
+        return DiagStatus::success();
+    }
+    DiagStatus hash_file(const char* path, uint8_t digest[SHA256_DIGEST_SIZE]) override {
+        const MemFile* f = find(path);
+        if (!f) return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
+        sha256(f->data, f->len, digest);
+        return DiagStatus::success();
+    }
+    bool file_exists(const char* path) override { return find(path) != nullptr; }
+    // copy_to_fat: inherits default no-op → *out_size=0
+private:
+    MemFile files_[8] = {};
+    size_t  count_ = 0;
+    const MemFile* find(const char* path) const {
+        for (size_t i = 0; i < count_; ++i)
+            if (strcmp(files_[i].path, path) == 0) return &files_[i];
+        return nullptr;
+    }
+};
+
+// ---------------------------------------------------------------------------
+// test_payload_written_to_fat
+//
+// Installing with a RomInstallReader must:
+//   - Write ROM bytes to 1:/collections/com.test.romload/rom_main.bin.
+//   - Store data_size == kRomSize in the PayloadRecord.
+// ---------------------------------------------------------------------------
+
+static void test_payload_written_to_fat() {
+    FatTestEnv env;
     PolicyStore policy = make_open_policy();
 
     RomInstallReader reader;
     reader.add_text("manifest.json", kManifest);
     reader.add_bytes("main.rom", kFakeRom, kRomSize);
 
-    Installer    installer;
+    Installer     installer;
     InstallResult result = {};
-    installer.run(reader, kv, event_log, policy, result, &content_flash);
+    installer.run(reader, policy, result);
 
     CHECK(result.installed);
 
-    ContentStore cs(kv);
+    ContentStore cs;
     CHECK(cs.has_active_collection());
 
     PayloadRecord pr = {};
     DiagStatus s = cs.load_default_payload(pr);
     CHECK(s.ok());
 
-    CHECK(pr.data_size         == kRomSize);
-    CHECK(pr.data_flash_offset == FLASH_CONTENT_DATA_OFS);
+    CHECK(pr.data_size == kRomSize);
 
-    // Verify bytes were actually written at the correct flash offset.
+    // Verify bytes were actually written to FAT.
     uint8_t readback[kRomSize] = {};
-    DiagStatus rs = content_flash.read(FLASH_CONTENT_DATA_OFS, readback, kRomSize);
-    CHECK(rs.ok());
+    size_t actual = 0;
+    CHECK(fat_read_file("1:/collections/com.test.romload/rom_main.bin",
+                         readback, kRomSize, &actual));
+    CHECK(actual == kRomSize);
     CHECK(memcmp(readback, kFakeRom, kRomSize) == 0);
 }
 
 // ---------------------------------------------------------------------------
-// test_no_flash_leaves_data_size_zero
+// test_no_copy_leaves_data_size_zero
 //
-// Installing with flash=nullptr (backward-compatible path used by host tests
-// that don't care about ROM data) must leave data_size == 0.
+// Installing with a plain MemoryInstallReader (default copy_to_fat no-op)
+// must leave data_size == 0.
 // ---------------------------------------------------------------------------
 
-static void test_no_flash_leaves_data_size_zero() {
-    FlashDevice kv_flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-
-    KvStore   kv;        kv.init(kv_flash, 0, TEST_KV_SIZE);
-    AppendLog event_log; event_log.init(kv_flash, TEST_KV_SIZE, TEST_LOG_SIZE);
+static void test_no_copy_leaves_data_size_zero() {
+    FatTestEnv env;
     PolicyStore policy = make_open_policy();
 
-    RomInstallReader reader;
+    MemoryInstallReader reader;
     reader.add_text("manifest.json", kManifest);
-    reader.add_bytes("main.rom", kFakeRom, kRomSize);
 
-    Installer    installer;
+    Installer     installer;
     InstallResult result = {};
-    installer.run(reader, kv, event_log, policy, result, /*flash=*/nullptr);
+    installer.run(reader, policy, result);
 
     CHECK(result.installed);
 
-    ContentStore cs(kv);
+    ContentStore cs;
     PayloadRecord pr = {};
     DiagStatus s = cs.load_default_payload(pr);
     CHECK(s.ok());
@@ -273,23 +272,19 @@ static void test_no_flash_leaves_data_size_zero() {
 // ---------------------------------------------------------------------------
 
 static void test_mapping_plan_from_loaded_payload() {
-    FlashDevice kv_flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-    FlashDevice content_flash(CONTENT_FLASH_SIZE);
-
-    KvStore   kv;        kv.init(kv_flash, 0, TEST_KV_SIZE);
-    AppendLog event_log; event_log.init(kv_flash, TEST_KV_SIZE, TEST_LOG_SIZE);
+    FatTestEnv env;
     PolicyStore policy = make_open_policy();
 
     RomInstallReader reader;
     reader.add_text("manifest.json", kManifest);
     reader.add_bytes("main.rom", kFakeRom, kRomSize);
 
-    Installer    installer;
+    Installer     installer;
     InstallResult result = {};
-    installer.run(reader, kv, event_log, policy, result, &content_flash);
+    installer.run(reader, policy, result);
     CHECK(result.installed);
 
-    ContentStore cs(kv);
+    ContentStore cs;
     PayloadRecord pr = {};
     cs.load_default_payload(pr);
 
@@ -319,37 +314,28 @@ static const char kManifestMissingFile[] =
     "}";
 
 static void test_missing_file_leaves_data_size_zero() {
-    FlashDevice kv_flash(TEST_KV_SIZE + TEST_LOG_SIZE);
-    FlashDevice content_flash(CONTENT_FLASH_SIZE);
-
-    KvStore   kv;        kv.init(kv_flash, 0, TEST_KV_SIZE);
-    AppendLog event_log; event_log.init(kv_flash, TEST_KV_SIZE, TEST_LOG_SIZE);
+    FatTestEnv env;
     PolicyStore policy = make_open_policy();
 
-    // Reader has the manifest but NOT the ROM file — copy_to_flash returns
+    // Reader has the manifest but NOT the ROM file — copy_to_fat returns
     // STORAGE_NOT_FOUND; installer must treat this as non-fatal.
     RomInstallReader reader;
     reader.add_text("manifest.json", kManifestMissingFile);
     // Intentionally NOT adding "missing.rom".
 
-    Installer    installer;
+    Installer     installer;
     InstallResult result = {};
-    installer.run(reader, kv, event_log, policy, result, &content_flash);
+    installer.run(reader, policy, result);
 
     CHECK(result.installed);
 
-    ContentStore cs(kv);
+    ContentStore cs;
     PayloadRecord pr = {};
     DiagStatus s = cs.load_default_payload(pr);
     CHECK(s.ok());
 
     // data_size must be 0 — no ROM was written.
     CHECK(pr.data_size == 0u);
-
-    // Flash at CONTENT_DATA should remain erased (0xFF).
-    uint8_t check_byte = 0x00;
-    content_flash.read(FLASH_CONTENT_DATA_OFS, &check_byte, 1u);
-    CHECK(check_byte == 0xFF);
 }
 
 // ---------------------------------------------------------------------------
@@ -357,8 +343,8 @@ static void test_missing_file_leaves_data_size_zero() {
 // ---------------------------------------------------------------------------
 
 int main() {
-    test_payload_written_to_flash();
-    test_no_flash_leaves_data_size_zero();
+    test_payload_written_to_fat();
+    test_no_copy_leaves_data_size_zero();
     test_mapping_plan_from_loaded_payload();
     test_missing_file_leaves_data_size_zero();
 

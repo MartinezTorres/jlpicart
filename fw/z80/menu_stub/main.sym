@@ -1,0 +1,50 @@
+ASxxxx Assembler V02.00 + NoICE + SDCC mods  (Zilog Z80 / Hitachi HD64180 / ZX-Next / eZ80 / R800)                          Page 1
+Hexadecimal [32-Bits]
+
+Symbol Table
+
+    .__.$$$.                                                    =   00002710 L
+    .__.ABS.                                                    =   00000000 G
+    .__.CPU.                                                    =   00000000 L
+    .__.H$L.                                                    =   00000000 L
+  7 __xinit__g_mode                                                 00000000 R
+  0 _bios_chput                                                     000000AD GR
+  0 _bios_cls                                                       000000BC GR
+  0 _bios_gtstck                                                    000000C6 GR
+  0 _bios_gttrig                                                    000000CC GR
+  0 _bios_posit                                                     000000B2 GR
+  0 _bios_snsmat                                                    000000C0 GR
+  0 _build_host_caps                                                000000EC R
+  0 _build_vdp_caps                                                 0000010F R
+  0 _cmd_clear                                                      000001CB R
+  0 _cmd_get_host_info                                              0000011C R
+  0 _cmd_idle                                                       0000041F R
+  0 _cmd_put_text                                                   000001E6 R
+  0 _cmd_read_input                                                 00000268 R
+  0 _cmd_set_mode                                                   000001AF R
+  0 _detect_msx_gen                                                 000000D4 R
+  0 _detect_vram_kb                                                 000000DD R
+  2 _g_mode                                                         00000000 R
+  0 _peek                                                           000000D2 R
+  0 _rd16                                                           00000000 R
+  0 _rd32                                                           00000022 R
+  0 _stub_main                                                      0000043D GR
+  0 _wr16                                                           00000011 R
+  0 _wr32                                                           00000085 R
+
+
+ASxxxx Assembler V02.00 + NoICE + SDCC mods  (Zilog Z80 / Hitachi HD64180 / ZX-Next / eZ80 / R800)                          Page 2
+Hexadecimal [32-Bits]
+
+Area Table
+
+   0 _CODE                                      size      599   flags    0
+   1 _DATA                                      size        0   flags    0
+   2 _INITIALIZED                               size        1   flags    0
+   3 _DABS                                      size        0   flags    8
+   4 _HOME                                      size        0   flags    0
+   5 _GSINIT                                    size        0   flags    0
+   6 _GSFINAL                                   size        0   flags    0
+   7 _INITIALIZER                               size        1   flags    0
+   8 _CABS                                      size        0   flags    8
+

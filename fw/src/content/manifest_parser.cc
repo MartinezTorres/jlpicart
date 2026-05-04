@@ -1,6 +1,7 @@
 // manifest_parser.cc — Minimal strict JSON parser for Collection manifests.
 
 #include "content/manifest_parser.h"
+#include "bus/device_type.h"
 #include <cstring>
 #include <cctype>
 
@@ -79,13 +80,17 @@ struct Scanner {
             }
             case 't': {
                 if (pos + 3 <= len && memcmp(src + pos, "rue", 3) == 0) {
-                    pos += 3; return Tok::BOOL_;
+                    pos += 3;
+                    sv[0] = '1'; sv[1] = '\0'; sv_len = 1;
+                    return Tok::BOOL_;
                 }
                 return Tok::ERR;
             }
             case 'f': {
                 if (pos + 4 <= len && memcmp(src + pos, "alse", 4) == 0) {
-                    pos += 4; return Tok::BOOL_;
+                    pos += 4;
+                    sv[0] = '0'; sv[1] = '\0'; sv_len = 1;
+                    return Tok::BOOL_;
                 }
                 return Tok::ERR;
             }
@@ -277,6 +282,58 @@ static DiagStatus parse_boot_body(Scanner& s, CollectionManifest& m) {
     return DiagStatus::success();
 }
 
+// Parse one device object body (LBRACE already consumed).
+// Fields: "type" (required), "subslot" (optional, 0–3), "optional" (bool),
+//         "params" (object; OPL4: "wave_payload_id").
+static DiagStatus parse_device_entry(Scanner& s, ManifestDeviceEntry& de) {
+    Tok t = s.next();
+    while (t != Tok::RBRACE) {
+        if (t != Tok::STR) return kBadManifest;
+        char key[64];
+        if (!s.copy_sv(key, sizeof(key))) return kBadManifest;
+        if (s.next() != Tok::COLON) return kBadManifest;
+        Tok vt = s.next();
+        if (strcmp(key, "type") == 0) {
+            if (vt != Tok::STR) return kBadManifest;
+            de.type = device_type_from_string(s.sv);
+            if (de.type == DeviceType::UNKNOWN) return kBadManifest;
+        } else if (strcmp(key, "subslot") == 0) {
+            if (vt != Tok::NUM) return kBadManifest;
+            if (s.sv_len != 1 || s.sv[0] < '0' || s.sv[0] > '3') return kBadManifest;
+            de.subslot = static_cast<uint8_t>(s.sv[0] - '0');
+        } else if (strcmp(key, "optional") == 0) {
+            if (vt != Tok::BOOL_) return kBadManifest;
+            de.optional = (s.sv[0] == '1');
+        } else if (strcmp(key, "params") == 0) {
+            if (vt != Tok::LBRACE) return kBadManifest;
+            Tok pt = s.next();
+            while (pt != Tok::RBRACE) {
+                if (pt != Tok::STR) return kBadManifest;
+                char pkey[64];
+                if (!s.copy_sv(pkey, sizeof(pkey))) return kBadManifest;
+                if (s.next() != Tok::COLON) return kBadManifest;
+                Tok pvt = s.next();
+                if (strcmp(pkey, "wave_payload_id") == 0) {
+                    if (pvt != Tok::STR) return kBadManifest;
+                    if (!s.copy_sv(de.params, sizeof(de.params))) return kBadManifest;
+                } else {
+                    if (!skip_value(s, pvt)) return kBadManifest;
+                }
+                pt = s.next();
+                if (pt == Tok::COMMA) pt = s.next();
+                else if (pt != Tok::RBRACE) return kBadManifest;
+            }
+        } else {
+            if (!skip_value(s, vt)) return kBadManifest;
+        }
+        t = s.next();
+        if (t == Tok::COMMA) t = s.next();
+        else if (t != Tok::RBRACE) return kBadManifest;
+    }
+    if (de.type == DeviceType::UNKNOWN) return kBadManifest; // "type" required
+    return DiagStatus::success();
+}
+
 // Parse one payload object body (LBRACE already consumed).
 static DiagStatus parse_payload_body(Scanner& s, PayloadEntry& pe) {
     Tok t = s.next();
@@ -332,6 +389,24 @@ static DiagStatus parse_payload_body(Scanner& s, PayloadEntry& pe) {
             // sv[] holds the number as a string; parse single digit.
             if (s.sv_len != 1 || s.sv[0] < '0' || s.sv[0] > '3') return kBadManifest;
             pe.subslot = static_cast<uint8_t>(s.sv[0] - '0');
+        } else if (strcmp(key, "devices") == 0) {
+            if (vt != Tok::LBRACKET) return kBadManifest;
+            Tok at = s.next();
+            while (at != Tok::RBRACKET) {
+                if (at != Tok::LBRACE) return kBadManifest;
+                if (pe.device_count < PAYLOAD_DEVICES_MAX) {
+                    ManifestDeviceEntry& de = pe.devices[pe.device_count];
+                    memset(&de, 0, sizeof(de));
+                    DiagStatus ds = parse_device_entry(s, de);
+                    if (!ds.ok()) return ds;
+                    ++pe.device_count;
+                } else {
+                    if (!skip_value(s, Tok::LBRACE)) return kBadManifest;
+                }
+                at = s.next();
+                if (at == Tok::COMMA) at = s.next();
+                else if (at != Tok::RBRACKET) return kBadManifest;
+            }
         } else {
             if (!skip_value(s, vt)) return kBadManifest;
         }

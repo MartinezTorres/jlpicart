@@ -7,20 +7,18 @@
 // commands into the MenuMailboxRegs; the Z80 stub executes them and writes
 // results back.  Both sides share the data buffer at data_ofs.
 //
-// Spec reference: spec.md §8 (Menu Host ABI).
-// Bootstrapping:  bootstrapping.md §5.
 
 #include <cstdint>
 #include <cstring>
 
 // ---------------------------------------------------------------------------
-// Page layout constants (spec.md §8 "Fixed layout within the 16KB Menu Page")
+// Page layout constants
 // ---------------------------------------------------------------------------
 
 static constexpr uint16_t MENU_PAGE_SIZE       = 0x4000u; // 16 KB
 static constexpr uint16_t MENU_HEADER_OFS      = 0x0000u; // MenuStubHeader
 static constexpr uint16_t MENU_MAILBOX_OFS     = 0x0040u; // MenuMailboxRegs
-static constexpr uint16_t MENU_DATA_OFS        = 0x0100u; // shared data buffer (spec: MUST be 0x0100)
+static constexpr uint16_t MENU_DATA_OFS        = 0x0100u; // shared data buffer
 static constexpr uint16_t MENU_STUB_OFS        = 0x3800u; // stub code at top of page (2 KB slot)
 static constexpr uint16_t MENU_DATA_LEN        = MENU_PAGE_SIZE - MENU_DATA_OFS; // 0x3F00 (full range)
 static constexpr uint16_t MENU_USABLE_DATA_LEN = MENU_STUB_OFS - MENU_DATA_OFS;  // 0x3700 (excl. stub)
@@ -29,7 +27,7 @@ static constexpr uint8_t  MENU_ABI_MAJOR     = 1u;
 static constexpr uint8_t  MENU_ABI_MINOR     = 0u;
 
 // ---------------------------------------------------------------------------
-// Command IDs (spec.md §8 "Command IDs and semantics")
+// Command IDs
 // ---------------------------------------------------------------------------
 
 static constexpr uint16_t MENU_CMD_NOP           = 0x0000u;
@@ -43,6 +41,7 @@ static constexpr uint16_t MENU_CMD_VRAM_WRITE    = 0x0007u;
 static constexpr uint16_t MENU_CMD_VRAM_FILL     = 0x0008u;
 static constexpr uint16_t MENU_CMD_BEEP          = 0x0009u;
 static constexpr uint16_t MENU_CMD_IDLE          = 0x000Au;
+static constexpr uint16_t MENU_CMD_LAUNCH        = 0x000Bu; // remap done; jump to BIOS cold start
 
 // SET_MODE mode ids (arg0 low byte)
 static constexpr uint8_t  MENU_MODE_TEXT_40 = 0u; // SCREEN 0, 40 cols — MUST be supported
@@ -55,7 +54,7 @@ static constexpr uint8_t  MENU_CLEAR_TEXT   = 1u; // clear text area only (text 
 static constexpr uint8_t  MENU_CLEAR_BITMAP = 2u; // clear bitmap plane only
 
 // ---------------------------------------------------------------------------
-// Status codes (spec.md §8 "Error codes (Menu mailbox status)")
+// Status codes
 // ---------------------------------------------------------------------------
 
 static constexpr uint16_t MENU_OK           = 0x0000u;
@@ -66,8 +65,7 @@ static constexpr uint16_t MENU_E_OVERFLOW   = 0x0004u; // in_len/out_len exceeds
 static constexpr uint16_t MENU_E_HW        = 0x0005u; // VDP/BIOS call failed (best-effort)
 
 // ---------------------------------------------------------------------------
-// host_caps bits (spec.md §8 MenuStubHeader.host_caps)
-// Filled by the Z80 stub at init; read by the RP2350 after stub runs.
+// host_caps bits — filled by the Z80 stub at init; read by the RP2350 after stub runs.
 // ---------------------------------------------------------------------------
 
 static constexpr uint32_t MENU_HOST_CAP_MSX1          = (1u << 0);
@@ -88,11 +86,8 @@ static constexpr uint32_t MENU_VDP_CAP_BITMAP         = (1u << 2); // bitmap mod
 
 #pragma pack(push, 1)
 
-// spec.md §8 "Header layout (MenuStubHeader)" — 64 bytes at MENU_HEADER_OFS.
-//
-// NOTE: The spec lists reserved[20] which only accounts for 48 bytes.  This
-// is a spec gap; reserved[36] is used here to reach exactly 64 bytes and
-// match the stated layout range 0x0000..0x003F.
+// MenuStubHeader — 64 bytes at MENU_HEADER_OFS.
+// reserved[36] (not 20) is needed to reach exactly 64 bytes.
 struct MenuStubHeader {
     char     sig[4];          // "JLMN"
     uint8_t  abi_major;       // MENU_ABI_MAJOR
@@ -110,8 +105,7 @@ struct MenuStubHeader {
 };
 static_assert(sizeof(MenuStubHeader) == 64, "MenuStubHeader must be 64 bytes");
 
-// spec.md §8 "Mailbox layout (MenuMailbox)" — 64 bytes at MENU_MAILBOX_OFS.
-// Named MenuMailboxRegs to avoid collision with the C++ controller class.
+// MenuMailboxRegs — 64 bytes at MENU_MAILBOX_OFS.
 struct MenuMailboxRegs {
     volatile uint16_t cmd_seq;   // RP2350 writes last when posting a command
     volatile uint16_t resp_seq;  // stub writes last when command is done
@@ -127,7 +121,7 @@ struct MenuMailboxRegs {
 };
 static_assert(sizeof(MenuMailboxRegs) == 64, "MenuMailboxRegs must be 64 bytes");
 
-// spec.md §8 "HostInfo structure" — returned by GET_HOST_INFO.
+// HostInfo — returned by GET_HOST_INFO.
 struct HostInfo {
     uint8_t  msx_gen;      // 1=MSX1, 2=MSX2, 3=MSX2+, 4=turboR (best-effort)
     uint8_t  vram_kb;      // 16, 64, 128... (best-effort)
@@ -138,7 +132,7 @@ struct HostInfo {
 };
 static_assert(sizeof(HostInfo) == 12, "HostInfo must be 12 bytes");
 
-// spec.md §8 "InputSnapshot structure" — returned by READ_INPUT.
+// InputSnapshot — returned by READ_INPUT.
 struct InputSnapshot {
     uint8_t kbd_rows[11]; // rows 0–10, 8 bits each, 0=pressed, 1=released
     uint8_t joy1;         // b0=Up b1=Down b2=Left b3=Right b4=TrigA b5=TrigB, 0=pressed
@@ -156,7 +150,7 @@ static_assert(sizeof(InputSnapshot) == 16, "InputSnapshot must be 16 bytes");
 // Wraps a 16KB page buffer and provides the RP2350 half of the mailbox
 // protocol.  The Z80 stub is the executor; the RP2350 is the command issuer.
 //
-// Protocol per spec.md §8:
+// Protocol:
 //   - RP2350 writes command fields first, then cmd_seq last ("post").
 //   - Stub detects cmd_seq != resp_seq, executes, writes resp_seq last.
 //   - RP2350 calls tick() to collect the response.

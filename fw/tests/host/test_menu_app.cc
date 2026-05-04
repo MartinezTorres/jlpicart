@@ -21,10 +21,8 @@
 #include "msx/menu/menu_host_abi.h"
 #include "profiles/profile_store.h"
 #include "profiles/profile_format.h"
-#include "storage/flash_device.h"
-#include "storage/flash_layout.h"
-#include "storage/kv_store.h"
 
+#include "fat_test_env.h"
 #include "test_helpers.h"
 #include <cassert>
 #include <cstring>
@@ -34,26 +32,18 @@
 // Fixture
 // ---------------------------------------------------------------------------
 
-static constexpr uint32_t TEST_FLASH_SIZE = FLASH_SECTOR_SIZE * 32u; // 128 KB
-
 struct MenuFixture {
     uint8_t      page[MENU_PAGE_SIZE];
-    FlashDevice  kv_flash;
-    FlashDevice  ps_flash;
-    KvStore      kv;
+    FatTestEnv   env;
     ProfileStore ps;
     MenuMailbox  mbx;
     MenuApp      app;
 
-    MenuFixture()
-        : kv_flash(TEST_FLASH_SIZE)
-        , ps_flash(TEST_FLASH_SIZE)
-    {
+    MenuFixture() {
         memset(page, 0, sizeof(page));
         mbx.init(page, 0u);
-        kv.init(kv_flash, 0u, TEST_FLASH_SIZE);
-        ps.init(ps_flash, 0u, TEST_FLASH_SIZE);
-        app.init(mbx, kv, ps);
+        ps.init();
+        app.init(mbx, ps);
     }
 
     // Simulate Z80 stub completing its own initialisation by writing host_caps.
@@ -340,13 +330,14 @@ static void test_menu_collections_back() {
     CHECK(f.tick_to_cmd() == MENU_CMD_READ_INPUT);
     f.ack_input(0xFFu ^ KEY_RETURN, 0xFFu); // RETURN → COLLECTIONS
 
-    // COLLECTIONS render: CLEAR, header, title, version, payloads, Back, footer = 7 cmds.
-    static constexpr int COLLECTIONS_RENDER_CMDS = 7;
+    // COLLECTIONS render: CLEAR, header, title, version, payloads,
+    //   Launch (or blank), Back, footer = 8 cmds.
+    static constexpr int COLLECTIONS_RENDER_CMDS = 8;
     f.advance(COLLECTIONS_RENDER_CMDS);
     CHECK(f.tick_to_cmd() == MENU_CMD_READ_INPUT);
 
-    // Any key → back to MAIN.
-    f.ack_input();
+    // ESC → back to MAIN.
+    f.ack_input(0xFFu ^ 0x04u, 0xFFu); // row7 bit2 = ESC
 
     // MAIN re-renders starting with SET_MODE.
     uint16_t cmd = f.tick_to_cmd();

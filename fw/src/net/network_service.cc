@@ -1,6 +1,4 @@
-// network_service.cc — Network service (0x02) implementation (Stage 32).
-//
-// Spec reference: spec.md §7.2 "Network service (0x02)".
+// network_service.cc — Network service (0x02) implementation.
 
 #include "net/network_service.h"
 #include "net/transport_esp_at.h"

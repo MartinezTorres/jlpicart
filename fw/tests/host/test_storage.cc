@@ -1,13 +1,13 @@
 // test_storage.cc — Host tests for Stage 6 storage substrate.
 //
-// Covers: flash_device bounds, KV roundtrip/overwrite/delete/power-loss,
-// append_log sequential/CRC/tail-corruption, storage_health.
+// Covers:
+//   FlashDevice: bounds, read/write/erase, power-loss injection.
+//   KvStore: roundtrip/overwrite/delete/power-loss/reinit.
 
 #include "storage/flash_device.h"
 #include "storage/flash_layout.h"
 #include "storage/kv_store.h"
-#include "storage/append_log.h"
-#include "storage/storage_health.h"
+#include "fat_test_env.h"
 
 #include <cstdio>
 #include <cstring>
@@ -33,27 +33,21 @@ static int g_fail = 0;
 #define CHECK_OK(s)    CHECK((s).ok())
 #define CHECK_FAIL(s)  CHECK(!(s).ok())
 
-// Small partition sizes used by tests (a few sectors each).
-static constexpr uint32_t TEST_KV_SIZE  = FLASH_SECTOR_SIZE * 4;  // 16 KB
-static constexpr uint32_t TEST_LOG_SIZE = FLASH_SECTOR_SIZE * 4;  // 16 KB
+// Small partition size used by KvStore tests.
+static constexpr uint32_t TEST_KV_SIZE = FLASH_SECTOR_SIZE * 4;  // 16 KB
 
 // ---------------------------------------------------------------------------
-// flash_layout: compile-time assertions are in the header; just verify values.
+// flash_layout: compile-time assertions are in the header; verify key values.
 // ---------------------------------------------------------------------------
 
 static void test_flash_layout_constants()
 {
-    CHECK_EQ(FLASH_LAYOUT_VERSION, 1u);
     CHECK_EQ(FLASH_SIZE_BYTES, 16u * 1024u * 1024u);
     CHECK_EQ(FLASH_SECTOR_SIZE, 4096u);
     CHECK_EQ(FLASH_PAGE_SIZE,   256u);
-
-    // No-overlap check (redundant with static_asserts but explicit here).
-    CHECK(FLASH_SYSTEM_KV_OFS   >= FLASH_FIRMWARE_OFS + FLASH_FIRMWARE_SIZE);
-    CHECK(FLASH_EVENT_LOG_OFS   >= FLASH_SYSTEM_KV_OFS + FLASH_SYSTEM_KV_SIZE);
-    CHECK(FLASH_CONTENT_INDEX_OFS >= FLASH_EVENT_LOG_OFS + FLASH_EVENT_LOG_SIZE);
-    CHECK(FLASH_CONTENT_DATA_OFS  >= FLASH_CONTENT_INDEX_OFS + FLASH_CONTENT_INDEX_SIZE);
-    CHECK_EQ(FLASH_CONTENT_DATA_OFS + FLASH_CONTENT_DATA_SIZE, FLASH_SIZE_BYTES);
+    CHECK_EQ(FLASH_FIRMWARE_SIZE, 0x200000u);
+    CHECK_EQ(FLASH_FAT_SIZE,      0xE00000u);
+    CHECK(FLASH_FIRMWARE_OFS + FLASH_FIRMWARE_SIZE == FLASH_FAT_OFS);
 }
 
 // ---------------------------------------------------------------------------
@@ -63,7 +57,6 @@ static void test_flash_layout_constants()
 static void test_flash_device_erased_state()
 {
     FlashDevice dev(1024);
-    // Freshly constructed: all bytes are 0xFF (erased).
     uint8_t buf[4] = {};
     CHECK_OK(dev.read(0, buf, 4));
     for (int i = 0; i < 4; ++i) CHECK_EQ(buf[i], 0xFFu);
@@ -104,21 +97,18 @@ static void test_flash_device_bounds_check()
 static void test_flash_device_power_loss_injection()
 {
     FlashDevice dev(64);
-    // Inject: allow only 4 bytes to be written.
     dev.inject_power_loss_after(4);
 
     uint8_t data[8];
     memset(data, 0xAB, sizeof(data));
     DiagStatus s = dev.write(0, data, sizeof(data));
-    CHECK_FAIL(s);  // write was cut short
+    CHECK_FAIL(s);
 
-    // First 4 bytes written, rest still 0xFF.
     uint8_t buf[8];
     dev.read(0, buf, sizeof(buf));
     for (int i = 0; i < 4; ++i) CHECK_EQ(buf[i], 0xABu);
     for (int i = 4; i < 8; ++i) CHECK_EQ(buf[i], 0xFFu);
 
-    // Further writes are no-ops (power is gone).
     memset(data, 0xCD, sizeof(data));
     dev.write(8, data, sizeof(data));
     dev.read(8, buf, sizeof(buf));
@@ -126,7 +116,7 @@ static void test_flash_device_power_loss_injection()
 }
 
 // ---------------------------------------------------------------------------
-// KvStore
+// KvStore (still exercised in standalone tests)
 // ---------------------------------------------------------------------------
 
 static void test_kv_init_empty()
@@ -165,10 +155,10 @@ static void test_kv_put_overwrite()
     const uint8_t v1[] = { 0x11 };
     const uint8_t v2[] = { 0x22, 0x33 };
     kv.put("k", v1, sizeof(v1));
-    kv.put("k", v2, sizeof(v2));  // overwrite
+    kv.put("k", v2, sizeof(v2));
 
     CHECK(kv.contains("k"));
-    CHECK_EQ(kv.live_count(), 1u);  // still just one live key
+    CHECK_EQ(kv.live_count(), 1u);
 
     uint8_t out[8] = {}; uint16_t out_len = 0;
     CHECK_OK(kv.get("k", out, &out_len, sizeof(out)));
@@ -190,7 +180,6 @@ static void test_kv_del()
     CHECK(!kv.contains("gone"));
     CHECK_EQ(kv.live_count(), 0u);
 
-    // Delete of non-existent key is a no-op success.
     CHECK_OK(kv.del("gone"));
 }
 
@@ -231,7 +220,6 @@ static void test_kv_multiple_keys()
 
 static void test_kv_survives_reinit()
 {
-    // Verify the in-memory index is rebuilt correctly from flash on reinit.
     FlashDevice dev(TEST_KV_SIZE);
 
     {
@@ -241,7 +229,6 @@ static void test_kv_survives_reinit()
         kv.put("persist", val, sizeof(val));
     }
 
-    // New KvStore object — reads from same FlashDevice.
     KvStore kv2;
     CHECK_OK(kv2.init(dev, 0, TEST_KV_SIZE));
     CHECK(kv2.contains("persist"));
@@ -254,11 +241,8 @@ static void test_kv_survives_reinit()
 
 static void test_kv_power_loss_old_value_survives()
 {
-    // Core power-loss test: a torn write of a new value must leave the old
-    // value readable after reinit.
     FlashDevice dev(TEST_KV_SIZE);
 
-    // Phase 1: write initial value.
     {
         KvStore kv;
         kv.init(dev, 0, TEST_KV_SIZE);
@@ -266,18 +250,14 @@ static void test_kv_power_loss_old_value_survives()
         CHECK_OK(kv.put("cfg", v1, sizeof(v1)));
     }
 
-    // Phase 2: inject power loss — only enough bytes for the record header
-    // (sizeof(KvRecordHdr) = 8 bytes).  The key + value won't be written.
     dev.inject_power_loss_after(sizeof(KvRecordHdr));
     {
         KvStore kv;
         kv.init(dev, 0, TEST_KV_SIZE);
         const uint8_t v2[] = "version2";
-        // This put() will partially write (header only); CRC will be wrong.
-        kv.put("cfg", v2, sizeof(v2));  // ignore return — may error
+        kv.put("cfg", v2, sizeof(v2));
     }
 
-    // Phase 3: reinit from same flash — must see old value, not garbage.
     KvStore kv3;
     CHECK_OK(kv3.init(dev, 0, TEST_KV_SIZE));
     CHECK(kv3.contains("cfg"));
@@ -305,140 +285,6 @@ static void test_kv_tombstone_survives_reinit()
 }
 
 // ---------------------------------------------------------------------------
-// AppendLog
-// ---------------------------------------------------------------------------
-
-static void test_log_init_empty()
-{
-    FlashDevice dev(TEST_LOG_SIZE);
-    AppendLog log;
-    CHECK_OK(log.init(dev, 0, TEST_LOG_SIZE));
-    CHECK(log.initialized());
-    CHECK_EQ(log.record_count(), 0u);
-    CHECK_EQ(log.next_seq(), 1u);
-}
-
-static void test_log_append_and_iterate()
-{
-    FlashDevice dev(TEST_LOG_SIZE);
-    AppendLog log;
-    log.init(dev, 0, TEST_LOG_SIZE);
-
-    const uint8_t d1[] = { 0xAA };
-    const uint8_t d2[] = { 0xBB, 0xCC };
-    CHECK_OK(log.append(ALOG_TYPE_BOOT,   d1, sizeof(d1)));
-    CHECK_OK(log.append(ALOG_TYPE_INSTALL, d2, sizeof(d2)));
-    CHECK_EQ(log.record_count(), 2u);
-
-    // Use a simple counter approach:
-    struct IterState { int count; uint8_t last_type; uint32_t last_seq; };
-    IterState state = {};
-    log.iterate([](uint8_t type, uint32_t seq,
-                   const uint8_t* data, uint16_t len, void* ctx) -> bool {
-        auto* s = static_cast<IterState*>(ctx);
-        s->count++;
-        s->last_type = type;
-        s->last_seq  = seq;
-        (void)data; (void)len;
-        return true;
-    }, &state);
-
-    CHECK_EQ(state.count,     2);
-    CHECK_EQ(state.last_type, ALOG_TYPE_INSTALL);
-    CHECK_EQ(state.last_seq,  2u);
-}
-
-static void test_log_seq_monotonic()
-{
-    FlashDevice dev(TEST_LOG_SIZE);
-    AppendLog log;
-    log.init(dev, 0, TEST_LOG_SIZE);
-
-    for (int i = 0; i < 4; ++i) {
-        const uint8_t d = static_cast<uint8_t>(i);
-        log.append(ALOG_TYPE_BOOT, &d, 1);
-    }
-
-    // Collect seq numbers via iterate; use a small struct as context.
-    struct SeqCtx { uint32_t seqs[4]; int count; };
-    SeqCtx sc = {};
-    log.iterate([](uint8_t, uint32_t seq, const uint8_t*, uint16_t, void* ctx) -> bool {
-        auto* s = static_cast<SeqCtx*>(ctx);
-        if (s->count < 4) s->seqs[s->count++] = seq;
-        return true;
-    }, &sc);
-
-    CHECK_EQ(sc.count, 4);
-    for (int i = 1; i < 4; ++i) CHECK(sc.seqs[i] > sc.seqs[i-1]);
-}
-
-static void test_log_survives_reinit()
-{
-    FlashDevice dev(TEST_LOG_SIZE);
-    {
-        AppendLog log;
-        log.init(dev, 0, TEST_LOG_SIZE);
-        const uint8_t d[] = { 0x55 };
-        log.append(ALOG_TYPE_BOOT, d, sizeof(d));
-        log.append(ALOG_TYPE_BOOT, d, sizeof(d));
-    }
-    AppendLog log2;
-    log2.init(dev, 0, TEST_LOG_SIZE);
-    CHECK_EQ(log2.record_count(), 2u);
-    CHECK_EQ(log2.next_seq(), 3u);
-}
-
-static void test_log_tail_corruption_ignored()
-{
-    // Write two good records, then corrupt the third record's header (wrong CRC
-    // by corrupting payload bytes after the header is written).
-    FlashDevice dev(TEST_LOG_SIZE);
-    {
-        AppendLog log;
-        log.init(dev, 0, TEST_LOG_SIZE);
-        const uint8_t d[] = { 0x01 };
-        log.append(ALOG_TYPE_BOOT, d, sizeof(d));  // seq=1  (valid)
-        log.append(ALOG_TYPE_BOOT, d, sizeof(d));  // seq=2  (valid)
-        // Inject power loss after header bytes of 3rd record (CRC won't match payload).
-        dev.inject_power_loss_after(sizeof(AppendLogHdr));
-        log.append(ALOG_TYPE_BOOT, d, sizeof(d));  // seq=3  (torn)
-    }
-
-    // Reinit: should only see 2 valid records.
-    AppendLog log2;
-    log2.init(dev, 0, TEST_LOG_SIZE);
-    CHECK_EQ(log2.record_count(), 2u);
-    CHECK_EQ(log2.next_seq(), 3u);  // continues from last valid seq+1
-}
-
-static void test_log_zero_len_payload()
-{
-    FlashDevice dev(TEST_LOG_SIZE);
-    AppendLog log;
-    log.init(dev, 0, TEST_LOG_SIZE);
-    CHECK_OK(log.append(ALOG_TYPE_BOOT, nullptr, 0));
-    CHECK_EQ(log.record_count(), 1u);
-}
-
-// ---------------------------------------------------------------------------
-// StorageHealth
-// ---------------------------------------------------------------------------
-
-static void test_health_fresh_partitions()
-{
-    // Small sim: KV at offset 0, LOG immediately after.
-    FlashDevice dev(TEST_KV_SIZE + TEST_LOG_SIZE);
-    StorageHealth health = {};
-    CHECK_OK(storage_check_health(dev, health,
-                                   0,            TEST_KV_SIZE,
-                                   TEST_KV_SIZE, TEST_LOG_SIZE));
-    CHECK(health.system_kv_ok);
-    CHECK(health.event_log_ok);
-    CHECK_EQ(health.kv_record_count,  0u);
-    CHECK_EQ(health.log_record_count, 0u);
-}
-
-// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
@@ -460,15 +306,6 @@ int main()
     test_kv_survives_reinit();
     test_kv_power_loss_old_value_survives();
     test_kv_tombstone_survives_reinit();
-
-    test_log_init_empty();
-    test_log_append_and_iterate();
-    test_log_seq_monotonic();
-    test_log_survives_reinit();
-    test_log_tail_corruption_ignored();
-    test_log_zero_len_payload();
-
-    test_health_fresh_partitions();
 
     fprintf(stderr, "\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;

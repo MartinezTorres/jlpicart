@@ -6,7 +6,6 @@
 //
 // SecurityPosture is read ONCE at boot from the OtpReader and then treated
 // as immutable for the lifetime of the firmware. Only this module reads OTP.
-// See spec.md §10 (Security, licensing, and privacy).
 
 struct SecurityPosture {
     // boot ROM enforces firmware signature checks against enrolled key slots.
@@ -16,7 +15,6 @@ struct SecurityPosture {
     bool otp_device_secret_present;
 
     // Bitmask of enrolled boot-key slots (bits 0–3 map to slots 0–3).
-    // spec.md §10: "boot_key_valid_mask"
     uint8_t boot_key_valid_mask;
 
     // SWD/debug interface is fully disabled by OTP.
@@ -36,9 +34,8 @@ struct SecurityPosture {
 
     // Encrypted boot flow is active for firmware images.
     // NOTE: the RP2350 has no single OTP bit for this; it requires reading the
-    // partition table imagedef headers, which is not available until the storage
-    // layer is initialised (Stage 6). Until then this field is always false.
-    // TODO(stage6): derive from partition table; see spec.md §10 and §14.
+    // partition table imagedef headers (not available until storage is initialised).
+    // Always false until then.
     bool encrypted_boot_enabled;
 
     // Read all posture fields from the given OtpReader.

@@ -5,7 +5,6 @@
 // (0x8000–0xBFFF in subslot 2).  The Z80 reads/writes frames in the request
 // and response rings; the firmware reads requests and posts responses.
 //
-// Spec reference: spec.md §5.1.  Bootstrapping: bootstrapping.md §4.1.
 
 #include "msx/api/api_types.h"
 #include "spine/security_posture.h"

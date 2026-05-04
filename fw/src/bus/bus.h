@@ -5,24 +5,26 @@
 // Core 0 and never returns.  All other firmware (API window, menu mailbox,
 // etc.) runs on Core 1.
 //
-// Configuration (BUS::cartridges[], BUS::is_expanded, BUS::reset_callback)
+// Configuration (BUS::subslots[], BUS::is_expanded, BUS::reset_callback)
 // MUST be set before calling BUS::start().  Once start() is called, the bus
 // state may only be written from within reset_callback (called while WAIT is
 // asserted and the MSX bus is stalled).
 //
-// See bootstrapping.md Stage 9 and old_src/bus/bus.cc for the original
-// implementation notes.
 
 #include "cartridges/cartridge.h"
 #include <cstdint>
 
 namespace BUS {
 
-    static constexpr size_t CARTRIDGE_COUNT = 8;
+    // Total number of subslots.
+    static constexpr size_t SUBSLOT_COUNT = 16;
 
-    // Cartridge slots.  Slots 0–3 have memory mapping; slots 4–7 are IO-only.
-    // Configured by PeripheralManager::apply_mapping() before BUS::start().
-    extern Cartridge cartridges[CARTRIDGE_COUNT];
+    // Subslots 0–3 are memory-capable (when JLPiCart is in a primary MSX slot).
+    // Subslots 4–15 are IO-only in all configurations.
+    static constexpr size_t MEMORY_SUBSLOT_COUNT = 4;
+
+    // Subslot array.  Configured by PeripheralManager before BUS::start().
+    extern Subslot subslots[SUBSLOT_COUNT];
 
     // Subslot routing for each of the four 16 KB MSX pages (0–3).
     // subslot_indexes[page] = which of slots 0–3 handles that page.

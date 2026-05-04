@@ -45,8 +45,6 @@
 //   Bank 0 is mapped at reset.  Writing to 0x4104 switches the visible bank.
 //   The ATA registers at 0x7C00–0x7E0F always override ROM reads regardless
 //   of the current bank (they are in hardware, not in the ROM window).
-//
-// See bootstrapping.md Stage 34.
 
 #include "cartridges/cartridge.h"
 #include <cstdint>

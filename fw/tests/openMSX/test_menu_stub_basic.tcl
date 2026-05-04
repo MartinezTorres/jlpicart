@@ -1,7 +1,7 @@
 # test_menu_stub_basic.tcl — openMSX TCL test: menu stub mailbox protocol.
 #
-# Stage 12 test: verifies that the Z80 menu stub correctly handles all
-# minimum-conformance commands (spec.md §8) over the mailbox ABI.
+# Verifies that the Z80 menu stub correctly handles all required commands
+# over the mailbox ABI.
 #
 # Invoke via run_test.sh:
 #   bash fw/tests/openMSX/run_test.sh test_menu_stub_basic.tcl

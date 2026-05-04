@@ -17,23 +17,12 @@
 #include <hardware/structs/systick.h>
 #include <hardware/sync.h>
 
-// ---------------------------------------------------------------------------
-// Hot state — placed in scratch_y so Core 0 accesses it without XIP latency.
-// ---------------------------------------------------------------------------
-
-#define BUS_SCRATCH __attribute__((section(".scratch_y")))
-
 namespace BUS {
-
-    Cartridge     cartridges[CARTRIDGE_COUNT];
-
-    uint8_t       subslot_indexes[4] BUS_SCRATCH = {0, 0, 0, 0};
-    bool          is_expanded        BUS_SCRATCH = false;
-    ResetCallback reset_callback     BUS_SCRATCH = nullptr;
 
     // -----------------------------------------------------------------------
     // Bus helper lambdas and the main loop live in a single function so the
     // compiler can keep the hot state in registers as much as possible.
+    // (Global state defined in bus_state.cc — compiled for all targets.)
     // -----------------------------------------------------------------------
 
     [[noreturn]] void __no_inline_not_in_flash_func(start)() {
@@ -85,7 +74,7 @@ namespace BUS {
             uint32_t displacement= (bus >> GPIO_A0)  & 0x1FFFu;
             uint32_t page        = (bus >> GPIO_A14) & 0x03u;
 
-            Cartridge& cart = cartridges[is_expanded ? subslot_indexes[page] : 0];
+            Subslot& cart = subslots[is_expanded ? subslot_indexes[page] : 0];
 
             uint32_t data = 0;
             if (is_expanded && address == 0xFFFFu) {
@@ -123,7 +112,7 @@ namespace BUS {
             uint32_t page        = (bus >> GPIO_A14) & 0x03u;
             uint32_t data        = (bus >> GPIO_D0)  & 0xFFu;
 
-            Cartridge& cart = cartridges[is_expanded ? subslot_indexes[page] : 0];
+            Subslot& cart = subslots[is_expanded ? subslot_indexes[page] : 0];
 
             if (is_expanded && address == 0xFFFFu) {
                 SubslotReg r; r.byte = static_cast<uint8_t>(data);
@@ -150,10 +139,10 @@ namespace BUS {
 
             bool    driven = false;
             uint8_t data   = 0;
-            for (size_t i = 0; i < CARTRIDGE_COUNT; ++i) {
-                auto cb = cartridges[i].io_read_callbacks[io_port];
+            for (size_t i = 0; i < SUBSLOT_COUNT; ++i) {
+                auto cb = subslots[i].io_read_callbacks[io_port];
                 if (cb) {
-                    auto [active, d] = cb(cartridges[i], bus);
+                    auto [active, d] = cb(subslots[i], bus);
                     if (active) { driven = true; data = d; }
                 }
             }
@@ -176,9 +165,9 @@ namespace BUS {
             set_bus_oe(BIT_WAIT);
 
             uint32_t io_port = (bus >> GPIO_A0) & 0xFFu;
-            for (size_t i = 0; i < CARTRIDGE_COUNT; ++i) {
-                auto cb = cartridges[i].io_write_callbacks[io_port];
-                if (cb) cb(cartridges[i], bus);
+            for (size_t i = 0; i < SUBSLOT_COUNT; ++i) {
+                auto cb = subslots[i].io_write_callbacks[io_port];
+                if (cb) cb(subslots[i], bus);
             }
 
             set_bus_oe(0);

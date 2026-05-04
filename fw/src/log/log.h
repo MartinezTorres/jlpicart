@@ -6,7 +6,6 @@
 //
 // Safe to call from any non-bus-loop context (Core 1 and host tests).
 // Never blocks; if the ring is full, oldest entries are overwritten.
-// See fw/spec.md §13.
 
 enum class LogLevel : uint8_t { DEBUG = 0, INFO = 1, WARN = 2, ERROR = 3 };
 

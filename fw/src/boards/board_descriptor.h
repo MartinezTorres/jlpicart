@@ -5,9 +5,8 @@
 // board_descriptor.h — hardware capability declarations for JLPiCart.
 //
 // A BoardCapabilityDecl says "this board has hardware X".
-// Declared ≠ present ≠ active. No probing happens in Stage 3.
+// Declared ≠ present ≠ active.
 // Probing is gated on: declared + allowed + requested + safe_verify=true.
-// See spec.md §5.1 (Resource and capability model contract v1).
 
 struct BoardCapabilityDecl {
     const char*          name;         // stable capability name (e.g. "bus.msx")

@@ -3,14 +3,12 @@
 //
 // All structs are #pragma pack(1), little-endian, shared between RP2350 firmware
 // and Z80 client code.  No SDK types; this file is included in host tests too.
-//
-// Spec references: spec.md §5 (JLPiCart API), §5.1 (Fixed MSX-visible allocations).
 
 #include <cstdint>
 #include <cstddef>
 
 // ---------------------------------------------------------------------------
-// Window layout constants (spec.md §5.1 "Fixed layout within the 16KB API Window")
+// Window layout constants
 // ---------------------------------------------------------------------------
 
 static constexpr uint16_t API_WINDOW_SIZE      = 0x4000u; // 16 KB total
@@ -47,23 +45,15 @@ static constexpr uint8_t API_HDR_FLAG_RINGS = (1u << 0); // rings enabled (MUST 
 static constexpr uint8_t API_HDR_FLAG_REGS  = (1u << 1); // ApiRegs doorbells enabled
 static constexpr uint8_t API_HDR_FLAGS_V1   = API_HDR_FLAG_RINGS | API_HDR_FLAG_REGS;
 
-// feature_bits (ApiWindowHeader and ApiInfo): which services are implemented.
-// spec.md "Feature bits (in feature_bits)".
+// feature_bits: which services are implemented
 static constexpr uint32_t API_FEATURE_SYSTEM    = (1u << 0); // System service 0x00
-static constexpr uint32_t API_FEATURE_STORAGE   = (1u << 1); // Storage service 0x01 (Stage 6)
-static constexpr uint32_t API_FEATURE_NETWORK   = (1u << 2); // Network service 0x02 (future)
-static constexpr uint32_t API_FEATURE_IDENTITY  = (1u << 3); // Identity service 0x03 (future)
-static constexpr uint32_t API_FEATURE_USERSTATS = (1u << 4); // UserStats 0x04 (future)
+static constexpr uint32_t API_FEATURE_STORAGE   = (1u << 1); // Storage service 0x01
+static constexpr uint32_t API_FEATURE_NETWORK   = (1u << 2); // Network service 0x02
+static constexpr uint32_t API_FEATURE_IDENTITY  = (1u << 3); // Identity service 0x03
+static constexpr uint32_t API_FEATURE_USERSTATS = (1u << 4); // UserStats 0x04
 
-// Stage 4: only System service implemented.
-static constexpr uint32_t API_FEATURES_STAGE4  = API_FEATURE_SYSTEM;
-// Stage 15: adds Identity service.
-static constexpr uint32_t API_FEATURES_STAGE15 = API_FEATURE_SYSTEM | API_FEATURE_IDENTITY;
-// Stage 19: adds Storage service.
-static constexpr uint32_t API_FEATURES_STAGE19 =
-    API_FEATURE_SYSTEM | API_FEATURE_IDENTITY | API_FEATURE_STORAGE;
-// Stage 21: adds UserStats service.
-static constexpr uint32_t API_FEATURES_STAGE21 =
+// All non-network services currently implemented (network is bound conditionally).
+static constexpr uint32_t API_FEATURES_CURRENT =
     API_FEATURE_SYSTEM | API_FEATURE_IDENTITY | API_FEATURE_STORAGE | API_FEATURE_USERSTATS;
 
 // ---------------------------------------------------------------------------
@@ -72,7 +62,7 @@ static constexpr uint32_t API_FEATURES_STAGE21 =
 
 #pragma pack(push, 1)
 
-// spec.md §5.1 "ApiWindowHeader (64 bytes)"
+// ApiWindowHeader — 64 bytes at API_HEADER_OFS
 struct ApiWindowHeader {
     char     sig[4];           // "JLP1"
     uint8_t  api_major;        // API_MAJOR
@@ -97,7 +87,7 @@ struct ApiWindowHeader {
 };
 static_assert(sizeof(ApiWindowHeader) == 64, "ApiWindowHeader must be 64 bytes");
 
-// spec.md §5.1 "ApiRegs (32 bytes)"
+// ApiRegs — 32 bytes at API_REGS_OFS
 struct ApiRegs {
     volatile uint8_t  host_kick;    // host increments to notify "requests posted"
     volatile uint8_t  cart_event;   // cart increments to notify "responses posted"
@@ -109,7 +99,7 @@ struct ApiRegs {
 };
 static_assert(sizeof(ApiRegs) == 32, "ApiRegs must be 32 bytes");
 
-// spec.md §5.1 "RingHeader"
+// RingHeader — 8 bytes, followed immediately by ring_data[size]
 struct RingHeader {
     volatile uint16_t head;  // producer writes (byte offset into ring_data)
     volatile uint16_t tail;  // consumer writes (byte offset into ring_data)
@@ -119,7 +109,7 @@ struct RingHeader {
 };
 static_assert(sizeof(RingHeader) == 8, "RingHeader must be 8 bytes");
 
-// spec.md §5.1 "Message header (MsgHeader, 16 bytes)"
+// MsgHeader — 16-byte frame header for all API messages
 struct MsgHeader {
     uint16_t seq;          // host-chosen request id; echoed in response
     uint8_t  service;      // service id (SVC_*)
@@ -134,7 +124,7 @@ struct MsgHeader {
 static_assert(sizeof(MsgHeader) == 16, "MsgHeader must be 16 bytes");
 
 // ---------------------------------------------------------------------------
-// Status codes (spec.md "Status codes")
+// Status codes
 // ---------------------------------------------------------------------------
 
 static constexpr uint16_t API_OK            = 0x0000u;
@@ -151,7 +141,7 @@ static constexpr uint16_t API_E_INTERNAL    = 0x2001u; // cart-side runtime erro
 static constexpr uint16_t API_E_POLICY      = 0x1010u; // operation blocked by policy flag
 
 // ---------------------------------------------------------------------------
-// Service IDs (spec.md "Services")
+// Service IDs
 // ---------------------------------------------------------------------------
 
 static constexpr uint8_t SVC_SYSTEM   = 0x00u;
@@ -161,7 +151,7 @@ static constexpr uint8_t SVC_IDENTITY = 0x03u;
 static constexpr uint8_t SVC_USERSTATS = 0x04u;
 
 // ---------------------------------------------------------------------------
-// System service (0x00) method IDs (spec.md "System service")
+// System service (0x00) method IDs
 // ---------------------------------------------------------------------------
 
 static constexpr uint8_t SYS_GET_API_INFO      = 0x00u;
@@ -173,8 +163,7 @@ static constexpr uint8_t SYS_GET_SECURITY_INFO = 0x05u;
 static constexpr uint8_t SYS_GET_POLICY_FLAGS  = 0x06u;
 
 // ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// Storage service (0x01) method IDs  (spec.md "Storage service")
+// Storage service (0x01) method IDs
 // ---------------------------------------------------------------------------
 
 static constexpr uint8_t STG_LIST_BLOBS        = 0x00u;
@@ -185,14 +174,14 @@ static constexpr uint8_t STG_WRITE_BLOB_COMMIT = 0x04u;
 static constexpr uint8_t STG_DELETE_BLOB       = 0x05u;
 
 // ---------------------------------------------------------------------------
-// Network service (0x02) method IDs  (spec.md "Network service")
+// Network service (0x02) method IDs
 // ---------------------------------------------------------------------------
 
 static constexpr uint8_t NET_STATUS        = 0x00u;
 static constexpr uint8_t NET_HTTP_REQUEST  = 0x01u;
 
 // ---------------------------------------------------------------------------
-// Identity service (0x03) method IDs  (spec.md "Identity service")
+// Identity service (0x03) method IDs
 // ---------------------------------------------------------------------------
 
 static constexpr uint8_t IDN_LIST_PROFILES       = 0x00u;
@@ -209,7 +198,7 @@ static constexpr uint8_t IDN_GUEST_END           = 0x04u;
 static constexpr uint8_t PROF_API_NAME_MAX = 16u;
 
 // ---------------------------------------------------------------------------
-// UserStats service (0x04) method IDs  (spec.md "UserStats service")
+// UserStats service (0x04) method IDs
 // ---------------------------------------------------------------------------
 
 static constexpr uint8_t UST_STAT_GET          = 0x00u;
@@ -219,10 +208,7 @@ static constexpr uint8_t UST_LEADER_RUN_BEGIN  = 0x03u;
 static constexpr uint8_t UST_LEADER_SUBMIT     = 0x04u;
 
 // ---------------------------------------------------------------------------
-// posture_props bitfield  (spec.md "Posture properties (OTP-derived)")
-//
-// Bit assignments are authoritative here; the spec says "see spec table" but
-// does not yet define one.  These bits are normative from Stage 4 onward.
+// posture_props bitfield — OTP-derived security state
 // ---------------------------------------------------------------------------
 
 static constexpr uint32_t API_POSTURE_SECURE_BOOT_ENABLED    = (1u << 0);
@@ -238,7 +224,7 @@ static constexpr uint32_t API_POSTURE_ENCRYPTED_BOOT_ENABLED = (1u << 6);
 // Response payload structs (all packed, little-endian)
 // ---------------------------------------------------------------------------
 
-// Network.HTTP_REQUEST (0x01) request payload  (spec.md "Network service")
+// Network.HTTP_REQUEST (0x01) request payload
 struct HttpReq {
     uint8_t  verb;        // 0=GET, 1=POST, 2=PUT, 3=DELETE
     uint8_t  flags;       // bit0=https, bit1=allow_redirects
@@ -255,7 +241,7 @@ struct HttpResp {
 };
 static_assert(sizeof(HttpResp) == 4, "HttpResp must be 4 bytes");
 
-// System.GET_API_INFO (0x00) response  (spec.md)
+// System.GET_API_INFO (0x00) response
 struct ApiInfo {
     uint8_t  api_major;
     uint8_t  api_minor;
@@ -271,10 +257,10 @@ struct ApiInfo {
 static_assert(sizeof(ApiInfo) == 20, "ApiInfo must be 20 bytes");
 
 // ---------------------------------------------------------------------------
-// Capability numeric IDs (spec.md §5.1, doc/api/capabilities.md)
+// Capability numeric IDs — see doc/api/capabilities.md
 //
-// These assignments are stable: once an ID is assigned to a capability string
-// it MUST NOT be reassigned or reused.  Domain groupings are 0x0100 wide.
+// Stable: once assigned, an ID must not be reassigned or reused.
+// Domain groupings are 0x0100 wide.
 // ---------------------------------------------------------------------------
 
 // Domain 0x0000: Core platform services
@@ -301,17 +287,13 @@ static constexpr uint16_t CAP_UI_EINK             = 0x0402u; // hw: e-ink displa
 
 // Domain 0x0500: Video
 static constexpr uint16_t CAP_VIDEO_CRT           = 0x0501u; // hw: CRT/VGA analog output
-static constexpr uint16_t CAP_VIDEO_V9990         = 0x0502u; // sw: V9990/G9000 VDP emulation
 
 // Domain 0x0600: Audio
 static constexpr uint16_t CAP_AUDIO_OUT           = 0x0601u; // hw: stereo DAC output
-static constexpr uint16_t CAP_AUDIO_OPL4          = 0x0602u; // sw: OPL4 MoonSound emulation
 
 // Domain 0x1000: Software capabilities
 static constexpr uint16_t CAP_API_CORE            = 0x1001u; // sw: core API service
 static constexpr uint16_t CAP_SW_MAPPER           = 0x1002u; // sw: MSX ROM mapper emulation
-static constexpr uint16_t CAP_SW_PSG              = 0x1010u; // sw: AY-3-8910 PSG emulation
-static constexpr uint16_t CAP_SW_SCC              = 0x1011u; // sw: Konami SCC/SCC+ emulation
 static constexpr uint16_t CAP_SW_MENU             = 0x1020u; // sw: menu host ABI + Z80 stub
 
 // cap_flags bits in CapEntry (doc/api/capabilities.md)
@@ -346,13 +328,9 @@ static constexpr CapIdMapping kCapIdMappings[] = {
     { "ui.oled",           CAP_UI_OLED,            true  },
     { "ui.eink",           CAP_UI_EINK,            true  },
     { "video.crt",         CAP_VIDEO_CRT,          true  },
-    { "video.v9990",       CAP_VIDEO_V9990,        false },
     { "audio.out",         CAP_AUDIO_OUT,          true  },
-    { "audio.opl4",        CAP_AUDIO_OPL4,         false },
     { "api.core",          CAP_API_CORE,           false },
     { "sw.mapper",         CAP_SW_MAPPER,          false },
-    { "sw.psg",            CAP_SW_PSG,             false },
-    { "sw.scc",            CAP_SW_SCC,             false },
     { "sw.menu",           CAP_SW_MENU,            false },
 };
 static constexpr size_t kCapIdMappingCount =
@@ -394,7 +372,7 @@ struct CapEntry {
 };
 static_assert(sizeof(CapEntry) == 8, "CapEntry must be 8 bytes");
 
-// System.GET_SECURITY_INFO (0x05) response  (spec.md)
+// System.GET_SECURITY_INFO (0x05) response
 struct SecurityInfoResp {
     uint32_t posture_props;        // API_POSTURE_* bitfield
     uint8_t  boot_key_valid_mask;
@@ -402,10 +380,10 @@ struct SecurityInfoResp {
 };
 static_assert(sizeof(SecurityInfoResp) == 8, "SecurityInfoResp must be 8 bytes");
 
-// System.GET_POLICY_FLAGS (0x06) response  (spec.md)
+// System.GET_POLICY_FLAGS (0x06) response
 struct PolicyFlagsResp {
-    uint32_t policy_flags;       // PolicyFlags bitfield (spec.md "Policy flags bit assignments v1")
-    uint32_t policy_gen;         // generation counter (0 until KV store in Stage 6)
+    uint32_t policy_flags;       // PolicyFlags bitfield
+    uint32_t policy_gen;         // generation counter
     uint8_t  policy_hash16[16];  // first 16 bytes of SHA-256(canonical policy bytes)
 };
 static_assert(sizeof(PolicyFlagsResp) == 24, "PolicyFlagsResp must be 24 bytes");

@@ -8,9 +8,6 @@
 #include "msx/api/api_window.h"
 #include "msx/api/api_types.h"
 #include "msx/menu/menu_host_abi.h"
-#include "storage/flash_device.h"
-#include "storage/flash_layout.h"
-#include "storage/kv_store.h"
 #include "profiles/profile_store.h"
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
@@ -19,6 +16,7 @@
 #include "drivers/driver_descriptor.h"
 #include "menu/menu_app.h"
 
+#include "fat_test_env.h"
 #include "test_helpers.h"
 #include <cstring>
 #include <cstdio>
@@ -26,8 +24,6 @@
 // ---------------------------------------------------------------------------
 // Minimal ApiWindow fixture
 // ---------------------------------------------------------------------------
-
-static constexpr uint32_t TEST_FLASH_SIZE = FLASH_SECTOR_SIZE * 32u;
 
 struct ApiFixture {
     SecurityPosture   posture;
@@ -166,12 +162,9 @@ static void test_get_random_cap()
 
 static void test_menu_app_reset_flag()
 {
-    FlashDevice kv_flash(TEST_FLASH_SIZE);
-    FlashDevice ps_flash(TEST_FLASH_SIZE);
-    KvStore     kv;
+    FatTestEnv   env;
     ProfileStore ps;
-    kv.init(kv_flash, 0u, TEST_FLASH_SIZE);
-    ps.init(ps_flash, 0u, TEST_FLASH_SIZE);
+    ps.init();
 
     uint8_t     page[MENU_PAGE_SIZE];
     MenuMailbox mbx;
@@ -179,7 +172,7 @@ static void test_menu_app_reset_flag()
     mbx.init(page, 0u);
 
     MenuApp app;
-    app.init(mbx, kv, ps);
+    app.init(mbx, ps);
 
     // Simulate Z80 stub initialising and boot sequence reaching MAIN.
     MenuStubHeader* hdr = reinterpret_cast<MenuStubHeader*>(page + MENU_HEADER_OFS);

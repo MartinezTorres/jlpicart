@@ -1,12 +1,6 @@
 #pragma once
-// activation.h — Shared helpers for Stage 8 Activation v1.
-//
-// Bridges the content layer (CollectionManifest) and the allocator:
-//   requested_from_manifest() converts a parsed Payload entry into a
-//   RequestedCapabilities struct that the Allocator can consume.
-//
-// See spec.md §5.1 "Capability lifecycle: Declared → Allowed → Activated"
-// and bootstrapping.md Stage 8.
+// activation.h — Convert a manifest payload entry to RequestedCapabilities
+// for the Allocator.
 
 #include "allocator/allocator.h"
 #include "content/manifest.h"

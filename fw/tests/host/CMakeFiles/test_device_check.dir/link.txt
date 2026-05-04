@@ -1,0 +1,1 @@
+/usr/bin/c++ -g CMakeFiles/test_device_check.dir/test_device_check.cc.o CMakeFiles/test_device_check.dir/home/claude/repos/jlpicart/fw/src/bus/device_type.cc.o CMakeFiles/test_device_check.dir/home/claude/repos/jlpicart/fw/src/allocator/device_check.cc.o -o test_device_check  /usr/lib/x86_64-linux-gnu/libcrypto.so 

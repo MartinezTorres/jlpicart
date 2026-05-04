@@ -1,21 +1,17 @@
 #pragma once
-// transport_esp_at.h — ESP32 AT command transport driver (Stage 32).
+// transport_esp_at.h — ESP32 AT command transport driver.
 //
 // Owns UART0 (GPIO64_UART_TX=44, GPIO64_UART_RX=45) and exposes WiFi status
 // and a blocking HTTP client to the firmware.
 //
 // Hardware note: EN and BOOT pins are NOT connected on the JLPiCart reference
-// board (confirmed in old_src/esp32/esp_jlpicart_port.cc).  The AT firmware
-// must be pre-flashed externally.  Software reset via AT+RST is the only
-// control available.
+// board. The AT firmware must be pre-flashed externally; software reset via
+// AT+RST is the only control available.
 //
-// Security note: the ESP32 is an UNTRUSTED transport (spec.md §12).  All
-// sensitive traffic MUST be end-to-end protected by the RP2350 above this
-// layer.  The HTTP client here is intentionally low-level so higher layers
-// can layer their own crypto.
+// Security note: the ESP32 is an UNTRUSTED transport. All sensitive traffic
+// MUST be end-to-end protected by the RP2350 above this layer.
 //
-// In host tests (JLPICART_HOST_TEST), all methods return stub/offline results
-// so service-level logic can be exercised without real hardware.
+// In host tests (JLPICART_HOST_TEST), all methods return stub/offline results.
 
 #include "diag/diag.h"
 #include <cstddef>

@@ -6,14 +6,13 @@
 #include "peripherals/opl4.h"
 #include "peripherals/sunrise_ide.h"
 #include "bus/bus_map.h"
+#include "bus/bus.h"
 #include "mappers/mappers.h"
+#include "content/content_store.h"
+#include "platform/platform.h"
 #include "log/log.h"
 #include <cstdio>
 #include <cstring>
-
-#ifndef JLPICART_HOST_TEST
-#  include "bus/bus.h"
-#endif
 
 // String table for LaunchFailureKind — must stay in sync with the enum.
 static const char* const kFailureKindStr[] = {
@@ -58,9 +57,7 @@ bool PeripheralManager::apply_mapping(const MappingPlan& plan) {
             continue;
         }
 
-#ifndef JLPICART_HOST_TEST
-        // Wire the mapper into BUS::cartridges[subslot].
-        Cartridge& slot = BUS::cartridges[e.subslot];
+        Subslot& slot = BUS::subslots[e.subslot];
         switch (e.mapper_type) {
             case MapperType::ROM:
                 mapper_setup_rom(slot, e.rom_data, e.rom_size);       break;
@@ -87,54 +84,66 @@ bool PeripheralManager::apply_mapping(const MappingPlan& plan) {
             case MapperType::NONE:
                 slot.clear();                                          break;
         }
-#endif
     }
 
-#ifndef JLPICART_HOST_TEST
     BUS::is_expanded = plan.expanded;
-#endif
+
+    for (size_t i = 0; i < plan.io_device_count; ++i) {
+        const IoDeviceEntry& d = plan.io_devices[i];
+        switch (d.type) {
+            case IoDeviceType::PSG:
+                map_psg();
+                break;
+            case IoDeviceType::OPL4:
+                map_opl4(d.wave_payload_id[0] ? d.wave_payload_id : nullptr);
+                break;
+            case IoDeviceType::NONE:
+                break;
+        }
+    }
 
     return true;
 }
 
-void PeripheralManager::map_psg(PsgState& state)
+void PeripheralManager::map_psg()
 {
-#ifndef JLPICART_HOST_TEST
-    psg_setup(BUS::cartridges[4], state);
-    psg_audio_init(state);
-#else
-    // Host test build: BUS::cartridges not available.  Wire into a local dummy
-    // so psg_setup() can record the state pointer; callbacks are never invoked.
-    static Cartridge dummy_slot;
-    psg_setup(dummy_slot, state);
-#endif
-    log_info("PSG (AY-3-8910) wired at IO ports 0xA0/0xA1/0xA2 (slot 4)");
+    const size_t slot = next_io_subslot_++;
+    psg_reset(psg_state_);
+    psg_setup(BUS::subslots[slot], psg_state_);
+    psg_audio_init(psg_state_);
+    psg_active_ = true;
+    char buf[56];
+    snprintf(buf, sizeof(buf),
+             "PSG (AY-3-8910) wired at IO 0xA0-0xA2 (subslot %zu)", slot);
+    log_info(buf);
 }
 
-void PeripheralManager::map_scc(uint8_t slot, const uint8_t* rom_data,
-                                 SccState& state)
+void PeripheralManager::map_opl4(const char* payload_id)
 {
-#ifndef JLPICART_HOST_TEST
-    mapper_setup_konami_scc(BUS::cartridges[slot], rom_data, state);
-#else
-    (void)slot;
-    static Cartridge dummy_slot;
-    mapper_setup_konami_scc(dummy_slot, rom_data, state);
-#endif
-    log_info("SCC wired: Konami SCC mapper + register space 0x9800-0x9FFF");
-}
+    const size_t slot = next_io_subslot_++;
+    opl4_reset(opl4_state_);
 
-void PeripheralManager::map_opl4(Opl4State& state,
-                                  const uint8_t* wave_rom, uint32_t wave_rom_size)
-{
-#ifndef JLPICART_HOST_TEST
-    opl4_setup(BUS::cartridges[5], state, wave_rom, wave_rom_size);
-    opl4_audio_init(state);
-#else
-    static Cartridge dummy_slot;
-    opl4_setup(dummy_slot, state, wave_rom, wave_rom_size);
-#endif
-    log_info("OPL4 (YMF278B) wired at IO ports 0x7E/0x7F + 0xF5/0xF6/0xF7 (slot 5)");
+    const uint8_t* wave_rom  = nullptr;
+    uint32_t       wave_size = 0u;
+    if (payload_id) {
+        ContentStore cs;
+        if (cs.has_active_collection()) {
+            PayloadRecord pr = {};
+            if (cs.load_payload(payload_id, pr).ok() && pr.data_size > 0u) {
+                wave_rom  = Platform::xip_map(pr.data_flash_offset);
+                wave_size = pr.data_size;
+                log_info("OPL4: wave ROM mapped from XIP flash");
+            }
+        }
+    }
+
+    opl4_setup(BUS::subslots[slot], opl4_state_, wave_rom, wave_size);
+    opl4_audio_init(opl4_state_);
+    opl4_active_ = true;
+    char buf[64];
+    snprintf(buf, sizeof(buf),
+             "OPL4 (YMF278B) wired at IO 0x7E/0x7F+0xF5-0xF7 (subslot %zu)", slot);
+    log_info(buf);
 }
 
 void PeripheralManager::map_sunrise_ide(uint8_t slot, IdeState& state,
@@ -142,14 +151,8 @@ void PeripheralManager::map_sunrise_ide(uint8_t slot, IdeState& state,
                                          const uint8_t* disk_image, uint32_t disk_sectors)
 {
     char buf[96];
-#ifndef JLPICART_HOST_TEST
-    ide_setup(BUS::cartridges[slot], state, nextor_rom, nextor_size,
+    ide_setup(BUS::subslots[slot], state, nextor_rom, nextor_size,
               disk_image, disk_sectors);
-#else
-    static Cartridge dummy_slot;
-    ide_setup(dummy_slot, state, nextor_rom, nextor_size, disk_image, disk_sectors);
-    (void)slot;
-#endif
     snprintf(buf, sizeof(buf),
              "Sunrise IDE wired: slot %u, nextor %s, disk %lu sectors",
              slot,
@@ -160,15 +163,21 @@ void PeripheralManager::map_sunrise_ide(uint8_t slot, IdeState& state,
 
 void PeripheralManager::map_menu_page(uint8_t* page) {
     BusMap::map_rw_region(1, 0x4000, page);
-#ifndef JLPICART_HOST_TEST
     BUS::is_expanded = true;
-#endif
     log_info("Menu page mapped: subslot 1 page 1 (0x4000-0x7FFF) RW");
 }
 
 void PeripheralManager::map_api_window(const uint8_t* buf) {
     BusMap::map_ro_region(2, 0x8000, buf);
     log_info("API window mapped: subslot 2 page 2 (0x8000-0xBFFF) RO");
+}
+
+void PeripheralManager::service_all() {
+    // Order matters: SCC and OPL4 write their output samples first;
+    // psg_service() reads them and mixes all three into PWM.
+    if (active_scc_)   scc_service(*active_scc_);
+    if (opl4_active_)  opl4_service(opl4_state_);
+    if (psg_active_)   psg_service(psg_state_);
 }
 
 void PeripheralManager::log_report(const LaunchPlan& plan) const {

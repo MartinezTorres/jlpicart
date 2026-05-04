@@ -1,6 +1,6 @@
 /* main.c — JLPiCart Menu stub ROM for Z80 MSX.
  *
- * Implements the Z80 side of the Menu Host ABI (spec.md §8).
+ * Implements the Z80 side of the Menu Host ABI.
  * Polls the MenuMailboxRegs; when cmd_seq != resp_seq, executes the command
  * and writes resp_seq last (signalling the RP2350 that the command is done).
  *
@@ -10,8 +10,7 @@
  * a known signature into the mailbox instead of entering the poll loop.
  * The RP2350 can then verify the stub loaded and ran correctly.
  *
- * Conformance per spec.md §8:
- *   MUST implement: GET_HOST_INFO, SET_MODE(TEXT_40), CLEAR, PUT_TEXT,
+ * Required commands: GET_HOST_INFO, SET_MODE(TEXT_40), CLEAR, PUT_TEXT,
  *                   READ_INPUT, IDLE, NOP.
  *
  * Assumptions:
@@ -63,6 +62,7 @@
 #define CMD_VRAM_FILL     0x0008u
 #define CMD_BEEP          0x0009u
 #define CMD_IDLE          0x000Au
+#define CMD_LAUNCH        0x000Bu
 
 #define MODE_TEXT_40    0u
 #define MODE_TEXT_80    1u
@@ -470,6 +470,19 @@ void stub_main(void)
             case CMD_IDLE:
                 cmd_idle(arg0);
                 break;
+
+            case CMD_LAUNCH:
+                /* ROM has been remapped by RP2350.  Acknowledge first so
+                 * the RP2350 sees the response, then perform a BIOS cold
+                 * start so the BIOS rescans all slots and boots the new ROM.
+                 * This is a one-way trip — the poll loop below is never
+                 * reached again. */
+                wr16(MAILBOX_BASE + MBX_STATUS,   MENU_OK);
+                wr16(MAILBOX_BASE + MBX_RESP_SEQ, cmd_seq);
+                __asm
+                    jp 0x0000
+                __endasm;
+                break; /* unreachable; suppresses SDCC fallthrough warning */
 
             default:
                 wr16(MAILBOX_BASE + MBX_STATUS, MENU_E_UNSUPPORTED);

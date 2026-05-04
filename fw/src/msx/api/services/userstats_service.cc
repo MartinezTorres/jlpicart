@@ -1,6 +1,4 @@
-// userstats_service.cc — UserStats service (0x04) implementation (Stage 21).
-//
-// Spec reference: spec.md §7.2 "UserStats service (0x04)".
+// userstats_service.cc — UserStats service (0x04) implementation.
 
 #include "msx/api/services/userstats_service.h"
 #include "msx/api/api_window.h"

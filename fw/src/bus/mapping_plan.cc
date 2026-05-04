@@ -1,6 +1,7 @@
 // mapping_plan.cc — MappingPlan helpers.
 
 #include "bus/mapping_plan.h"
+#include "bus/device_type.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------
@@ -43,28 +44,43 @@ MappingPlan mapping_plan_from_payload_record(const PayloadRecord& record)
 {
     MappingPlan plan = {};
 
+    // Memory mapper entry (if ROM data is present).
     MapperType mt = mapper_type_from_string(record.mapper_type);
-    if (mt == MapperType::NONE) return plan;   // no mapper specified
-    if (record.data_size == 0)  return plan;   // ROM not yet written to flash
-
-    MappingEntry& entry  = plan.entries[0];
-    entry.mapper_type    = mt;
-    entry.subslot        = record.subslot;
-    entry.rom_size       = record.data_size;
-    entry.ram_data       = nullptr;
-    entry.ram_size       = 0;
-
+    if (mt != MapperType::NONE && record.data_size > 0) {
+        MappingEntry& entry = plan.entries[0];
+        entry.mapper_type   = mt;
+        entry.subslot       = record.subslot;
+        entry.rom_size      = record.data_size;
+        entry.ram_data      = nullptr;
+        entry.ram_size      = 0;
 #ifndef JLPICART_HOST_TEST
-    // XIP_BASE = 0x10000000 on RP2350.  ROM data is directly readable at this address.
-    static constexpr uint32_t XIP_BASE = 0x10000000u;
-    entry.rom_data = reinterpret_cast<const uint8_t*>(XIP_BASE + record.data_flash_offset);
+        static constexpr uint32_t XIP_BASE = 0x10000000u;
+        entry.rom_data = reinterpret_cast<const uint8_t*>(XIP_BASE + record.data_flash_offset);
 #else
-    // XIP is not available on the host; caller must not dereference rom_data.
-    entry.rom_data = nullptr;
+        entry.rom_data = nullptr;
 #endif
+        plan.entry_count = 1;
+        plan.expanded    = false;
+    }
 
-    plan.entry_count = 1;
-    plan.expanded    = false;  // single subslot; no subslot expansion register
+    // IO devices from device records (memory-mapped devices handled via mapper entries).
+    for (uint8_t i = 0; i < record.device_count && i < PAYLOAD_DEVICES_MAX; ++i) {
+        const PayloadDeviceRecord& pdr = record.devices[i];
+        const DeviceType dt = static_cast<DeviceType>(pdr.type);
+        const DeviceTypeInfo* info = device_type_info(dt);
+        if (!info || info->memory_mapped) continue;
+        if (plan.io_device_count >= MAPPING_MAX_IO_DEVICES) break;
+        IoDeviceEntry& io = plan.io_devices[plan.io_device_count++];
+        if (dt == DeviceType::PSG) {
+            io.type = IoDeviceType::PSG;
+        } else if (dt == DeviceType::OPL4) {
+            io.type = IoDeviceType::OPL4;
+            size_t plen = strnlen(pdr.params, sizeof(pdr.params));
+            if (plen > 0 && plen < PAYLOAD_ID_MAX)
+                memcpy(io.wave_payload_id, pdr.params, plen + 1u);
+        }
+    }
+
     return plan;
 }
 
@@ -91,8 +107,25 @@ MappingPlan mapper_plan_from_manifest(const CollectionManifest& manifest,
     entry.rom_size       = 0;
     entry.ram_data       = nullptr;
     entry.ram_size       = 0;
-    plan.entry_count     = 1;
-    plan.expanded        = false;  // single entry → no subslot expansion needed
+    plan.entry_count = 1;
+    plan.expanded    = false;
+
+    // IO devices from manifest device list.
+    for (uint8_t i = 0; i < pe.device_count && i < PAYLOAD_DEVICES_MAX; ++i) {
+        const ManifestDeviceEntry& de = pe.devices[i];
+        const DeviceTypeInfo* info = device_type_info(de.type);
+        if (!info || info->memory_mapped) continue;
+        if (plan.io_device_count >= MAPPING_MAX_IO_DEVICES) break;
+        IoDeviceEntry& io = plan.io_devices[plan.io_device_count++];
+        if (de.type == DeviceType::PSG) {
+            io.type = IoDeviceType::PSG;
+        } else if (de.type == DeviceType::OPL4) {
+            io.type = IoDeviceType::OPL4;
+            size_t plen = strnlen(de.params, sizeof(de.params));
+            if (plen > 0 && plen < PAYLOAD_ID_MAX)
+                memcpy(io.wave_payload_id, de.params, plen + 1u);
+        }
+    }
 
     return plan;
 }

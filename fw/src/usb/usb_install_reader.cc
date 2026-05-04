@@ -5,8 +5,6 @@
 #include "usb/usb_install_reader.h"
 #include "diag/diag.h"
 #include "crypto/sha256.h"
-#include "storage/flash_device.h"
-#include "storage/flash_layout.h"
 #include <cstring>
 #include <cstdio>
 
@@ -30,22 +28,18 @@ DiagStatus UsbInstallReader::read_file(const char* path, uint8_t* buf,
     full_path(fpath, sizeof(fpath), path);
 
     FIL fil;
-    FRESULT res = f_open(&fil, fpath, FA_READ);
-    if (res != FR_OK) {
+    if (f_open(&fil, fpath, FA_READ) != FR_OK) {
         *out_len = 0;
         return DiagStatus::error(DiagCode::STORAGE_NOT_FOUND);
     }
-
-    UINT bytes_read = 0;
-    res = f_read(&fil, buf, static_cast<UINT>(max_len), &bytes_read);
+    UINT br = 0;
+    FRESULT res = f_read(&fil, buf, static_cast<UINT>(max_len), &br);
     f_close(&fil);
-
     if (res != FR_OK) {
         *out_len = 0;
         return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
     }
-
-    *out_len = bytes_read;
+    *out_len = br;
     return DiagStatus::success();
 }
 
@@ -55,26 +49,19 @@ DiagStatus UsbInstallReader::hash_file(const char* path,
     full_path(fpath, sizeof(fpath), path);
 
     FIL fil;
-    FRESULT res = f_open(&fil, fpath, FA_READ);
-    if (res != FR_OK) {
+    if (f_open(&fil, fpath, FA_READ) != FR_OK)
         return DiagStatus::error(DiagCode::STORAGE_NOT_FOUND);
-    }
 
     Sha256Ctx ctx;
     sha256_init(&ctx);
-
     uint8_t chunk[CHUNK_SIZE];
-    UINT bytes_read = 0;
+    UINT br = 0;
     for (;;) {
-        res = f_read(&fil, chunk, sizeof(chunk), &bytes_read);
-        if (res != FR_OK) {
-            f_close(&fil);
-            return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
-        }
-        if (bytes_read == 0) break;
-        sha256_update(&ctx, chunk, bytes_read);
+        FRESULT res = f_read(&fil, chunk, sizeof(chunk), &br);
+        if (res != FR_OK) { f_close(&fil); return DiagStatus::error(DiagCode::STORAGE_IO_ERROR); }
+        if (br == 0) break;
+        sha256_update(&ctx, chunk, br);
     }
-
     f_close(&fil);
     sha256_final(&ctx, digest);
     return DiagStatus::success();
@@ -83,52 +70,46 @@ DiagStatus UsbInstallReader::hash_file(const char* path,
 bool UsbInstallReader::file_exists(const char* path) {
     char fpath[ROOT_MAX + 256];
     full_path(fpath, sizeof(fpath), path);
-
     FILINFO info;
     return f_stat(fpath, &info) == FR_OK;
 }
 
-DiagStatus UsbInstallReader::copy_to_flash(const char* path,
-                                             FlashDevice& flash,
-                                             uint32_t flash_offset,
-                                             size_t* out_size) {
+DiagStatus UsbInstallReader::copy_to_fat(const char* src_path,
+                                          const char* dst_path,
+                                          size_t* out_size) {
     char fpath[ROOT_MAX + 256];
-    full_path(fpath, sizeof(fpath), path);
+    full_path(fpath, sizeof(fpath), src_path);
 
-    FIL fil;
-    if (f_open(&fil, fpath, FA_READ) != FR_OK) {
+    FIL src;
+    if (f_open(&src, fpath, FA_READ) != FR_OK) {
         *out_size = 0;
         return DiagStatus::error(DiagCode::STORAGE_NOT_FOUND);
     }
 
-    uint8_t sector_buf[FLASH_SECTOR_SIZE];
-    uint32_t offset = flash_offset;
-    size_t total = 0;
-
-    for (;;) {
-        UINT bytes_read = 0;
-        FRESULT res = f_read(&fil, sector_buf, sizeof(sector_buf), &bytes_read);
-        if (res != FR_OK) {
-            f_close(&fil);
-            *out_size = total;
-            return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
-        }
-        if (bytes_read == 0) break;
-
-        DiagStatus s = flash.erase(offset, 1u);
-        if (!s.ok()) { f_close(&fil); *out_size = total; return s; }
-
-        s = flash.write(offset, sector_buf, bytes_read);
-        if (!s.ok()) { f_close(&fil); *out_size = total; return s; }
-
-        offset += FLASH_SECTOR_SIZE;
-        total  += bytes_read;
-        if (bytes_read < sizeof(sector_buf)) break;
+    FIL dst;
+    if (f_open(&dst, dst_path, FA_WRITE | FA_CREATE_ALWAYS) != FR_OK) {
+        f_close(&src);
+        *out_size = 0;
+        return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
     }
 
-    f_close(&fil);
+    uint8_t buf[CHUNK_SIZE];
+    size_t  total = 0;
+    UINT    br = 0, bw = 0;
+    FRESULT res;
+    for (;;) {
+        res = f_read(&src, buf, sizeof(buf), &br);
+        if (res != FR_OK || br == 0) break;
+        res = f_write(&dst, buf, br, &bw);
+        if (res != FR_OK || bw < br) break;
+        total += br;
+    }
+
+    f_close(&src);
+    f_close(&dst);
     *out_size = total;
-    return DiagStatus::success();
+    return (res == FR_OK) ? DiagStatus::success()
+                          : DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
 }
 
 #endif // JLPICART_HOST_TEST

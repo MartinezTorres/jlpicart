@@ -1,4 +1,4 @@
-// test_menu_mailbox.cc — Host tests for MenuMailbox (Stage 5, spec.md §8).
+// test_menu_mailbox.cc — Host tests for MenuMailbox.
 //
 // Tests run on the build host (Linux amd64) with no RP2350 SDK.
 // The MenuMailbox class is fully portable; Z80 stub responses are simulated

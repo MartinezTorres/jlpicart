@@ -1,0 +1,563 @@
+Start testing: May 01 15:41 CEST
+----------------------------------------------------------
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/smoke_test
+1/35 Testing: smoke_test
+1/35 Test: smoke_test
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"smoke_test" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"smoke_test" end time: May 01 15:41 CEST
+"smoke_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_diag
+2/35 Testing: test_diag
+2/35 Test: test_diag
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_diag" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_diag" end time: May 01 15:41 CEST
+"test_diag" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_log
+3/35 Testing: test_log
+3/35 Test: test_log
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_log" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_log" end time: May 01 15:41 CEST
+"test_log" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_otp
+4/35 Testing: test_otp
+4/35 Test: test_otp
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_otp" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_otp" end time: May 01 15:41 CEST
+"test_otp" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_security_posture
+5/35 Testing: test_security_posture
+5/35 Test: test_security_posture
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_security_posture" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_security_posture" end time: May 01 15:41 CEST
+"test_security_posture" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_policy
+6/35 Testing: test_policy
+6/35 Test: test_policy
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_policy" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_policy" end time: May 01 15:41 CEST
+"test_policy" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_capability_registry
+7/35 Testing: test_capability_registry
+7/35 Test: test_capability_registry
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_capability_registry" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_capability_registry" end time: May 01 15:41 CEST
+"test_capability_registry" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_api_window
+8/35 Testing: test_api_window
+8/35 Test: test_api_window
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_api_window" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_api_window" end time: May 01 15:41 CEST
+"test_api_window" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_network_service
+9/35 Testing: test_network_service
+9/35 Test: test_network_service
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_network_service" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_network_service" end time: May 01 15:41 CEST
+"test_network_service" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_menu_mailbox
+10/35 Testing: test_menu_mailbox
+10/35 Test: test_menu_mailbox
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_menu_mailbox" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_menu_mailbox" end time: May 01 15:41 CEST
+"test_menu_mailbox" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_menu_stub
+11/35 Testing: test_menu_stub
+11/35 Test: test_menu_stub
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_menu_stub" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_menu_stub" end time: May 01 15:41 CEST
+"test_menu_stub" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_storage
+12/35 Testing: test_storage
+12/35 Test: test_storage
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_storage" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_storage" end time: May 01 15:41 CEST
+"test_storage" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_store
+13/35 Testing: test_store
+13/35 Test: test_store
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_store" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_store" end time: May 01 15:41 CEST
+"test_store" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_allocator
+14/35 Testing: test_allocator
+14/35 Test: test_allocator
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_allocator" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_allocator" end time: May 01 15:41 CEST
+"test_allocator" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_bus_mapper
+15/35 Testing: test_bus_mapper
+15/35 Test: test_bus_mapper
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_bus_mapper" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_bus_mapper" end time: May 01 15:41 CEST
+"test_bus_mapper" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_collections
+16/35 Testing: test_collections
+16/35 Test: test_collections
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_collections" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_collections" end time: May 01 15:41 CEST
+"test_collections" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_profiles
+17/35 Testing: test_profiles
+17/35 Test: test_profiles
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_profiles" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_profiles" end time: May 01 15:41 CEST
+"test_profiles" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_usb_scanner
+18/35 Testing: test_usb_scanner
+18/35 Test: test_usb_scanner
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_usb_scanner" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_usb_scanner" end time: May 01 15:41 CEST
+"test_usb_scanner" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_menu_app
+19/35 Testing: test_menu_app
+19/35 Test: test_menu_app
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_menu_app" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_menu_app" end time: May 01 15:41 CEST
+"test_menu_app" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_system_settings
+20/35 Testing: test_system_settings
+20/35 Test: test_system_settings
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_system_settings" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_system_settings" end time: May 01 15:41 CEST
+"test_system_settings" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_core_service
+21/35 Testing: test_core_service
+21/35 Test: test_core_service
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_core_service" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_core_service" end time: May 01 15:41 CEST
+"test_core_service" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_save_store
+22/35 Testing: test_save_store
+22/35 Test: test_save_store
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_save_store" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_save_store" end time: May 01 15:41 CEST
+"test_save_store" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_boot_mode
+23/35 Testing: test_boot_mode
+23/35 Test: test_boot_mode
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_boot_mode" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_boot_mode" end time: May 01 15:41 CEST
+"test_boot_mode" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_stats_store
+24/35 Testing: test_stats_store
+24/35 Test: test_stats_store
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_stats_store" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_stats_store" end time: May 01 15:41 CEST
+"test_stats_store" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_device_identity
+25/35 Testing: test_device_identity
+25/35 Test: test_device_identity
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_device_identity" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_device_identity" end time: May 01 15:41 CEST
+"test_device_identity" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_smk
+26/35 Testing: test_smk
+26/35 Test: test_smk
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_smk" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_smk" end time: May 01 15:41 CEST
+"test_smk" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_policy_enforcement
+27/35 Testing: test_policy_enforcement
+27/35 Test: test_policy_enforcement
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_policy_enforcement" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_policy_enforcement" end time: May 01 15:41 CEST
+"test_policy_enforcement" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_psg
+28/35 Testing: test_psg
+28/35 Test: test_psg
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_psg" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_psg" end time: May 01 15:41 CEST
+"test_psg" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_opl4
+29/35 Testing: test_opl4
+29/35 Test: test_opl4
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_opl4" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_opl4" end time: May 01 15:41 CEST
+"test_opl4" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_sunrise_ide
+30/35 Testing: test_sunrise_ide
+30/35 Test: test_sunrise_ide
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_sunrise_ide" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_sunrise_ide" end time: May 01 15:41 CEST
+"test_sunrise_ide" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_scc
+31/35 Testing: test_scc
+31/35 Test: test_scc
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_scc" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_scc" end time: May 01 15:41 CEST
+"test_scc" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_rom_loading
+32/35 Testing: test_rom_loading
+32/35 Test: test_rom_loading
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_rom_loading" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_rom_loading" end time: May 01 15:41 CEST
+"test_rom_loading" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_content_store
+33/35 Testing: test_content_store
+33/35 Test: test_content_store
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_content_store" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_content_store" end time: May 01 15:41 CEST
+"test_content_store" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_bundle_sig
+34/35 Testing: test_bundle_sig
+34/35 Test: test_bundle_sig
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_bundle_sig" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_bundle_sig" end time: May 01 15:41 CEST
+"test_bundle_sig" time elapsed: 00:00:00
+----------------------------------------------------------
+
+Unable to find executable: /home/claude/repos/jlpicart/fw/tests/host/test_device_check
+35/35 Testing: test_device_check
+35/35 Test: test_device_check
+Command: ""
+Directory: /home/claude/repos/jlpicart/fw/tests/host
+"test_device_check" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_device_check" end time: May 01 15:41 CEST
+"test_device_check" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: May 01 15:41 CEST

@@ -1,0 +1,74 @@
+                                      1 ; crt0.s — Menu stub page layout for JLPiCart.
+                                      2 ;
+                                      3 ; The Menu Page is 16KB, mapped at Z80 page 1 (0x4000–0x7FFF, subslot 1).
+                                      4 ; Layout per spec.md §8:
+                                      5 ;   0x4000–0x403F  MenuStubHeader (64 bytes, "JLMN")
+                                      6 ;   0x4040–0x407F  MenuMailboxRegs (64 bytes, zeroed)
+                                      7 ;   0x4080–0x40FF  Reserved (128 bytes)
+                                      8 ;   0x4100–0x7FFF  Shared data buffer and stub code
+                                      9 ;
+                                     10 ; The RP2350 calls stub_entry (page-relative 0x0100 → absolute 0x4100) to
+                                     11 ; start the stub.  This is NOT a BIOS-scanned cartridge; the RP2350 explicitly
+                                     12 ; maps this page and calls the entrypoint via the bus layer.
+                                     13 ;
+                                     14 ; Built with pinned SDCC 4.5.0 assembler (sdasz80).
+                                     15 
+                                     16         .module crt0
+                                     17         .globl  _stub_main
+                                     18 
+                                     19         ; ---------------------------------------------------------------
+                                     20         ; MenuStubHeader — 64 bytes at 0x4000
+                                     21         ; ---------------------------------------------------------------
+                                     22         .area   _HEADER (ABS)
+    00004000                         23         .org    0x4000
+                                     24 
+                                     25         ; sig[4] = "JLMN"
+    00004000 4A 4C 4D 4E             26         .db     0x4A, 0x4C, 0x4D, 0x4E
+                                     27         ; abi_major=1, abi_minor=0
+    00004004 01 00                   28         .db     0x01, 0x00
+                                     29         ; header_len = 64
+    00004006 40 00                   30         .dw     0x0040
+                                     31         ; mailbox_ofs = 0x0040
+    00004008 40 00                   32         .dw     0x0040
+                                     33         ; data_ofs = 0x0100
+    0000400A 00 01                   34         .dw     0x0100
+                                     35         ; data_len = 0x3F00
+    0000400C 00 3F                   36         .dw     0x3F00
+                                     37         ; stub_entry = 0x0100 (offset within page; absolute = 0x4100)
+    0000400E 00 01                   38         .dw     0x0100
+                                     39         ; host_caps = 0 (filled at runtime by _stub_main)
+    00004010 00 00 00 00             40         .dw     0x0000, 0x0000
+                                     41         ; vdp_caps = 0 (filled at runtime by _stub_main)
+    00004014 00 00 00 00             42         .dw     0x0000, 0x0000
+                                     43         ; build_id = 0x0001
+    00004018 01 00                   44         .dw     0x0001
+                                     45         ; reserved0 = 0
+    0000401A 00 00                   46         .dw     0x0000
+                                     47         ; reserved[36]
+    0000401C                         48         .ds     36
+                                     49 
+                                     50         ; ---------------------------------------------------------------
+                                     51         ; MenuMailboxRegs — 64 bytes at 0x4040 (all zero initially)
+                                     52         ; ---------------------------------------------------------------
+    00004040                         53         .ds     64
+                                     54 
+                                     55         ; ---------------------------------------------------------------
+                                     56         ; Reserved — 128 bytes at 0x4080
+                                     57         ; ---------------------------------------------------------------
+    00004080                         58         .ds     128
+                                     59 
+                                     60         ; ---------------------------------------------------------------
+                                     61         ; Stub entry and code — start at 0x4100
+                                     62         ; ---------------------------------------------------------------
+    00004100                         63         .org    0x4100
+                                     64 
+    00004100                         65 _stub_entry:
+                                     66         ; Initialise stack in upper RAM (safe on all MSX generations).
+    00004100 31 80 F3         [10]   67         ld      sp, #0xF380
+    00004103 CDr00r00         [17]   68         call    _stub_main      ; call C main — should never return
+    00004106                         69 _halt:
+    00004106 C3r06r41         [10]   70         jp      _halt
+                                     71 
+                                     72         .area   _CODE
+                                     73         .area   _DATA
+                                     74         .area   _BSS

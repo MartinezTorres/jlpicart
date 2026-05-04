@@ -20,8 +20,6 @@
 //     possible); it uses time_us_64() internally to self-rate-limit.
 //   - psg_audio_init() must be called once before psg_service().
 //
-// See spec.md "Audio devices — PSG (AY-3-8910)" and
-//     spec.md §5.1 "Resource and capability model contract (v1)".
 
 #include "cartridges/cartridge.h"
 #include <cstdint>

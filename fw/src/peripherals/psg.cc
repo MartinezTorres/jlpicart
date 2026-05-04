@@ -203,11 +203,16 @@ void psg_reset(PsgState& state)
     state.regs[15] = 0xFFu;   // no joystick connected (port B)
 }
 
+static void psg_reset_fn(Subslot& c) {
+    psg_reset(*reinterpret_cast<PsgState*>(c.ram_base));
+}
+
 void psg_setup(Cartridge& c, PsgState& state)
 {
     c.clear();
     c.name     = "psg";
     c.ram_base = reinterpret_cast<uint8_t*>(&state);
+    c.reset_fn = psg_reset_fn;
 
     c.io_write_callbacks[0xA0] = psg_write_regselect;
     c.io_write_callbacks[0xA1] = psg_write_data;

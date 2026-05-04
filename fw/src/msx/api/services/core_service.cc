@@ -1,7 +1,5 @@
 // core_service.cc — System service (0x00) implementation.
-//
-// Spec reference: spec.md §5.1 "System service (0x00)".
-// Methods implemented: GET_API_INFO (0x00), GET_DEVICE_ID (0x01), GET_CAPS (0x02),
+// Methods: GET_API_INFO (0x00), GET_DEVICE_ID (0x01), GET_CAPS (0x02),
 //   GET_RANDOM (0x03), RESET_TO_MENU (0x04),
 //   GET_SECURITY_INFO (0x05), GET_POLICY_FLAGS (0x06).
 
@@ -59,7 +57,7 @@ static void handle_get_api_info(const MsgHeader& req, ApiWindow& win,
     info.api_minor          = API_MINOR;
     info.layout_ver         = API_LAYOUT_VER;
     info.flags              = API_HDR_FLAGS_V1;
-    info.feature_bits       = API_FEATURES_STAGE4;
+    info.feature_bits       = API_FEATURES_CURRENT;
     info.max_frame          = API_MAX_FRAME;
     info.posture_props      = posture_to_props(posture);
     info.boot_key_valid_mask = posture.boot_key_valid_mask;

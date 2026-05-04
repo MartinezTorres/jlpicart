@@ -5,7 +5,7 @@
 
 // policy_store.h — load, verify, and expose the signed policy document.
 //
-// Only this module parses policy blobs from flash. See bootstrapping.md Appendix.
+// Only this module parses policy blobs from flash.
 // Policy document lives at POLICY_FLASH_OFFSET in external flash (fixed XIP offset).
 
 class PolicyStore {

@@ -7,18 +7,13 @@
 
 // capability_registry.h — Declared → Allowed → Activated capability pipeline.
 //
-// The registry owns the three-stage capability lifecycle (spec.md §5.1):
+// Three-stage lifecycle:
 //   Declared:  board declares HW / driver table declares SW
 //   Allowed:   declared ∩ (not masked by policy)
 //   Activated: allowed ∩ requested ∩ (resources available / probe passed)
 //
-// Declared and Allowed are populated at init() time (Stage 3).
-// Activated is set by PeripheralManager::apply() after Allocator::compute()
-// runs during the boot preflight (Stage 8).
-//
-// This is the single query surface for "what exists and is permitted".
-// No other module queries board descriptors or driver tables directly.
-// See spec.md §5.1 and bootstrapping.md Appendix.
+// Single query surface for "what is permitted". No other module reads board
+// descriptors or driver tables directly.
 
 static constexpr size_t CAPABILITY_REGISTRY_MAX = 32;
 
@@ -73,8 +68,5 @@ private:
     bool            initialized_ = false;
 
     // Policy masking: returns true if `name` is blocked by the given policy.
-    // Currently no capability names are policy-gated (masking will be
-    // populated as features are added in Stage 9+).
-    // spec.md §5.1: "Board declaration MUST declare which Capabilities exist".
     static bool is_masked_by_policy(const char* name, const PolicyInfo& policy);
 };

@@ -6,16 +6,13 @@
 #include "content/manifest_parser.h"
 #include "content/content_store.h"
 #include "content/installer.h"
-#include "content/receipts.h"
 #include "bus/mapping_plan.h"
-#include "storage/flash_device.h"
-#include "storage/flash_layout.h"
-#include "storage/kv_store.h"
-#include "storage/append_log.h"
+#include "storage/fat_util.h"
 #include "spine/policy_store.h"
 #include "spine/security_posture.h"
 #include "security/otp_reader.h"
 #include "crypto/sha256.h"
+#include "fat_test_env.h"
 
 #include <cassert>
 #include <cstdio>
@@ -42,39 +39,39 @@ static int g_fail = 0;
 #define CHECK_OK(s)    CHECK((s).ok())
 #define CHECK_FAIL(s)  CHECK(!(s).ok())
 
-static constexpr uint32_t TEST_KV_SIZE  = FLASH_SECTOR_SIZE * 4;
-static constexpr uint32_t TEST_LOG_SIZE = FLASH_SECTOR_SIZE * 4;
-
 // ---------------------------------------------------------------------------
-// Helpers: build a fresh in-memory KvStore
+// FAT write helpers
 // ---------------------------------------------------------------------------
 
-struct KvFixture {
-    FlashDevice flash;
-    KvStore     kv;
-
-    KvFixture() : flash(TEST_KV_SIZE) {
-        DiagStatus s = kv.init(flash, 0, TEST_KV_SIZE);
-        assert(s.ok());
-    }
-};
-
-// Put a NUL-terminated string value.
-static void kv_put_str(KvStore& kv, const char* key, const char* val) {
-    DiagStatus s = kv.put(key,
-                           reinterpret_cast<const uint8_t*>(val),
-                           static_cast<uint16_t>(strlen(val)));
-    assert(s.ok());
+static void fat_put_active(const char* col_id) {
+    fat_ensure_dir("1:/collections");
+    fat_write_file("1:/collections/active.txt", col_id, strlen(col_id));
 }
 
-// Put a binary blob.
-static void kv_put_blob(KvStore& kv, const char* key,
-                         const void* data, size_t len) {
-    DiagStatus s = kv.put(key,
-                           reinterpret_cast<const uint8_t*>(data),
-                           static_cast<uint16_t>(len));
-    assert(s.ok());
+static void fat_put_collection(const CollectionRecord& rec) {
+    char dir[128];
+    snprintf(dir, sizeof(dir), "1:/collections/%s", rec.collection_id);
+    fat_ensure_dir("1:/collections");
+    fat_ensure_dir(dir);
+    char path[192];
+    snprintf(path, sizeof(path), "%s/collection.bin", dir);
+    fat_write_file(path, &rec, sizeof(rec));
 }
+
+static void fat_put_payload(const char* col_id, const PayloadRecord& pr) {
+    char dir[256];
+    snprintf(dir, sizeof(dir), "1:/collections/%s", col_id);
+    fat_ensure_dir("1:/collections");
+    fat_ensure_dir(dir);
+    char path[320];
+    snprintf(path, sizeof(path), "1:/collections/%s/payload_%s.bin",
+             col_id, pr.payload_id);
+    fat_write_file(path, &pr, sizeof(pr));
+}
+
+// ---------------------------------------------------------------------------
+// Record builder helpers
+// ---------------------------------------------------------------------------
 
 // Build a minimal CollectionRecord for testing.
 static CollectionRecord make_col_record(const char* col_id,
@@ -109,23 +106,24 @@ static PayloadRecord make_payload_record(const char* payload_id,
 // Tests: has_active_collection
 // ---------------------------------------------------------------------------
 
-static void test_has_active_empty_kv() {
-    KvFixture fix;
-    ContentStore cs(fix.kv);
+static void test_has_active_empty_fat() {
+    FatTestEnv env;
+    ContentStore cs;
     CHECK(!cs.has_active_collection());
 }
 
-static void test_has_active_pending() {
-    KvFixture fix;
-    kv_put_str(fix.kv, KV_COL_STATE, COL_STATE_PENDING);
-    ContentStore cs(fix.kv);
+static void test_has_active_no_active_txt() {
+    FatTestEnv env;
+    // No active.txt written — collection dir may exist but commit marker absent.
+    ContentStore cs;
     CHECK(!cs.has_active_collection());
 }
 
 static void test_has_active_true() {
-    KvFixture fix;
-    kv_put_str(fix.kv, KV_COL_STATE, COL_STATE_ACTIVE);
-    ContentStore cs(fix.kv);
+    FatTestEnv env;
+    fat_ensure_dir("1:/collections");
+    fat_write_file("1:/collections/active.txt", "com.test.col", strlen("com.test.col"));
+    ContentStore cs;
     CHECK(cs.has_active_collection());
 }
 
@@ -134,12 +132,12 @@ static void test_has_active_true() {
 // ---------------------------------------------------------------------------
 
 static void test_load_collection_roundtrip() {
-    KvFixture fix;
+    FatTestEnv env;
     CollectionRecord written = make_col_record("com.test.col", "main");
-    kv_put_str(fix.kv, KV_COL_STATE, COL_STATE_ACTIVE);
-    kv_put_blob(fix.kv, KV_COL_RECORD, &written, sizeof(written));
+    fat_put_collection(written);
+    fat_put_active("com.test.col");
 
-    ContentStore cs(fix.kv);
+    ContentStore cs;
     CollectionRecord read = {};
     CHECK_OK(cs.load_collection(read));
     CHECK(strcmp(read.collection_id, "com.test.col") == 0);
@@ -148,26 +146,24 @@ static void test_load_collection_roundtrip() {
 }
 
 static void test_load_payload_roundtrip() {
-    KvFixture fix;
-    PayloadRecord written = make_payload_record("main", "konami", 1,
-                                                  FLASH_CONTENT_DATA_OFS, 32768u);
-    char key[KV_MAX_KEY_LEN + 1];
-    snprintf(key, sizeof(key), "%s%s", KV_PAYLOAD_PREFIX, "main");
-    kv_put_blob(fix.kv, key, &written, sizeof(written));
+    FatTestEnv env;
+    fat_put_active("com.test.col");
+    PayloadRecord written = make_payload_record("main", "konami", 1, 0x200000u, 32768u);
+    fat_put_payload("com.test.col", written);
 
-    ContentStore cs(fix.kv);
+    ContentStore cs;
     PayloadRecord read = {};
     CHECK_OK(cs.load_payload("main", read));
     CHECK(strcmp(read.payload_id, "main") == 0);
     CHECK(strcmp(read.mapper_type, "konami") == 0);
     CHECK_EQ(read.subslot, 1u);
-    CHECK_EQ(read.data_flash_offset, FLASH_CONTENT_DATA_OFS);
+    CHECK_EQ(read.data_flash_offset, 0x200000u);
     CHECK_EQ(read.data_size, 32768u);
 }
 
 static void test_load_payload_not_found() {
-    KvFixture fix;
-    ContentStore cs(fix.kv);
+    FatTestEnv env;
+    ContentStore cs;
     PayloadRecord pr = {};
     CHECK_FAIL(cs.load_payload("missing", pr));
 }
@@ -177,18 +173,14 @@ static void test_load_payload_not_found() {
 // ---------------------------------------------------------------------------
 
 static void test_load_default_payload() {
-    KvFixture fix;
+    FatTestEnv env;
     CollectionRecord col = make_col_record("com.test.col", "main");
-    PayloadRecord pr     = make_payload_record("main", "ascii8", 0,
-                                                FLASH_CONTENT_DATA_OFS, 65536u);
-    char key[KV_MAX_KEY_LEN + 1];
-    snprintf(key, sizeof(key), "%s%s", KV_PAYLOAD_PREFIX, "main");
+    PayloadRecord pr     = make_payload_record("main", "ascii8", 0, 0x200000u, 65536u);
+    fat_put_collection(col);
+    fat_put_active("com.test.col");
+    fat_put_payload("com.test.col", pr);
 
-    kv_put_str( fix.kv, KV_COL_STATE,  COL_STATE_ACTIVE);
-    kv_put_blob(fix.kv, KV_COL_RECORD, &col, sizeof(col));
-    kv_put_blob(fix.kv, key,           &pr,  sizeof(pr));
-
-    ContentStore cs(fix.kv);
+    ContentStore cs;
     PayloadRecord result = {};
     CHECK_OK(cs.load_default_payload(result));
     CHECK(strcmp(result.payload_id, "main") == 0);
@@ -197,22 +189,22 @@ static void test_load_default_payload() {
 }
 
 static void test_load_default_payload_no_collection() {
-    KvFixture fix;
-    ContentStore cs(fix.kv);
+    FatTestEnv env;
+    ContentStore cs;
     PayloadRecord pr = {};
     CHECK_FAIL(cs.load_default_payload(pr));
 }
 
 static void test_load_default_payload_empty_id() {
     // Collection record present but default_payload_id is empty ("").
-    KvFixture fix;
+    FatTestEnv env;
     CollectionRecord col = {};  // default_payload_id[0] == '\0'
     strncpy(col.collection_id, "com.test.noid", sizeof(col.collection_id) - 1u);
     col.payload_count = 1;
-    kv_put_str( fix.kv, KV_COL_STATE,  COL_STATE_ACTIVE);
-    kv_put_blob(fix.kv, KV_COL_RECORD, &col, sizeof(col));
+    fat_put_collection(col);
+    fat_put_active("com.test.noid");
 
-    ContentStore cs(fix.kv);
+    ContentStore cs;
     PayloadRecord pr = {};
     CHECK_FAIL(cs.load_default_payload(pr));
 }
@@ -222,8 +214,7 @@ static void test_load_default_payload_empty_id() {
 // ---------------------------------------------------------------------------
 
 static void test_mapping_plan_from_record_with_data() {
-    PayloadRecord pr = make_payload_record("main", "konami", 2,
-                                            FLASH_CONTENT_DATA_OFS, 32768u);
+    PayloadRecord pr = make_payload_record("main", "konami", 2, 0x200000u, 32768u);
     MappingPlan plan = mapping_plan_from_payload_record(pr);
     CHECK_EQ(plan.entry_count, 1u);
     CHECK(plan.entries[0].mapper_type == MapperType::KONAMI);
@@ -235,15 +226,13 @@ static void test_mapping_plan_from_record_with_data() {
 }
 
 static void test_mapping_plan_from_record_data_size_zero() {
-    PayloadRecord pr = make_payload_record("main", "konami", 0,
-                                            FLASH_CONTENT_DATA_OFS, 0u);
+    PayloadRecord pr = make_payload_record("main", "konami", 0, 0x200000u, 0u);
     MappingPlan plan = mapping_plan_from_payload_record(pr);
     CHECK_EQ(plan.entry_count, 0u);
 }
 
 static void test_mapping_plan_from_record_empty_mapper() {
-    PayloadRecord pr = make_payload_record("main", "", 0,
-                                            FLASH_CONTENT_DATA_OFS, 32768u);
+    PayloadRecord pr = make_payload_record("main", "", 0, 0x200000u, 32768u);
     MappingPlan plan = mapping_plan_from_payload_record(pr);
     CHECK_EQ(plan.entry_count, 0u);
 }
@@ -259,8 +248,7 @@ static void test_mapping_plan_all_mapper_types() {
         { "ram",              MapperType::RAM              },
     };
     for (const auto& c : cases) {
-        PayloadRecord pr = make_payload_record("x", c.name, 0,
-                                               FLASH_CONTENT_DATA_OFS, 8192u);
+        PayloadRecord pr = make_payload_record("x", c.name, 0, 0x200000u, 8192u);
         MappingPlan plan = mapping_plan_from_payload_record(pr);
         CHECK_EQ(plan.entry_count, 1u);
         CHECK(plan.entries[0].mapper_type == c.expected);
@@ -268,7 +256,7 @@ static void test_mapping_plan_all_mapper_types() {
 }
 
 // ---------------------------------------------------------------------------
-// Tests: Installer integration — PayloadRecord written to KvStore
+// Tests: Installer integration — PayloadRecord written to FAT
 // ---------------------------------------------------------------------------
 
 // Minimal InstallReader backed by in-memory files.
@@ -322,13 +310,7 @@ static const char kMapperManifest[] =
     "}";
 
 static void test_installer_writes_payload_record() {
-    // Storage for KvStore + AppendLog.
-    FlashDevice kv_flash(TEST_KV_SIZE);
-    FlashDevice log_flash(TEST_LOG_SIZE);
-    KvStore     kv;
-    AppendLog   event_log;
-    CHECK_OK(kv.init(kv_flash, 0, TEST_KV_SIZE));
-    CHECK_OK(event_log.init(log_flash, 0, TEST_LOG_SIZE));
+    FatTestEnv env;
 
     // Policy (open mode — accepts all; FakeOtpReader returns zeroed OTP).
     static const uint8_t kZeroOtp[256] = {};
@@ -343,11 +325,11 @@ static void test_installer_writes_payload_record() {
 
     InstallResult result = {};
     Installer installer;
-    CHECK_OK(installer.run(reader, kv, event_log, policy, result));
+    CHECK_OK(installer.run(reader, policy, result));
     CHECK(result.installed);
 
     // ContentStore should see the active collection.
-    ContentStore cs(kv);
+    ContentStore cs;
     CHECK(cs.has_active_collection());
 
     // PayloadRecord must be present with mapper_type="konami", subslot=1.
@@ -356,7 +338,6 @@ static void test_installer_writes_payload_record() {
     CHECK(strcmp(pr.payload_id,  "main")   == 0);
     CHECK(strcmp(pr.mapper_type, "konami") == 0);
     CHECK_EQ(pr.subslot,           1u);
-    CHECK_EQ(pr.data_flash_offset, FLASH_CONTENT_DATA_OFS);
     CHECK_EQ(pr.data_size,         0u);  // ROM not yet written
 
     // load_default_payload via CollectionRecord.default_payload_id.
@@ -372,8 +353,8 @@ static void test_installer_writes_payload_record() {
 // ---------------------------------------------------------------------------
 
 int main() {
-    test_has_active_empty_kv();
-    test_has_active_pending();
+    test_has_active_empty_fat();
+    test_has_active_no_active_txt();
     test_has_active_true();
     test_load_collection_roundtrip();
     test_load_payload_roundtrip();

@@ -10,8 +10,8 @@
 // No other file may add entries to that table.
 
 struct DriverDescriptor {
-    const char*          name;       // stable capability name (e.g. "api.core")
-    ResourceRequirements resources = {};  // budget consumed when active (zero = none)
+    const char*          name;              // stable capability name (e.g. "api.core")
+    ResourceRequirements resources = {};    // budget consumed when active (zero = none)
 };
 
 extern const DriverDescriptor kDriverDescriptors[];

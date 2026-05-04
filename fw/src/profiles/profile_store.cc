@@ -1,203 +1,204 @@
-// profile_store.cc — ProfileStore implementation.
+// profile_store.cc — ProfileStore over FAT manifest + optional Store.
 
 #include "profiles/profile_store.h"
+#include "storage/fat_util.h"
+#include "storage/store.h"
+#include "storage/store_record.h"
+#include "storage/store_key.h"
 #include <cstring>
-#include <cstdint>
 
 // ---------------------------------------------------------------------------
-// init
+// init / persist
 // ---------------------------------------------------------------------------
 
-DiagStatus ProfileStore::init(FlashDevice& dev,
-                               uint32_t part_ofs, uint32_t part_size)
+DiagStatus ProfileStore::init()
 {
-    DiagStatus s = kv_.init(dev, part_ofs, part_size);
-    if (!s.ok()) return s;
+    count_        = 0;
+    active_id_    = PROF_ID_NONE;
+    pre_guest_id_ = PROF_ID_NONE;
+    initialized_  = false;
+    memset(slots_, 0, sizeof(slots_));
 
-    // Load cached active_id_ (absent = PROF_ID_NONE, which is fine).
-    uint8_t  buf[2] = {};
-    uint16_t len    = 0;
-    DiagStatus sa = kv_.get(KV_PROF_ACTIVE, buf, &len, sizeof(buf));
-    if (sa.ok() && len == 2) {
-        active_id_ = static_cast<uint16_t>(buf[0] | (buf[1] << 8u));
-    } else {
-        active_id_ = PROF_ID_NONE;
+    ProfileManifest m = {};
+    size_t actual = 0;
+    if (fat_read_file(MANIFEST_PATH, &m, sizeof(m), &actual)
+        && actual == sizeof(ProfileManifest))
+    {
+        active_id_ = m.active_id;
+        uint8_t n = m.count < PROF_MAX_PROFILES ? m.count : PROF_MAX_PROFILES;
+        for (uint8_t i = 0; i < n; ++i)
+            slots_[i] = m.entries[i];
+        count_ = n;
     }
 
     initialized_ = true;
     return DiagStatus::success();
 }
 
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-DiagStatus ProfileStore::load_index(ProfileIndex& idx) const
+DiagStatus ProfileStore::save_manifest()
 {
-    memset(&idx, 0, sizeof(idx));
-    uint8_t  buf[sizeof(ProfileIndex)];
-    uint16_t len = 0;
-    DiagStatus s = kv_.get(KV_PROF_INDEX,
-                            buf, &len, static_cast<uint16_t>(sizeof(buf)));
-    if (!s.ok()) {
-        // Absent key = empty index (normal on first boot).
-        return DiagStatus::success();
-    }
-    if (len < sizeof(ProfileIndex)) {
-        // Truncated record — treat as empty to avoid undefined behaviour.
-        return DiagStatus::success();
-    }
-    memcpy(&idx, buf, sizeof(ProfileIndex));
+    ProfileManifest m = {};
+    m.active_id = active_id_;
+    m.count     = count_;
+    for (uint8_t i = 0; i < count_; ++i)
+        m.entries[i] = slots_[i];
+    fat_ensure_dir("1:/system");
+    if (!fat_write_file(MANIFEST_PATH, &m, sizeof(m)))
+        return DiagStatus::error(DiagCode::STORAGE_IO_ERROR);
     return DiagStatus::success();
 }
 
-DiagStatus ProfileStore::save_index(const ProfileIndex& idx)
+void ProfileStore::append_to_store(const Slot& slot)
 {
-    return kv_.put(KV_PROF_INDEX,
-                   reinterpret_cast<const uint8_t*>(&idx),
-                   static_cast<uint16_t>(sizeof(idx)));
-}
+    if (!store_) return;
 
-DiagStatus ProfileStore::save_active(uint16_t id)
-{
-    uint8_t buf[2];
-    buf[0] = static_cast<uint8_t>(id & 0xFFu);
-    buf[1] = static_cast<uint8_t>(id >> 8u);
-    DiagStatus s = kv_.put(KV_PROF_ACTIVE, buf, 2u);
-    if (s.ok()) active_id_ = id;
-    return s;
+    StoreRecord rec = {};
+    StoreKey key = StoreKey::for_profile(slot.uuid);
+    memcpy(rec.key, key.data, 32);
+    rec.event_type = static_cast<uint8_t>(StoreEntryType::PROFILE);
+
+    ProfilePayload pp = {};
+    memcpy(pp.name,  slot.name, PROF_NAME_MAX);
+    memcpy(pp.lang,  slot.lang, PROF_LANG_MAX);
+    pp.flags = slot.flags;
+    memcpy(rec.payload, &pp, sizeof(pp));
+    rec.payload_len = sizeof(pp);
+
+    store_->append(rec);  // best-effort
 }
 
 // ---------------------------------------------------------------------------
-// list / count
+// list / count / uuid_for
 // ---------------------------------------------------------------------------
 
 uint8_t ProfileStore::list(ProfileRecord* buf, uint8_t max) const
 {
-    ProfileIndex idx;
-    load_index(idx);
-    uint8_t n = (idx.count < max) ? idx.count : max;
-    if (n > 0) memcpy(buf, idx.entries, n * sizeof(ProfileRecord));
+    uint8_t n = count_ < max ? count_ : max;
+    for (uint8_t i = 0; i < n; ++i) {
+        buf[i].profile_id = slots_[i].profile_id;
+        buf[i].uuid       = slots_[i].uuid;
+        memcpy(buf[i].name, slots_[i].name, PROF_NAME_MAX);
+        memcpy(buf[i].lang, slots_[i].lang, PROF_LANG_MAX);
+        buf[i].flags = slots_[i].flags;
+        buf[i]._pad  = 0;
+    }
     return n;
 }
 
-uint8_t ProfileStore::count() const
+uint8_t ProfileStore::count() const { return count_; }
+
+Uuid ProfileStore::uuid_for(uint16_t profile_id) const
 {
-    ProfileIndex idx;
-    load_index(idx);
-    return idx.count;
+    for (uint8_t i = 0; i < count_; ++i) {
+        if (slots_[i].profile_id == profile_id)
+            return slots_[i].uuid;
+    }
+    return Uuid::zero();
 }
 
 // ---------------------------------------------------------------------------
-// create
+// create / get / remove / set_active
 // ---------------------------------------------------------------------------
 
 DiagStatus ProfileStore::create(const char* name, const char* lang,
                                  uint16_t* id_out)
 {
-    ProfileIndex idx;
-    DiagStatus s = load_index(idx);
-    if (!s.ok()) return s;
-
-    if (idx.count >= PROF_MAX_PROFILES) {
+    if (count_ >= PROF_MAX_PROFILES)
         return DiagStatus::error(DiagCode::STORAGE_FULL);
-    }
 
-    // Find the smallest uint16 ≥ 1 not already used.
     uint16_t new_id = 1u;
     for (;;) {
         bool used = false;
-        for (uint8_t i = 0; i < idx.count; ++i) {
-            if (idx.entries[i].profile_id == new_id) { used = true; break; }
+        for (uint8_t i = 0; i < count_; ++i) {
+            if (slots_[i].profile_id == new_id) { used = true; break; }
         }
         if (!used) break;
         if (new_id == 0xFFFEu) return DiagStatus::error(DiagCode::STORAGE_FULL);
         ++new_id;
     }
 
-    ProfileRecord& rec = idx.entries[idx.count];
-    memset(&rec, 0, sizeof(rec));
-    rec.profile_id = new_id;
+    Slot& s = slots_[count_];
+    memset(&s, 0, sizeof(s));
+    s.profile_id = new_id;
+    s.uuid       = Uuid::generate();
 
-    size_t name_len = name ? strlen(name) : 0u;
-    if (name_len >= PROF_NAME_MAX) name_len = PROF_NAME_MAX - 1u;
-    memcpy(rec.name, name, name_len);
+    if (name) {
+        size_t n = strlen(name);
+        if (n >= PROF_NAME_MAX) n = PROF_NAME_MAX - 1u;
+        memcpy(s.name, name, n);
+    }
+    if (lang) {
+        size_t n = strlen(lang);
+        if (n >= PROF_LANG_MAX) n = PROF_LANG_MAX - 1u;
+        memcpy(s.lang, lang, n);
+    }
 
-    size_t lang_len = lang ? strlen(lang) : 0u;
-    if (lang_len >= PROF_LANG_MAX) lang_len = PROF_LANG_MAX - 1u;
-    memcpy(rec.lang, lang, lang_len);
+    ++count_;
+    DiagStatus st = save_manifest();
+    if (!st.ok()) { --count_; return st; }
 
-    ++idx.count;
-
-    s = save_index(idx);
-    if (!s.ok()) return s;
+    append_to_store(s);
 
     if (id_out) *id_out = new_id;
     return DiagStatus::success();
 }
 
-// ---------------------------------------------------------------------------
-// get
-// ---------------------------------------------------------------------------
-
 DiagStatus ProfileStore::get(uint16_t profile_id, ProfileRecord* out) const
 {
-    ProfileIndex idx;
-    DiagStatus s = load_index(idx);
-    if (!s.ok()) return s;
-
-    for (uint8_t i = 0; i < idx.count; ++i) {
-        if (idx.entries[i].profile_id == profile_id) {
-            if (out) *out = idx.entries[i];
+    for (uint8_t i = 0; i < count_; ++i) {
+        if (slots_[i].profile_id == profile_id) {
+            if (out) {
+                out->profile_id = slots_[i].profile_id;
+                out->uuid       = slots_[i].uuid;
+                memcpy(out->name, slots_[i].name, PROF_NAME_MAX);
+                memcpy(out->lang, slots_[i].lang, PROF_LANG_MAX);
+                out->flags = slots_[i].flags;
+                out->_pad  = 0;
+            }
             return DiagStatus::success();
         }
     }
     return DiagStatus::error(DiagCode::STORAGE_NOT_FOUND);
 }
 
-// ---------------------------------------------------------------------------
-// remove
-// ---------------------------------------------------------------------------
-
 DiagStatus ProfileStore::remove(uint16_t profile_id)
 {
-    ProfileIndex idx;
-    DiagStatus s = load_index(idx);
-    if (!s.ok()) return s;
-
-    uint8_t found = PROF_MAX_PROFILES;  // sentinel
-    for (uint8_t i = 0; i < idx.count; ++i) {
-        if (idx.entries[i].profile_id == profile_id) { found = i; break; }
+    uint8_t found = PROF_MAX_PROFILES;
+    for (uint8_t i = 0; i < count_; ++i) {
+        if (slots_[i].profile_id == profile_id) { found = i; break; }
     }
+    if (found == PROF_MAX_PROFILES) return DiagStatus::success();
 
-    if (found == PROF_MAX_PROFILES) return DiagStatus::success(); // not found, OK
+    for (uint8_t i = found; i + 1u < count_; ++i)
+        slots_[i] = slots_[i + 1u];
+    memset(&slots_[count_ - 1u], 0, sizeof(Slot));
+    --count_;
 
-    // Shift entries left to fill the gap.
-    for (uint8_t i = found; i + 1u < idx.count; ++i) {
-        idx.entries[i] = idx.entries[i + 1u];
+    if (active_id_ == profile_id) active_id_ = PROF_ID_NONE;
+    return save_manifest();
+}
+
+DiagStatus ProfileStore::set_active(uint16_t profile_id)
+{
+    if (profile_id != PROF_ID_NONE) {
+        bool found = false;
+        for (uint8_t i = 0; i < count_; ++i) {
+            if (slots_[i].profile_id == profile_id) { found = true; break; }
+        }
+        if (!found) return DiagStatus::error(DiagCode::STORAGE_NOT_FOUND);
     }
-    memset(&idx.entries[idx.count - 1u], 0, sizeof(ProfileRecord));
-    --idx.count;
-
-    s = save_index(idx);
-    if (!s.ok()) return s;
-
-    if (active_id_ == profile_id) {
-        save_active(PROF_ID_NONE);  // best-effort; ignore error
-    }
-
-    return DiagStatus::success();
+    active_id_ = profile_id;
+    return save_manifest();
 }
 
 // ---------------------------------------------------------------------------
-// begin_guest / end_guest
+// guest session
 // ---------------------------------------------------------------------------
 
 void ProfileStore::begin_guest()
 {
     pre_guest_id_ = active_id_;
     active_id_    = PROF_ID_GUEST;
-    // No flash write: guest sessions are ephemeral.
 }
 
 void ProfileStore::end_guest()
@@ -213,24 +214,10 @@ void ProfileStore::end_guest()
 DiagStatus ProfileStore::wipe_all()
 {
     if (!initialized_) return DiagStatus::error(DiagCode::STORAGE_CORRUPT);
-    // Delete all "prof.*" keys from the underlying KV.
-    DiagStatus s = kv_.del_prefix("prof.");
-    // Reset in-memory state regardless of storage result.
-    active_id_ = PROF_ID_NONE;
-    return s;
-}
-
-// ---------------------------------------------------------------------------
-// set_active
-// ---------------------------------------------------------------------------
-
-DiagStatus ProfileStore::set_active(uint16_t profile_id)
-{
-    // PROF_ID_NONE always accepted (clears selection).
-    if (profile_id != PROF_ID_NONE) {
-        ProfileRecord dummy;
-        DiagStatus s = get(profile_id, &dummy);
-        if (!s.ok()) return s;  // STORAGE_NOT_FOUND
-    }
-    return save_active(profile_id);
+    count_        = 0;
+    active_id_    = PROF_ID_NONE;
+    pre_guest_id_ = PROF_ID_NONE;
+    memset(slots_, 0, sizeof(slots_));
+    fat_delete_file(MANIFEST_PATH);
+    return DiagStatus::success();
 }

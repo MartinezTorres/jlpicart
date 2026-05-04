@@ -1,12 +1,12 @@
 #pragma once
 // collection_format.h — Collection bundle layout constants and types.
-// See spec.md §6.1 (Collection format contract v1) and §6.2 (Manifest contract).
 
+#include "bus/device_type.h"
 #include <cstdint>
 #include <cstddef>
 
 // ---------------------------------------------------------------------------
-// Size bounds (from spec.md §6.3 JSON schemas)
+// Size bounds
 // ---------------------------------------------------------------------------
 
 static constexpr size_t COL_ID_MAX             = 64;   // collection_id maxLength
@@ -14,34 +14,24 @@ static constexpr size_t COL_VERSION_MAX        = 32;   // version maxLength
 static constexpr size_t COL_TITLE_MAX          = 128;  // title maxLength
 static constexpr size_t PUB_ID_MAX             = 64;   // publisher_id maxLength
 static constexpr size_t PAYLOAD_ID_MAX         = 64;   // payload_id maxLength
-static constexpr size_t PAYLOAD_PATH_MAX       = 200;  // path maxLength (spec §6.1)
+static constexpr size_t PAYLOAD_PATH_MAX       = 200;  // path maxLength
 static constexpr size_t PAYLOAD_MAPPER_TYPE_MAX = 24;  // "rom_32k_mirrored" = 16 chars max
 static constexpr size_t SIG_KEY_ID_MAX         = 64;   // key_id in bundle.sig
 static constexpr size_t BUNDLE_MAX_FILES       = 8;    // max files listed in bundle.sig
 static constexpr size_t MANIFEST_MAX_PAYLOADS  = 4;    // max payload entries parsed
 static constexpr size_t MANIFEST_BYTES_MAX     = 4096; // max bytes for read_file of manifest
 static constexpr size_t SIG_ENV_BYTES_MAX      = 2048; // max bytes for read_file of bundle.sig
+static constexpr size_t PAYLOAD_DEVICES_MAX    = 4;    // max device entries per payload
 
 // ---------------------------------------------------------------------------
-// Bundle file paths (relative to bundle root, per spec §6.1)
+// Bundle file paths (relative to bundle root)
 // ---------------------------------------------------------------------------
 
 static constexpr const char* BUNDLE_MANIFEST_FILE = "manifest.json";
 static constexpr const char* BUNDLE_SIG_FILE      = "bundle.sig";
 
 // ---------------------------------------------------------------------------
-// KvStore key names for collection state (spec §6.1, §11.1 atomicity rules)
-// ---------------------------------------------------------------------------
-
-static constexpr const char* KV_COL_STATE  = "col.state";  // "active" or "pending"
-static constexpr const char* KV_COL_RECORD = "col.record"; // CollectionRecord bytes
-
-static constexpr const char* COL_STATE_ACTIVE  = "active";
-static constexpr const char* COL_STATE_PENDING = "pending";
-
-// ---------------------------------------------------------------------------
 // Bundle signature envelope — parsed from bundle.sig.
-// See spec.md §6.2 "Bundle signature envelope (minimal v1)".
 // ---------------------------------------------------------------------------
 
 struct BundleFileHash {
@@ -61,9 +51,8 @@ struct BundleSigEnvelope {
 };
 
 // ---------------------------------------------------------------------------
-// Compact on-flash record for the installed Collection (stored in KvStore).
-// The full payload list must be re-read from the source at launch time.
-// See spec.md §6.2 "Collection Manifest schema".
+// Compact record for the installed Collection, stored as
+// 1:/collections/{col_id}/collection.bin on the FAT volume.
 // ---------------------------------------------------------------------------
 
 #pragma pack(push, 1)
@@ -75,45 +64,50 @@ struct CollectionRecord {
     uint8_t boot_mode;                           //  1 byte  (0=menu_first, 1=direct)
     char    default_payload_id[PAYLOAD_ID_MAX];  // 64 bytes
     uint8_t payload_count;                       //  1 byte
-    uint8_t _pad[3];                             //  3 bytes (makes total a multiple of 4)
-    // Total: 64+32+64+128+1+64+1+3 = 357 bytes — fits in KV_MAX_VAL_LEN (512)
+    uint8_t _pad[3];                             //  3 bytes (alignment)
+    // Total: 64+32+64+128+1+64+1+3 = 357 bytes
 };
 #pragma pack(pop)
 static_assert(sizeof(CollectionRecord) == 357, "CollectionRecord layout has changed");
-static_assert(sizeof(CollectionRecord) <= 512,
-              "CollectionRecord must fit in KV_MAX_VAL_LEN (512)");
 
 // ---------------------------------------------------------------------------
-// Per-payload runtime record (stored in KvStore under "pl.<payload_id>").
+// Per-device record embedded in a PayloadRecord.
+// Describes one collection device (PSG, OPL4, SCC, …) required by a payload.
+// ---------------------------------------------------------------------------
+
+#pragma pack(push, 1)
+struct PayloadDeviceRecord {
+    uint8_t type;                      //  1 byte  (DeviceType enum value)
+    uint8_t subslot;                   //  1 byte  (0–3; for memory-mapped devices)
+    uint8_t optional;                  //  1 byte  (0=required, 1=optional)
+    uint8_t _pad;                      //  1 byte
+    char    params[PAYLOAD_ID_MAX];    // 64 bytes (device-specific; OPL4: wave_payload_id)
+    // Total: 68 bytes
+};
+#pragma pack(pop)
+static_assert(sizeof(PayloadDeviceRecord) == 68, "PayloadDeviceRecord layout has changed");
+
+// ---------------------------------------------------------------------------
+// Per-payload record, stored as 1:/collections/{col_id}/payload_{id}.bin.
 //
-// Written by Installer::run() at commit time and by populate_flash.py when
-// pre-populating flash from a ROM file.  Read at boot by ContentStore.
+// Written by Installer::run() at install time.  Read at boot by ContentStore.
 //
 // data_flash_offset: offset from the start of external flash (not XIP base).
 //   On RP2350: XIP pointer = 0x10000000 + data_flash_offset.
-// data_size: size of ROM/RAM data in bytes.
-//   0 means the ROM has not been written to flash yet (bus wiring skipped).
-//
-// KV key: KV_PAYLOAD_PREFIX + payload_id.  payload_id must be ≤ 45 chars
-// so the full key fits within KV_MAX_KEY_LEN (48).
+// data_size: 0 means no ROM data was written to flash (bus wiring skipped).
 // ---------------------------------------------------------------------------
-
-static constexpr const char* KV_PAYLOAD_PREFIX = "pl.";  // 3-char prefix
-// Full KV key = KV_PAYLOAD_PREFIX + payload_id; payload_id must be ≤ 45 chars
-// so the combined key fits within KV_MAX_KEY_LEN (48).
 
 #pragma pack(push, 1)
 struct PayloadRecord {
     char     payload_id[PAYLOAD_ID_MAX];           // 64 bytes
     char     mapper_type[PAYLOAD_MAPPER_TYPE_MAX]; // 24 bytes
     uint8_t  subslot;                              //  1 byte  (0–3)
-    uint8_t  _pad[3];                              //  3 bytes (alignment)
+    uint8_t  device_count;                         //  1 byte  (number of valid devices[])
+    uint8_t  _pad[2];                              //  2 bytes
     uint32_t data_flash_offset;                    //  4 bytes (offset from flash start)
     uint32_t data_size;                            //  4 bytes (0 = not yet written)
-    // Total: 64 + 24 + 1 + 3 + 4 + 4 = 100 bytes
+    PayloadDeviceRecord devices[PAYLOAD_DEVICES_MAX]; // 4×68 = 272 bytes
+    // Total: 64 + 24 + 1 + 1 + 2 + 4 + 4 + 272 = 372 bytes
 };
 #pragma pack(pop)
-static_assert(sizeof(PayloadRecord) == 100, "PayloadRecord layout has changed");
-// KV_MAX_VAL_LEN = 512; PayloadRecord (100) fits comfortably.
-static_assert(sizeof(PayloadRecord) <= 512,
-              "PayloadRecord must fit in KvStore value limit (512)");
+static_assert(sizeof(PayloadRecord) == 372, "PayloadRecord layout has changed");

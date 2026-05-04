@@ -1,0 +1,71 @@
+smoke_test 0 0
+test_diag 0 0
+test_log 0 0
+test_otp 0 0
+test_security_posture 0 0
+test_policy 0 0
+test_capability_registry 0 0
+test_api_window 0 0
+test_network_service 0 0
+test_menu_mailbox 0 0
+test_menu_stub 0 0
+test_storage 0 0
+test_store 0 0
+test_allocator 0 0
+test_bus_mapper 0 0
+test_collections 0 0
+test_profiles 0 0
+test_usb_scanner 0 0
+test_menu_app 0 0
+test_system_settings 0 0
+test_core_service 0 0
+test_save_store 0 0
+test_boot_mode 0 0
+test_stats_store 0 0
+test_device_identity 0 0
+test_smk 0 0
+test_policy_enforcement 0 0
+test_psg 0 0
+test_opl4 0 0
+test_sunrise_ide 0 0
+test_scc 0 0
+test_rom_loading 0 0
+test_content_store 0 0
+test_bundle_sig 0 0
+test_device_check 0 0
+---
+smoke_test
+test_diag
+test_log
+test_otp
+test_security_posture
+test_policy
+test_capability_registry
+test_api_window
+test_network_service
+test_menu_mailbox
+test_menu_stub
+test_storage
+test_store
+test_allocator
+test_bus_mapper
+test_collections
+test_profiles
+test_usb_scanner
+test_menu_app
+test_system_settings
+test_core_service
+test_save_store
+test_boot_mode
+test_stats_store
+test_device_identity
+test_smk
+test_policy_enforcement
+test_psg
+test_opl4
+test_sunrise_ide
+test_scc
+test_rom_loading
+test_content_store
+test_bundle_sig
+test_device_check

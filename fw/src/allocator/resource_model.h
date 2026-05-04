@@ -1,19 +1,13 @@
 #pragma once
-// resource_model.h — Consumable resource budgets for the Stage 8 allocator.
+// resource_model.h — Consumable resource budgets for the allocator.
 //
 // Tracks what the RP2350 has available for peripheral allocation, after
 // deducting reserves consumed by the system (bus loop, stacks, API window,
 // menu mailbox, etc.).
 //
-// Three resource classes (spec.md §5.1):
+// Resource classes:
 //   Quantifiable: allocated from a shared budget (SRAM bytes).
 //   Exclusive:    one owner at a time (PIO state machines, DMA channels).
-//   Shareable:    (future) shared under defined rules (e.g. network stack).
-//
-// ResourceRequirements is embedded in board and driver descriptors.
-// A zero-valued struct means "no additional resources needed" and is the
-// correct default for capabilities that run entirely within existing system
-// budget (e.g. api.core, bus.msx).
 //
 // Thread safety: NOT thread-safe. Use only from the boot/preflight path.
 
@@ -27,13 +21,13 @@ static constexpr uint8_t  RP2350_TOTAL_DMA_CH  = 16u;
 // System reserves: SRAM consumed by firmware infrastructure that is not
 // modelled as a capability resource:
 //   ~16 KB — menu mailbox page buffer (static in main.cc)
-//   ~17 KB — BUS::cartridges[8] × 2 184 B per Cartridge struct
+//   ~35 KB — BUS::subslots[16] × 2 184 B per Subslot struct
 //   ~16 KB — Core 0 + Core 1 stacks (8 KB each)
 //   ~64 KB — linker .bss / .data / heap headroom, tinyusb stack, log buffer
 //   ──────
 //   ~113 KB → rounded up to 128 KB
 //
-// api.core, sw.psg, sw.scc, sw.opl4 declare their own SRAM above this floor.
+// api.core declares its own SRAM above this floor.
 static constexpr uint32_t SYSTEM_SRAM_RESERVE   = 128u * 1024u;  // 128 KB
 static constexpr uint8_t  SYSTEM_PIO_SM_RESERVE = 4u;   // bus loop uses PIO0 SMs 0-3
 static constexpr uint8_t  SYSTEM_DMA_RESERVE    = 2u;   // reserved for future DMA use

@@ -1,16 +1,16 @@
 // usb_install_scanner.cc — UsbInstallScanner implementation.
 
 #include "usb/usb_install_scanner.h"
+#include "content/content_store.h"
 #include "content/collection_format.h"
 #include "content/manifest.h"
 #include "content/manifest_parser.h"
-#include "storage/flash_device.h"
 #include "log/log.h"
 #include <cstdio>
 #include <cstring>
 
 // ---------------------------------------------------------------------------
-// FatFsInstallDirSource — firmware-only, not compiled in host test builds
+// FatFsInstallDirSource — firmware-only
 // ---------------------------------------------------------------------------
 
 #ifndef JLPICART_HOST_TEST
@@ -20,7 +20,6 @@
 class FatFsInstallDirSource : public InstallDirSource {
 public:
     FatFsInstallDirSource() {
-        // Mount drive 0 (populated by diskio_tuh).
         f_mount(&fs_, "0:", 1);
         enumerate();
     }
@@ -58,22 +57,17 @@ private:
             log_info("USB install: /JLPICART/INSTALL not found");
             return;
         }
-
         FILINFO info;
         while (count_ < INSTALL_SCAN_MAX_DIRS) {
             if (f_readdir(&dir, &info) != FR_OK || info.fname[0] == '\0') break;
             if (!(info.fattrib & AM_DIR)) continue;
-
             size_t nlen = strlen(info.fname);
             if (nlen >= NAME_MAX_) nlen = NAME_MAX_ - 1;
             memcpy(names_[count_], info.fname, nlen);
             names_[count_][nlen] = '\0';
-
-            // Build root path: "0:/JLPICART/INSTALL/<name>/"
             char root[128];
             snprintf(root, sizeof(root), "0:/JLPICART/INSTALL/%s/", info.fname);
             readers_[count_] = new UsbInstallReader(root);
-
             ++count_;
         }
         f_closedir(&dir);
@@ -88,28 +82,18 @@ private:
 
 UsbInstallScanner::UsbInstallScanner(UsbHost& host) : host_(host) {}
 
-bool UsbInstallScanner::already_installed(KvStore& kv,
-                                           const char* collection_id,
+bool UsbInstallScanner::already_installed(const char* collection_id,
                                            const char* version) {
-    uint8_t buf[sizeof(CollectionRecord)];
-    uint16_t len = 0;
-    DiagStatus s = kv.get(KV_COL_RECORD, buf, &len, sizeof(buf));
-    if (!s.ok() || len < sizeof(CollectionRecord)) return false;
-
-    const CollectionRecord* rec =
-        reinterpret_cast<const CollectionRecord*>(buf);
-
-    return (strncmp(rec->collection_id, collection_id, COL_ID_MAX) == 0 &&
-            strncmp(rec->version,       version,       COL_VERSION_MAX) == 0);
+    ContentStore cs;
+    CollectionRecord rec = {};
+    if (!cs.load_collection(rec).ok()) return false;
+    return (strncmp(rec.collection_id, collection_id, COL_ID_MAX) == 0 &&
+            strncmp(rec.version,       version,       COL_VERSION_MAX) == 0);
 }
 
-void UsbInstallScanner::run_scan(InstallDirSource& dirs,
-                                  KvStore& kv, AppendLog& event_log,
-                                  const PolicyStore& policy,
-                                  FlashDevice* flash) {
-    // Policy gate: USB collection install must be explicitly permitted.
+void UsbInstallScanner::run_scan(InstallDirSource& dirs, const PolicyStore& policy) {
     if (!(policy.info().flags & POLICY_ALLOW_USB_COLLECTION_INSTALL)) {
-        log_info("USB install: denied by policy (POLICY_ALLOW_USB_COLLECTION_INSTALL not set)");
+        log_info("USB install: denied by policy");
         return;
     }
 
@@ -117,73 +101,61 @@ void UsbInstallScanner::run_scan(InstallDirSource& dirs,
     if (n > INSTALL_SCAN_MAX_DIRS) n = INSTALL_SCAN_MAX_DIRS;
 
     for (size_t i = 0; i < n; ++i) {
-        const char* name    = dirs.dir_name(i);
+        const char*    name   = dirs.dir_name(i);
         InstallReader& reader = dirs.open_reader(i);
 
-        // Read manifest to extract collection_id + version for skip check.
         uint8_t mbuf[MANIFEST_BYTES_MAX];
-        size_t mlen = 0;
-        DiagStatus s = reader.read_file(BUNDLE_MANIFEST_FILE,
-                                         mbuf, sizeof(mbuf), &mlen);
+        size_t  mlen = 0;
+        DiagStatus s = reader.read_file(BUNDLE_MANIFEST_FILE, mbuf, sizeof(mbuf), &mlen);
         if (!s.ok()) {
             char msg[96];
-            snprintf(msg, sizeof(msg),
-                     "USB install %s: manifest read failed — skipping", name);
+            snprintf(msg, sizeof(msg), "USB install %s: manifest read failed", name);
             log_info(msg);
             continue;
         }
 
         CollectionManifest manifest = {};
-        s = parse_collection_manifest(
-                reinterpret_cast<const char*>(mbuf), mlen, manifest);
+        s = parse_collection_manifest(reinterpret_cast<const char*>(mbuf), mlen, manifest);
         if (!s.ok()) {
             char msg[96];
-            snprintf(msg, sizeof(msg),
-                     "USB install %s: manifest parse failed — skipping", name);
+            snprintf(msg, sizeof(msg), "USB install %s: manifest parse failed", name);
             log_info(msg);
             continue;
         }
 
-        if (already_installed(kv, manifest.collection_id, manifest.version)) {
+        if (already_installed(manifest.collection_id, manifest.version)) {
             char msg[96];
-            snprintf(msg, sizeof(msg),
-                     "USB install %s: already installed — skipping", name);
+            snprintf(msg, sizeof(msg), "USB install %s: already installed", name);
             log_info(msg);
             continue;
         }
 
         Installer installer;
         InstallResult result = {};
-        installer.run(reader, kv, event_log, policy, result, flash);
+        installer.run(reader, policy, result);
 
-        // Log result — message is intentionally brief to fit within the 128-byte
-        // log line limit (name ≤ 32, collection_id ≤ 63, version ≤ 31).
         char msg[192];
         if (result.installed) {
-            snprintf(msg, sizeof(msg),
-                     "USB install %s: ok id=%s ver=%s",
+            snprintf(msg, sizeof(msg), "USB install %s: ok id=%s ver=%s",
                      name, result.collection_id, result.version);
             log_info(msg);
         } else {
-            snprintf(msg, sizeof(msg),
-                     "USB install %s: failed reason=%d",
+            snprintf(msg, sizeof(msg), "USB install %s: failed reason=%d",
                      name, static_cast<int>(result.reason));
-            log_info(msg);
+            log_warn(msg);
         }
     }
 }
 
-void UsbInstallScanner::scan(KvStore& kv, AppendLog& event_log,
-                               const PolicyStore& policy) {
+void UsbInstallScanner::scan(const PolicyStore& policy) {
     if (!host_.is_msc_mounted()) {
         log_info("USB MSC not mounted — skipping install scan");
         return;
     }
-
 #ifndef JLPICART_HOST_TEST
     FatFsInstallDirSource dirs;
-    run_scan(dirs, kv, event_log, policy, &FlashDevice::hardware());
+    run_scan(dirs, policy);
 #else
-    (void)kv; (void)event_log; (void)policy;
+    (void)policy;
 #endif
 }

@@ -6,7 +6,6 @@
 // into the bus loop.  Must not be called after BUS::start().
 //
 // On host test builds (JLPICART_HOST_TEST), both functions are no-ops.
-// See bootstrapping.md Stage 13.
 
 #include <cstdint>
 

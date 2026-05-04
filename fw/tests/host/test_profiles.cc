@@ -4,8 +4,8 @@
 //   ProfileStore: create / list / get / remove / set_active
 //   Identity service 0x03: LIST_PROFILES, SET/GET_ACTIVE_PROFILE
 //
-// No FatFs, no USB, no OTP hardware.  KvStore runs over an in-memory
-// FlashDevice (same pattern as test_storage.cc).
+// No KvStore, no FlashDevice.  ProfileStore runs over an in-memory FAT volume
+// via FatTestEnv.
 
 #include "profiles/profile_format.h"
 #include "profiles/profile_store.h"
@@ -17,10 +17,9 @@
 #include "spine/capability_registry.h"
 #include "boards/board_descriptor.h"
 #include "drivers/driver_descriptor.h"
-#include "storage/flash_device.h"
-#include "storage/flash_layout.h"
 #include "security/otp_reader.h"
 
+#include "fat_test_env.h"
 #include "test_helpers.h"
 #include <cassert>
 #include <cstring>
@@ -30,15 +29,13 @@
 // Shared harness helpers
 // ---------------------------------------------------------------------------
 
-static constexpr uint32_t TEST_PART_SIZE = FLASH_SECTOR_SIZE * 32; // 128 KB
-
-// Build a ProfileStore backed by an in-memory FlashDevice.
+// Build a ProfileStore backed by an in-memory FAT volume.
 struct ProfileFixture {
-    FlashDevice    flash{TEST_PART_SIZE};
-    ProfileStore   ps;
+    FatTestEnv    env;
+    ProfileStore  ps;
 
     ProfileFixture() {
-        DiagStatus s = ps.init(flash, 0, TEST_PART_SIZE);
+        DiagStatus s = ps.init();
         assert(s.ok());
     }
 };
@@ -124,12 +121,12 @@ static void test_profile_active() {
 // ---------------------------------------------------------------------------
 
 static void test_profile_active_persists() {
-    FlashDevice flash(TEST_PART_SIZE);
+    FatTestEnv env;
     uint16_t id = 0;
 
     {
         ProfileStore ps;
-        CHECK(ps.init(flash, 0, TEST_PART_SIZE).ok());
+        CHECK(ps.init().ok());
         CHECK(ps.create("Frank", "es", &id).ok());
         CHECK(ps.set_active(id).ok());
     }
@@ -137,7 +134,7 @@ static void test_profile_active_persists() {
     // Re-init from same flash.
     {
         ProfileStore ps2;
-        CHECK(ps2.init(flash, 0, TEST_PART_SIZE).ok());
+        CHECK(ps2.init().ok());
         CHECK(ps2.active() == id);
         ProfileRecord rec = {};
         CHECK(ps2.get(id, &rec).ok());
@@ -263,9 +260,9 @@ static void push_request(ApiWindow& win, uint16_t seq,
 static void test_identity_list() {
     ensure_spine();
 
-    FlashDevice    flash(TEST_PART_SIZE);
+    FatTestEnv     env;
     ProfileStore   ps;
-    CHECK(ps.init(flash, 0, TEST_PART_SIZE).ok());
+    CHECK(ps.init().ok());
 
     uint16_t id1 = 0, id2 = 0;
     CHECK(ps.create("Ivan", "en", &id1).ok());
@@ -307,9 +304,9 @@ static void test_identity_list() {
 static void test_identity_set_get_active() {
     ensure_spine();
 
-    FlashDevice  flash(TEST_PART_SIZE);
+    FatTestEnv   env;
     ProfileStore ps;
-    CHECK(ps.init(flash, 0, TEST_PART_SIZE).ok());
+    CHECK(ps.init().ok());
 
     uint16_t id = 0;
     CHECK(ps.create("Karl", "de", &id).ok());
@@ -350,9 +347,9 @@ static void test_identity_set_get_active() {
 static void test_identity_set_active_not_found() {
     ensure_spine();
 
-    FlashDevice  flash(TEST_PART_SIZE);
+    FatTestEnv   env;
     ProfileStore ps;
-    CHECK(ps.init(flash, 0, TEST_PART_SIZE).ok());
+    CHECK(ps.init().ok());
 
     static ApiWindow win3;
     win3.init(g_posture, g_policy, g_registry);
@@ -432,9 +429,9 @@ static void test_guest_session_no_prior() {
 static void test_guest_api_roundtrip() {
     ensure_spine();
 
-    FlashDevice  flash(TEST_PART_SIZE);
+    FatTestEnv   env;
     ProfileStore ps;
-    CHECK(ps.init(flash, 0, TEST_PART_SIZE).ok());
+    CHECK(ps.init().ok());
 
     uint16_t id = 0;
     CHECK(ps.create("Mia", "en", &id).ok());

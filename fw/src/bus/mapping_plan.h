@@ -6,11 +6,8 @@
 // into a MappingPlan that PeripheralManager::apply_mapping() uses to configure
 // BUS::cartridges[].
 //
-// In Stage 9, rom_data in MappingEntry is always nullptr: the ROM is not yet
-// loaded from flash storage (deferred to the content-load stage).
-// apply_mapping() logs this and skips the bus wiring until rom_data is set.
-//
-// See spec.md §5.1 and bootstrapping.md Stage 9.
+// rom_data in MappingEntry may be nullptr when no payload is loaded;
+// apply_mapping() logs and skips bus wiring in that case.
 
 #include "content/collection_format.h"
 #include "content/manifest.h"
@@ -51,12 +48,29 @@ struct MappingEntry {
 
 static constexpr size_t MAPPING_MAX_ENTRIES = 4;
 
+// IO-only devices declared by a collection: no memory mapping, but wired to
+// MSX IO ports.  apply_mapping() iterates these after memory entries.
+enum class IoDeviceType : uint8_t {
+    NONE = 0,
+    PSG,   // AY-3-8910 / YM2149 — IO 0xA0-0xA2
+    OPL4,  // YMF278B — IO 0x7C-0x7F + 0xF5-0xF7
+};
+
+struct IoDeviceEntry {
+    IoDeviceType type;
+    char         wave_payload_id[PAYLOAD_ID_MAX];  // OPL4 wave ROM payload ID; "" = none
+};
+
+static constexpr size_t MAPPING_MAX_IO_DEVICES = 4;
+
 struct MappingPlan {
-    MappingEntry entries[MAPPING_MAX_ENTRIES];
-    size_t       entry_count;
+    MappingEntry  entries[MAPPING_MAX_ENTRIES];
+    size_t        entry_count;
+    IoDeviceEntry io_devices[MAPPING_MAX_IO_DEVICES];
+    size_t        io_device_count;
     // When multiple subslots are used, the subslot expansion register at 0xFFFF
     // must be enabled.  apply_mapping() sets BUS::is_expanded accordingly.
-    bool         expanded;
+    bool          expanded;
 };
 
 // Build a MappingPlan from a stored PayloadRecord (read from ContentStore).

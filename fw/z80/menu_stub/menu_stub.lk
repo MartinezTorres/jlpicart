@@ -1,0 +1,11 @@
+-mjwx
+-i menu_stub.ihx
+-b _CODE = 0x4110
+-b _DATA = 0xe000
+-k ../../../tools/sdcc/bin/../share/sdcc/lib/z80
+-k /usr/local/share/sdcc/lib/z80
+-l z80
+crt0.rel
+main.rel
+
+-e

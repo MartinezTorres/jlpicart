@@ -1,6 +1,5 @@
 // api_window.cc — JLPiCart API window: ring framing and service dispatch.
 //
-// Ring framing algorithm is specified in spec.md §5.1 "Ring layout and invariants".
 // Frames: u16 frame_len (includes itself) followed by (frame_len-2) msg_bytes.
 // frame_len == 0 is a wrap marker; consumer must wrap tail to 0 and re-read.
 
@@ -45,7 +44,7 @@ void ApiWindow::init(const SecurityPosture& posture,
     h.h2c_scratch_len = API_H2C_SCRATCH_LEN;
     h.c2h_scratch_ofs = API_C2H_SCRATCH_OFS;
     h.c2h_scratch_len = API_C2H_SCRATCH_LEN;
-    h.feature_bits   = API_FEATURES_STAGE4;
+    h.feature_bits   = API_FEATURES_CURRENT;
     h.max_frame      = API_MAX_FRAME;
 
     // Init request ring.
@@ -132,7 +131,7 @@ bool ApiWindow::ring_empty(uint16_t ring_ofs) const
 // ring_push_msg — producer (firmware side for responses, Z80 side for requests)
 // ---------------------------------------------------------------------------
 //
-// Algorithm per spec.md §5.1 "Writing a frame (producer algorithm)":
+// Producer algorithm:
 // 1. needed = msg_len + 2
 // 2. compute free space from head and tail
 // 3. if insufficient, return E_RING_FULL
@@ -332,8 +331,6 @@ bool ApiWindow::service_once()
     MsgHeader req;
     memcpy(&req, frame, sizeof(MsgHeader));
 
-    // Validate request invariants (spec.md §5.1 "Sequence number rules" and
-    // "Message header (MsgHeader)").
     // seq MUST be nonzero.
     if (req.seq == 0 || req.status != 0 || req.reserved != 0) {
         write_response(req.seq, req.service, req.method, API_E_BAD_REQ, nullptr, 0);
@@ -347,10 +344,8 @@ bool ApiWindow::service_once()
         return true;
     }
 
-    // Scratch bounds check (spec.md §5.1):
-    // "If scratch_ofs != 0xFFFF, then scratch_ofs + scratch_len MUST fit
-    //  within the corresponding scratch buffer."
-    // Requests use host→cart scratch (h2c), so bounds are API_H2C_SCRATCH_LEN.
+    // Scratch bounds check: if scratch_ofs != 0xFFFF, scratch_ofs + scratch_len
+    // must fit within h2c scratch (API_H2C_SCRATCH_LEN).
     if (req.scratch_ofs != 0xFFFFu) {
         const uint32_t scratch_end = (uint32_t)req.scratch_ofs + req.scratch_len;
         if (scratch_end > API_H2C_SCRATCH_LEN) {

@@ -52,7 +52,6 @@
 //   Sample rate  : 33.8688e6 / 768 = 44100 Hz
 //   Matches PSG/SCC sample rates — share the same PWM update tick.
 //
-// See spec.md "Audio devices — OPL4" and bootstrapping.md Stage 30.
 
 #include "cartridges/cartridge.h"
 #include "peripherals/opl3fm.h"
