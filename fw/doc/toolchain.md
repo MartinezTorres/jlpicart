@@ -1,4 +1,4 @@
-# fw/toolchain — Pico SDK and build instructions
+# Toolchain and build instructions
 
 ## Prerequisites
 
@@ -56,4 +56,4 @@ ctest --output-on-failure
 | SDCC          | 4.5.0       |
 | openMSX       | RELEASE_21_0 |
 
-All version hashes are in `tools/lock.yml`.
+All version hashes are in `ext/lock.yml`.

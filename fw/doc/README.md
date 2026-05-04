@@ -31,3 +31,4 @@ Read [security/key-reference.md](security/key-reference.md).
 | [security/key-reference.md](security/key-reference.md) | Draft | All key types, storage, lifecycle |
 | [api/capabilities.md](api/capabilities.md) | Draft | Capability ID catalog |
 | [glossary.md](glossary.md) | Draft | Platform vocabulary |
+| [toolchain.md](toolchain.md) | Current | SDK setup, build, flash, host tests |

@@ -1,5 +1,5 @@
-# fw/tools/lock.yml — pinned external tool versions
-# Run the corresponding get_*.sh / build_*.sh scripts to set up tools locally.
+# fw/ext/lock.yml — pinned external tool versions
+# Run the corresponding ext/get_*.sh / ext/build_*.sh scripts to set up tools locally.
 # SHA256 fields are filled on first download by get_sdcc.sh.
 
 sdcc:
@@ -12,7 +12,7 @@ sdcc:
 openmsx:
   # Pinned to RELEASE_21_0 (commit cb61db762aba16752ff649990bf85e40627777af).
   # Submodule at: third_party/openMSX
-  # Build with: bash fw/tools/build_openmsx.sh
-  # Binary installed at: fw/tools/openmsx/bin/openmsx
+  # Build with: bash fw/ext/build_openmsx.sh
+  # Binary installed at: fw/ext/openmsx/bin/openmsx
   tag: "RELEASE_21_0"
   commit: "cb61db762aba16752ff649990bf85e40627777af"

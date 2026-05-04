@@ -243,7 +243,7 @@ endforeach()
 # Stage 11: Z80 menu stub build target
 #
 # Compiles fw/src/msx/menu/stub/ with SDCC and regenerates menu_stub_bin.h.
-# Requires SDCC: run  bash fw/tools/get_sdcc.sh  first.
+# Requires SDCC: run  bash fw/ext/get_sdcc.sh  first.
 #
 # Usage:  cmake --build <build_dir> --target build_menu_stub
 # ---------------------------------------------------------------------------
@@ -251,7 +251,7 @@ endforeach()
 set(STUB_DIR    "${CMAKE_CURRENT_LIST_DIR}/src/msx/menu/stub")
 set(STUB_BIN    "${STUB_DIR}/stub.bin")
 set(STUB_BIN_H  "${CMAKE_CURRENT_LIST_DIR}/src/msx/menu/menu_stub_bin.h")
-set(SDCC_BIN    "${CMAKE_CURRENT_LIST_DIR}/tools/sdcc/bin/sdcc")
+set(SDCC_BIN    "${CMAKE_CURRENT_LIST_DIR}/ext/sdcc/bin/sdcc")
 
 if(EXISTS "${SDCC_BIN}")
     add_custom_command(
@@ -264,9 +264,14 @@ if(EXISTS "${SDCC_BIN}")
     )
     add_custom_command(
         OUTPUT  "${STUB_BIN_H}"
-        COMMAND ${CMAKE_COMMAND} -E env
-                python3 "${CMAKE_CURRENT_LIST_DIR}/tools/bin_to_c_array.py"
-                        "${STUB_BIN}" kMenuStubBin > "${STUB_BIN_H}"
+        COMMAND bash -c
+            "{ printf '#pragma once\\n#include <cstdint>\\n// clang-format off\\n' ; \
+               xxd -i '${STUB_BIN}' | sed \
+                 -e 's/unsigned char stub_bin\\[\\]/static const uint8_t kMenuStubBin[]/' \
+                 -e 's/unsigned int stub_bin_len/static const uint16_t kMenuStubBin_SIZE/' \
+                 -e 's/= \\([0-9]*\\);/= \\1u;/' ; \
+               printf '// clang-format on\\n' ; \
+             } > '${STUB_BIN_H}'"
         DEPENDS "${STUB_BIN}"
         COMMENT "Generating menu_stub_bin.h from stub.bin"
     )
@@ -276,10 +281,17 @@ if(EXISTS "${SDCC_BIN}")
     )
     message(STATUS "SDCC found — build_menu_stub target available")
 else()
+    file(WRITE "${STUB_BIN_H}"
+        "#pragma once\n"
+        "#include <cstdint>\n"
+        "#pragma message(\"SDCC not available — kMenuStubBin is an empty placeholder\")\n"
+        "static const uint8_t kMenuStubBin[] = { 0x00u };\n"
+        "static const uint16_t kMenuStubBin_SIZE = 0u;\n"
+    )
     add_custom_target(build_menu_stub
         COMMAND ${CMAKE_COMMAND} -E echo
-            "SDCC not found at ${SDCC_BIN} — run: bash fw/tools/get_sdcc.sh"
+            "SDCC not found at ${SDCC_BIN} — run: bash fw/ext/get_sdcc.sh"
         COMMENT "SDCC not installed; stub will be placeholder"
     )
-    message(STATUS "SDCC not found at ${SDCC_BIN} — stub is placeholder. Run: bash fw/tools/get_sdcc.sh")
+    message(STATUS "SDCC not found at ${SDCC_BIN} — stub is placeholder. Run: bash fw/ext/get_sdcc.sh")
 endif()

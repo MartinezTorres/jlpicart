@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# get_sdcc.sh — download and unpack pinned SDCC Z80 compiler to fw/tools/sdcc/
-# Usage: bash fw/tools/get_sdcc.sh [--force]
+# get_sdcc.sh — download and unpack pinned SDCC Z80 compiler to fw/ext/sdcc/
+# Usage: bash fw/ext/get_sdcc.sh [--force]
 #
 # On first run: downloads, unpacks, prints SHA256, updates lock.yml.
 # On subsequent runs: verifies SHA256, no-ops if already present.

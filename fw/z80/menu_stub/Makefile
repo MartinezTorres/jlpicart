@@ -1,12 +1,12 @@
 # Makefile — JLPiCart Z80 Menu Stub
 #
-# Uses pinned SDCC 4.5.0 from tools/sdcc/bin/.
+# Uses pinned SDCC 4.5.0 from ext/sdcc/bin/.
 # Run from fw/z80/menu_stub/ or via 'make -C fw/z80/menu_stub' from fw/.
 #
 # Output: menu_stub.rom — flat binary, 16KB, page-relative (0x0000–0x3FFF).
 # The RP2350 loads this image into the Menu Page buffer (mapped at 0x4000–0x7FFF).
 
-TOOLS_DIR := ../../../tools/sdcc
+TOOLS_DIR := ../../../ext/sdcc
 SDCC      := $(TOOLS_DIR)/bin/sdcc
 SDASZ80   := $(TOOLS_DIR)/bin/sdasz80
 

@@ -9,7 +9,7 @@
 #   bash fw/tests/openMSX/run_test.sh test_menu_stub_basic.tcl -machine Philips_VG_8020
 #
 # Environment (override defaults):
-#   OPENMSX_BIN     path to openmsx binary (default: fw/tools/openmsx/bin/openmsx)
+#   OPENMSX_BIN     path to openmsx binary (default: fw/ext/openmsx/bin/openmsx)
 #   MENUPAGE_ROM    path to menupage.rom (default: fw/src/msx/menu/stub/menupage.rom)
 #   TEST_MACHINE    openMSX machine name (default: msx1_jlpicart)
 #   TEST_TIMEOUT    seconds before FAIL (default: 30)
@@ -43,7 +43,7 @@ fi
 TEST_SCRIPT="$(realpath "$TEST_SCRIPT")"
 
 # --- Configuration with overridable defaults ---
-OPENMSX_BIN="${OPENMSX_BIN:-$FW_ROOT/tools/openmsx/bin/openmsx}"
+OPENMSX_BIN="${OPENMSX_BIN:-$FW_ROOT/ext/openmsx/bin/openmsx}"
 MENUPAGE_ROM="${MENUPAGE_ROM:-$FW_ROOT/src/msx/menu/stub/menupage.rom}"
 TEST_MACHINE="${TEST_MACHINE:-msx1_jlpicart}"
 TEST_TIMEOUT="${TEST_TIMEOUT:-30}"
@@ -51,14 +51,14 @@ TEST_TIMEOUT="${TEST_TIMEOUT:-30}"
 # --- Pre-flight checks ---
 if [[ ! -x "$OPENMSX_BIN" ]]; then
     echo "run_test.sh: openMSX binary not found at $OPENMSX_BIN" >&2
-    echo "  Run: bash fw/tools/build_openmsx.sh" >&2
+    echo "  Run: bash fw/ext/build_openmsx.sh" >&2
     exit 1
 fi
 
 if [[ ! -f "$MENUPAGE_ROM" ]]; then
     echo "run_test.sh: menupage.rom not found at $MENUPAGE_ROM" >&2
     echo "  Run: make -C fw/src/msx/menu/stub menupage.rom" >&2
-    echo "  (Requires SDCC: bash fw/tools/get_sdcc.sh)" >&2
+    echo "  (Requires SDCC: bash fw/ext/get_sdcc.sh)" >&2
     exit 1
 fi
 

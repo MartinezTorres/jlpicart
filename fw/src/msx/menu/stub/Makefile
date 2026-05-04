@@ -7,7 +7,7 @@
 #   stub.bin   — raw binary (max 2048 bytes), placed at ROM offset MENU_STUB_OFS
 #   menupage.rom — 16 KB page image for openMSX fixtures (Stage 12)
 
-SDCC     := $(or $(shell which sdcc 2>/dev/null),fw/tools/sdcc/bin/sdcc)
+SDCC     := $(or $(shell which sdcc 2>/dev/null),fw/ext/sdcc/bin/sdcc)
 # sdasz80 lives next to sdcc; derive path so both pinned and system installs work.
 SDASZ80  := $(dir $(SDCC))sdasz80
 OBJCOPY  := objcopy

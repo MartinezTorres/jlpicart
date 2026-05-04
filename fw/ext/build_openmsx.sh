@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# fw/tools/build_openmsx.sh — build openMSX from the pinned third_party submodule.
+# fw/ext/build_openmsx.sh — build openMSX from the pinned third_party submodule.
 #
 # Invoke from the fw/ root or repo root:
-#   bash fw/tools/build_openmsx.sh
+#   bash fw/ext/build_openmsx.sh
 #
 # Installs the binary at:
-#   fw/tools/openmsx/bin/openmsx
+#   fw/ext/openmsx/bin/openmsx
 #
 # System prerequisites (install with apt before running):
 #   libsdl2-dev libsdl2-ttf-dev libpng-dev libogg-dev libvorbis-dev
@@ -25,7 +25,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 FW_ROOT="$REPO_ROOT/fw"
 OPENMSX_SRC="$REPO_ROOT/third_party/openMSX"
-OPENMSX_DEST="$FW_ROOT/tools/openmsx"
+OPENMSX_DEST="$FW_ROOT/ext/openmsx"
 OPENMSX_BIN="$OPENMSX_DEST/bin/openmsx"
 
 FORCE=0

@@ -60,3 +60,20 @@ python3 at.py modify_bin --baud 115200 --tx_pin 21 --rx_pin 20 --cts_pin -1 --rt
 - **Source:** https://github.com/espressif/esp-serial-flasher (v1.8.0)
 - **Tracking:** Vendored directly in the main repo (no submodule)
 - **Local patches:** none — modify files directly and commit to main repo
+
+---
+
+## sdcc
+
+- **Version:** 4.4.0 (pinned in `ext/lock.yml`)
+- **Tracking:** Downloaded locally to `ext/sdcc/` — not tracked in git
+- **Install:** `bash fw/ext/get_sdcc.sh`
+
+---
+
+## openmsx
+
+- **Version:** RELEASE_21_0 (pinned in `ext/lock.yml`)
+- **Source:** `third_party/openMSX` submodule (built locally)
+- **Tracking:** Built locally to `ext/openmsx/` — not tracked in git
+- **Install:** `bash fw/ext/build_openmsx.sh`
