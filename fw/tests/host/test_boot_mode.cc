@@ -19,7 +19,7 @@
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
 #include "boards/board_descriptor.h"
-#include "drivers/driver_descriptor.h"
+#include "spine/driver_descriptor.h"
 #include "storage/fat_util.h"
 
 #include "fat_test_env.h"

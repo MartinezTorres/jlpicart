@@ -53,7 +53,7 @@
 //   Matches PSG/SCC sample rates — share the same PWM update tick.
 //
 
-#include "cartridges/cartridge.h"
+#include "bus/cartridge.h"
 #include "peripherals/opl3fm.h"
 #include <cstdint>
 

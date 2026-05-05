@@ -7,8 +7,8 @@
 #include "spine/activation.h"
 #include "peripherals/peripheral_manager.h"
 #include "boards/board_descriptor.h"
-#include "drivers/driver_descriptor.h"
-#include "policy/policy_types.h"
+#include "spine/driver_descriptor.h"
+#include "spine/policy_types.h"
 #include "content/manifest.h"
 #include "content/manifest_parser.h"
 

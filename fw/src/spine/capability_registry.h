@@ -2,8 +2,8 @@
 #include <cstddef>
 #include "allocator/resource_model.h"
 #include "boards/board_descriptor.h"
-#include "drivers/driver_descriptor.h"
-#include "policy/policy_types.h"
+#include "spine/driver_descriptor.h"
+#include "spine/policy_types.h"
 
 // capability_registry.h — Declared → Allowed → Activated capability pipeline.
 //

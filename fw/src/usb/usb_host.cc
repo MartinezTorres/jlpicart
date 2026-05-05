@@ -1,7 +1,7 @@
 // usb_host.cc — UsbHost implementation.
 
 #include "usb/usb_host.h"
-#include "log/log.h"
+#include "diag/log.h"
 
 bool    UsbHost::g_msc_mounted_  = false;
 uint8_t UsbHost::g_msc_dev_addr_ = 0;

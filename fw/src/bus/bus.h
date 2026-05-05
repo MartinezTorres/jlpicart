@@ -11,7 +11,7 @@
 // asserted and the MSX bus is stalled).
 //
 
-#include "cartridges/cartridge.h"
+#include "bus/cartridge.h"
 #include <cstdint>
 
 namespace BUS {

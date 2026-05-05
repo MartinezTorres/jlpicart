@@ -1,6 +1,6 @@
 // test_log.cc — unit tests for the ring-buffer logger.
 #include "test_helpers.h"
-#include "log/log.h"
+#include "diag/log.h"
 #include <cstring>
 
 static void test_log_init_clears() {

@@ -1,7 +1,7 @@
 // fat_volume.cc — FatVolume implementation.
 
 #include "storage/fat_volume.h"
-#include "log/log.h"
+#include "diag/log.h"
 #include <cstdio>
 
 bool FatVolume::mount() {

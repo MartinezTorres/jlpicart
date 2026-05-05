@@ -16,7 +16,7 @@
 #include "crypto/sha256.h"
 #include "spine/policy_store.h"
 #include "storage/fat_util.h"
-#include "log/log.h"
+#include "diag/log.h"
 #include "ff.h"
 #include <cstring>
 #include <cstdio>

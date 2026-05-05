@@ -2,7 +2,7 @@
 
 #include "bus/bus_map.h"
 #include "bus/bus.h"
-#include "cartridges/cartridge.h"
+#include "bus/cartridge.h"
 
 namespace BusMap {
 

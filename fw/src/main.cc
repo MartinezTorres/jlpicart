@@ -25,7 +25,7 @@
 // Starting the bus (step 17) must not be delayed by USB enumeration.
 
 #include "diag/diag.h"
-#include "log/log.h"
+#include "diag/log.h"
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
@@ -33,7 +33,7 @@
 #include "allocator/allocator.h"
 #include "allocator/resource_model.h"
 #include "peripherals/peripheral_manager.h"
-#include "drivers/driver_descriptor.h"
+#include "spine/driver_descriptor.h"
 #include "bus/mapping_plan.h"
 #include "content/content_store.h"
 #include "boards/board_descriptor.h"

@@ -2,7 +2,7 @@
 
 #include "bus/mapping_plan.h"
 #include "mappers/mappers.h"
-#include "cartridges/cartridge.h"
+#include "bus/cartridge.h"
 #include "content/manifest.h"
 #include "content/manifest_parser.h"
 #include "boards/gpio_defs.h"

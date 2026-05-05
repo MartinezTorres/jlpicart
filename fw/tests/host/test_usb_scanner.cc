@@ -17,7 +17,7 @@
 #include "storage/fat_util.h"
 #include "spine/policy_store.h"
 #include "spine/security_posture.h"
-#include "security/otp_reader.h"
+#include "spine/otp_reader.h"
 #include "crypto/sha256.h"
 
 #include "fat_test_env.h"

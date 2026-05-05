@@ -21,7 +21,7 @@
 //   - psg_audio_init() must be called once before psg_service().
 //
 
-#include "cartridges/cartridge.h"
+#include "bus/cartridge.h"
 #include <cstdint>
 
 // ---------------------------------------------------------------------------

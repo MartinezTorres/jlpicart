@@ -7,7 +7,7 @@
 #include "usb/usb_device.h"
 #include "storage/diskio_flash.h"
 #include "storage/flash_layout.h"
-#include "log/log.h"
+#include "diag/log.h"
 #include "tusb.h"
 
 // ---------------------------------------------------------------------------

@@ -1,11 +1,11 @@
 # Makefile — JLPiCart Z80 API reference client
 #
 # Uses pinned SDCC 4.5.0 from ext/sdcc/bin/.
-# Run from fw/z80/api_client/ or via 'make -C fw/z80/api_client' from fw/.
+# Run from fw/src/msx/api/client/ or via 'make -C fw/src/msx/api/client' from fw/.
 #
 # Output: api_client.rom — flat binary, loadable as a 16KB MSX page-1 ROM.
 
-TOOLS_DIR := ../../../ext/sdcc
+TOOLS_DIR := ../../../../ext/sdcc
 SDCC      := $(TOOLS_DIR)/bin/sdcc
 SDASZ80   := $(TOOLS_DIR)/bin/sdasz80
 

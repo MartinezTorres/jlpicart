@@ -1,5 +1,5 @@
 #include "policy_store.h"
-#include "policy/policy_verify.h"
+#include "spine/policy_verify.h"
 #include "crypto/sha256.h"
 #include <cstring>
 

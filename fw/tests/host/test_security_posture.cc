@@ -1,7 +1,7 @@
 // test_security_posture.cc — unit tests for SecurityPosture::read.
 #include "test_helpers.h"
 #include "spine/security_posture.h"
-#include "security/otp_reader.h"
+#include "spine/otp_reader.h"
 #include <cstring>
 
 static constexpr size_t BUF_SIZE = 256;

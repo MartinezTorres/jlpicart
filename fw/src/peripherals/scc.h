@@ -42,7 +42,7 @@
 // Output sample rate: 44100 Hz.
 // SCC_TICKS_PER_SAMPLE_FP16 = floor(3579545/44100 × 65536) = 5319483.
 
-#include "cartridges/cartridge.h"
+#include "bus/cartridge.h"
 #include <cstdint>
 
 // ---------------------------------------------------------------------------

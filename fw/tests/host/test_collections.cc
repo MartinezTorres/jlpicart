@@ -168,7 +168,7 @@ private:
 // Helpers to stand up an open-policy PolicyStore for tests
 // ---------------------------------------------------------------------------
 
-#include "security/otp_reader.h"
+#include "spine/otp_reader.h"
 
 static PolicyStore make_open_policy() {
     static const uint8_t kZeroOtp[256] = {};

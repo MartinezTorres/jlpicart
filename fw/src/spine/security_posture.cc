@@ -1,5 +1,5 @@
 #include "security_posture.h"
-#include "security/otp_reader.h"
+#include "spine/otp_reader.h"
 #include <cstdio>
 
 SecurityPosture SecurityPosture::read(const OtpReader& otp) {

@@ -41,10 +41,10 @@ add_executable(jlpicart
 
     # Diagnostics and logging
     src/diag/diag.cc
-    src/log/log.cc
+    src/diag/log.cc
 
-    # Security
-    src/security/otp_reader_hw.cc
+    # Security and OTP
+    src/spine/otp_reader_hw.cc
     src/spine/security_posture.cc
 
     # Crypto
@@ -52,12 +52,12 @@ add_executable(jlpicart
     src/crypto/smk.cc
 
     # Policy
-    src/policy/policy_verify.cc
+    src/spine/policy_verify.cc
     src/spine/policy_store.cc
 
     # Capability descriptors and registry
     src/boards/board_descriptor_jlpicart.cc
-    src/drivers/driver_descriptor_table.cc
+    src/spine/driver_descriptor_table.cc
     src/spine/capability_registry.cc
 
     # API window (Stage 4) + Identity service (Stage 15)

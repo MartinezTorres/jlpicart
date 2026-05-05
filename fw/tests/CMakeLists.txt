@@ -22,14 +22,14 @@ set(COMMON_INC
 
 # Shared portable sources (no SDK, no flash, no OTP hardware).
 set(SRC_DIAG        "${FW_SRC}/diag/diag.cc")
-set(SRC_LOG         "${FW_SRC}/log/log.cc")
+set(SRC_LOG         "${FW_SRC}/diag/log.cc")
 set(SRC_SHA256      "${FW_SRC}/crypto/sha256.cc")
 set(SRC_POSTURE     "${FW_SRC}/spine/security_posture.cc")
-set(SRC_POL_VERIFY  "${FW_SRC}/policy/policy_verify.cc")
+set(SRC_POL_VERIFY  "${FW_SRC}/spine/policy_verify.cc")
 set(SRC_POL_STORE   "${FW_SRC}/spine/policy_store.cc")
 set(SRC_CAP_REG     "${FW_SRC}/spine/capability_registry.cc")
 set(SRC_BOARD_DESC  "${FW_SRC}/boards/board_descriptor_jlpicart.cc")
-set(SRC_DRV_TABLE   "${FW_SRC}/drivers/driver_descriptor_table.cc")
+set(SRC_DRV_TABLE   "${FW_SRC}/spine/driver_descriptor_table.cc")
 
 # ---------------------------------------------------------------------------
 # FAT infrastructure (used by all FAT-backed stores in host tests)

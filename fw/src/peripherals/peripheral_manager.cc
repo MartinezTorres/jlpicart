@@ -10,7 +10,7 @@
 #include "mappers/mappers.h"
 #include "content/content_store.h"
 #include "platform/platform.h"
-#include "log/log.h"
+#include "diag/log.h"
 #include <cstdio>
 #include <cstring>
 

@@ -46,7 +46,7 @@
 //   The ATA registers at 0x7C00–0x7E0F always override ROM reads regardless
 //   of the current bank (they are in hardware, not in the ROM window).
 
-#include "cartridges/cartridge.h"
+#include "bus/cartridge.h"
 #include <cstdint>
 
 // ---------------------------------------------------------------------------

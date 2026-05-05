@@ -5,7 +5,7 @@
 // sector-buffer window (0x7C00–0x7DFF).
 
 #include "peripherals/sunrise_ide.h"
-#include "cartridges/cartridge.h"
+#include "bus/cartridge.h"
 #include <cassert>
 #include <cstdio>
 #include <cstring>

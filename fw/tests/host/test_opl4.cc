@@ -16,7 +16,7 @@
 //  13. ADPCM nibble decode: known step produces known output.
 
 #include "peripherals/opl4.h"
-#include "cartridges/cartridge.h"
+#include "bus/cartridge.h"
 #include "boards/gpio_defs.h"
 
 #include "test_helpers.h"

@@ -3,7 +3,7 @@
 #include "storage/store.h"
 #include "storage/fat_util.h"
 #include "crypto/crc32.h"
-#include "log/log.h"
+#include "diag/log.h"
 #include "ff.h"
 #include <cstring>
 #include <cstdio>

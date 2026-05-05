@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-#include "security/otp_reader.h"
+#include "spine/otp_reader.h"
 
 // security_posture.h — OTP-derived security facts for JLPiCart.
 //

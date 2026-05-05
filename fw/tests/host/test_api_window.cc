@@ -7,9 +7,9 @@
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
 #include "boards/board_descriptor.h"
-#include "drivers/driver_descriptor.h"
-#include "security/otp_reader.h"
-#include "policy/policy_types.h"
+#include "spine/driver_descriptor.h"
+#include "spine/otp_reader.h"
+#include "spine/policy_types.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------

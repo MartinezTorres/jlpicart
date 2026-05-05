@@ -1,6 +1,6 @@
 // test_otp.cc — unit tests for FakeOtpReader and OtpReader helpers.
 #include "test_helpers.h"
-#include "security/otp_reader.h"
+#include "spine/otp_reader.h"
 #include <cstring>
 
 // Minimal OTP buffer for testing (covers the farthest offset we read).

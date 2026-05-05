@@ -5,7 +5,7 @@
 #include "platform/platform.h"
 #include "boards/gpio_defs.h"
 #include "bus/bus.h"
-#include "log/log.h"
+#include "diag/log.h"
 #include <pico.h>
 #include <pico/multicore.h>
 #include <pico/time.h>

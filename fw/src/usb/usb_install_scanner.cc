@@ -5,7 +5,7 @@
 #include "content/collection_format.h"
 #include "content/manifest.h"
 #include "content/manifest_parser.h"
-#include "log/log.h"
+#include "diag/log.h"
 #include <cstdio>
 #include <cstring>
 

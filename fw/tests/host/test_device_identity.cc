@@ -11,7 +11,7 @@
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
 #include "boards/board_descriptor.h"
-#include "drivers/driver_descriptor.h"
+#include "spine/driver_descriptor.h"
 
 // ed25519 verify via OpenSSL (host only).
 #include <openssl/evp.h>

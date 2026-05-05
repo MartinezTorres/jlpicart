@@ -12,7 +12,7 @@
 //   - Writing R13 resets envelope counter and position
 
 #include "peripherals/psg.h"
-#include "cartridges/cartridge.h"
+#include "bus/cartridge.h"
 #include "test_helpers.h"
 #include <cstdio>
 #include <cstring>
