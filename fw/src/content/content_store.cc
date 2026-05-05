@@ -1,7 +1,7 @@
 // content_store.cc — ContentStore over FAT files.
 
 #include "content/content_store.h"
-#include "storage/fat_util.h"
+#include "filesystem/fat_util.h"
 #include <cstring>
 #include <cstdio>
 

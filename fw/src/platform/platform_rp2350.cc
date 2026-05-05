@@ -3,7 +3,7 @@
 // Hardware-only: excluded from host-test builds via CMakeLists.txt.
 
 #include "platform/platform.h"
-#include "boards/gpio_defs.h"
+#include "platform/gpio_defs.h"
 #include "bus/bus.h"
 #include "diag/log.h"
 #include <pico.h>

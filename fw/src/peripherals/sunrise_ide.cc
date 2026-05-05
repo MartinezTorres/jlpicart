@@ -1,7 +1,7 @@
 // sunrise_ide.cc — Sunrise ATA-IDE compatible interface emulation.
 
 #include "peripherals/sunrise_ide.h"
-#include "boards/gpio_defs.h"
+#include "platform/gpio_defs.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------

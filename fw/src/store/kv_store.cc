@@ -1,6 +1,6 @@
 // kv_store.cc — Log-structured KV store implementation.
 
-#include "storage/kv_store.h"
+#include "store/kv_store.h"
 #include "crypto/crc32.h"
 #include <cstring>
 

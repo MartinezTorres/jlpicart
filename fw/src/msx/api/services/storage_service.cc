@@ -2,7 +2,7 @@
 
 #include "msx/api/services/storage_service.h"
 #include "msx/api/api_window.h"
-#include "storage/save_store.h"
+#include "store/save_store.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------

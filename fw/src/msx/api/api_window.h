@@ -10,7 +10,7 @@
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
-#include "profiles/profile_store.h"
+#include "store/profile_store.h"
 #include <cstddef>
 
 class SaveStore;

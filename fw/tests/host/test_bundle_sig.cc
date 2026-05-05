@@ -18,7 +18,7 @@
 #include <cstdio>
 
 #include "fat_test_env.h"
-#include "storage/fat_util.h"
+#include "filesystem/fat_util.h"
 
 // ---------------------------------------------------------------------------
 // Helper: build a BundleSigEnvelope with the given alg and signature

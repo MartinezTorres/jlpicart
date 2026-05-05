@@ -3,7 +3,7 @@
 // See scc.h for register map and design notes.
 
 #include "peripherals/scc.h"
-#include "boards/gpio_defs.h"
+#include "platform/gpio_defs.h"
 #include <cstring>
 
 #ifndef JLPICART_HOST_TEST

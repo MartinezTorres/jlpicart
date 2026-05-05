@@ -19,7 +19,7 @@
 // Thread safety: NOT thread-safe.
 
 #include "diag/diag.h"
-#include "storage/flash_device.h"
+#include "filesystem/flash_device.h"
 #include <cstddef>
 #include <cstdint>
 

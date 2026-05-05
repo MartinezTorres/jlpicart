@@ -3,12 +3,12 @@
 // Tests verify: defaults, round-trip persistence, missing-key fallback,
 // corrupt-blob fallback, and factory reset operations.
 
-#include "settings/system_settings_store.h"
-#include "settings/system_settings.h"
-#include "profiles/profile_store.h"
+#include "store/system_settings_store.h"
+#include "store/system_settings.h"
+#include "store/profile_store.h"
 
 #include "fat_test_env.h"
-#include "storage/fat_util.h"
+#include "filesystem/fat_util.h"
 #include "test_helpers.h"
 #include <cstring>
 #include <cstdio>

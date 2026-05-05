@@ -1,11 +1,11 @@
 // save_store.cc — Save blob CRUD over FAT files + optional Store sync tracking.
 
-#include "storage/save_store.h"
-#include "storage/fat_util.h"
-#include "storage/store.h"
-#include "storage/store_record.h"
-#include "storage/store_key.h"
-#include "profiles/profile_store.h"
+#include "store/save_store.h"
+#include "filesystem/fat_util.h"
+#include "store/store.h"
+#include "store/store_record.h"
+#include "store/store_key.h"
+#include "store/profile_store.h"
 #include <cstring>
 #include <cstdio>
 

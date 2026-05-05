@@ -5,7 +5,7 @@
 
 #include "msx/api/services/core_service.h"
 #include "msx/api/api_window.h"
-#include "identity/device_identity.h"
+#include "spine/device_identity.h"
 #include <cstring>
 
 #ifndef JLPICART_HOST_TEST

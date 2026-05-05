@@ -1,10 +1,10 @@
 // profile_store.cc — ProfileStore over FAT manifest + optional Store.
 
-#include "profiles/profile_store.h"
-#include "storage/fat_util.h"
-#include "storage/store.h"
-#include "storage/store_record.h"
-#include "storage/store_key.h"
+#include "store/profile_store.h"
+#include "filesystem/fat_util.h"
+#include "store/store.h"
+#include "store/store_record.h"
+#include "store/store_key.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------

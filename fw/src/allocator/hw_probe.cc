@@ -26,7 +26,7 @@ bool hw_probe(const char* /*capability_name*/) {
 
 #else
 
-#include "boards/gpio_defs.h"
+#include "platform/gpio_defs.h"
 #include "hardware/uart.h"
 #include "hardware/i2c.h"
 #include "hardware/gpio.h"

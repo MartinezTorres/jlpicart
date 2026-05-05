@@ -28,7 +28,7 @@ set(SRC_POSTURE     "${FW_SRC}/spine/security_posture.cc")
 set(SRC_POL_VERIFY  "${FW_SRC}/spine/policy_verify.cc")
 set(SRC_POL_STORE   "${FW_SRC}/spine/policy_store.cc")
 set(SRC_CAP_REG     "${FW_SRC}/spine/capability_registry.cc")
-set(SRC_BOARD_DESC  "${FW_SRC}/boards/board_descriptor_jlpicart.cc")
+set(SRC_BOARD_DESC  "${FW_SRC}/platform/board_descriptor_jlpicart.cc")
 set(SRC_DRV_TABLE   "${FW_SRC}/spine/driver_descriptor_table.cc")
 
 # ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ set(SRC_FATFS
 set(SRC_DISKIO_RAM "${CMAKE_CURRENT_LIST_DIR}/host/diskio_ram.cc")
 
 # FatVolume lifecycle (mount/unmount/format).
-set(SRC_FAT_VOLUME "${FW_SRC}/storage/fat_volume.cc")
+set(SRC_FAT_VOLUME "${FW_SRC}/filesystem/fat_volume.cc")
 
 # Aggregate: every test that uses any FAT-backed store needs all four.
 # fat_volume.cc calls log_info/log_warn, so SRC_LOG is always required.
@@ -61,22 +61,22 @@ set(SRC_FAT_DEPS
 # Store primitives (uuid + store; store_key.h and store_record.h are header-only)
 # ---------------------------------------------------------------------------
 
-set(SRC_STORE  "${FW_SRC}/storage/uuid.cc"
-               "${FW_SRC}/storage/store.cc")
+set(SRC_STORE  "${FW_SRC}/store/uuid.cc"
+               "${FW_SRC}/store/store.cc")
 
 # ---------------------------------------------------------------------------
 # Store sources (all FAT-backed now; no KvStore dependency)
 # ---------------------------------------------------------------------------
 
-set(SRC_PROFILE_STORE  "${FW_SRC}/profiles/profile_store.cc")
-set(SRC_SAVE_STORE     "${FW_SRC}/storage/save_store.cc")
-set(SRC_STATS_STORE    "${FW_SRC}/stats/stats_store.cc")
-set(SRC_SYSTEM_SETTINGS "${FW_SRC}/settings/system_settings_store.cc")
+set(SRC_PROFILE_STORE  "${FW_SRC}/store/profile_store.cc")
+set(SRC_SAVE_STORE     "${FW_SRC}/store/save_store.cc")
+set(SRC_STATS_STORE    "${FW_SRC}/store/stats_store.cc")
+set(SRC_SYSTEM_SETTINGS "${FW_SRC}/store/system_settings_store.cc")
 set(SRC_CONTENT_STORE  "${FW_SRC}/content/content_store.cc")
 
 # KvStore and FlashDevice: used by test_storage standalone tests.
-set(SRC_FLASH_DEVICE  "${FW_SRC}/storage/flash_device.cc")
-set(SRC_KV_STORE      "${FW_SRC}/storage/kv_store.cc")
+set(SRC_FLASH_DEVICE  "${FW_SRC}/filesystem/flash_device.cc")
+set(SRC_KV_STORE      "${FW_SRC}/store/kv_store.cc")
 
 # ---------------------------------------------------------------------------
 # API / service sources
@@ -98,7 +98,7 @@ set(SRC_MONOCYPHER "${FW_SRC}/crypto/monocypher/monocypher.c")
 
 # device_identity.cc requires smk.cc and monocypher.c; bundle them.
 set(SRC_DEVICE_IDENTITY
-    "${FW_SRC}/identity/device_identity.cc"
+    "${FW_SRC}/spine/device_identity.cc"
     "${FW_SRC}/crypto/smk.cc"
     "${FW_SRC}/crypto/monocypher/monocypher.c"
 )
@@ -280,7 +280,7 @@ set(SRC_OPL3FM          "${FW_SRC}/peripherals/opl3fm.cc")
 set(SRC_OPL4            "${FW_SRC}/peripherals/opl3fm.cc"
                         "${FW_SRC}/peripherals/opl4.cc")
 set(SRC_SUNRISE_IDE     "${FW_SRC}/peripherals/sunrise_ide.cc")
-set(SRC_MAPPERS         "${FW_SRC}/mappers/mappers.cc")
+set(SRC_MAPPERS         "${FW_SRC}/bus/mappers.cc")
 set(SRC_DEVICE_TYPE     "${FW_SRC}/bus/device_type.cc")
 set(SRC_DEVICE_CHECK    "${FW_SRC}/allocator/device_check.cc")
 set(SRC_MAPPING_PLAN    "${FW_SRC}/bus/mapping_plan.cc"

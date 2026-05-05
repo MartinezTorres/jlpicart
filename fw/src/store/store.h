@@ -16,9 +16,9 @@
 //   Ratio of current file size to STORE_MAX_BYTES (320 KB ≈ 2048 records).
 //   At >= 0.8 the caller should compact or warn the user.
 
-#include "storage/store_key.h"
-#include "storage/store_record.h"
-#include "storage/uuid.h"
+#include "store/store_key.h"
+#include "store/store_record.h"
+#include "store/uuid.h"
 #include "diag/diag.h"
 #include <cstddef>
 

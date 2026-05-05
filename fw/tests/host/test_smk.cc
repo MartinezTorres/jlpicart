@@ -10,9 +10,9 @@
 //   - DeviceIdentity: Stage 22 plaintext migration works transparently
 
 #include "crypto/smk.h"
-#include "identity/device_identity.h"
+#include "spine/device_identity.h"
 #include "fat_test_env.h"
-#include "storage/fat_util.h"
+#include "filesystem/fat_util.h"
 #include "test_helpers.h"
 #include <cstring>
 #include <cstdio>

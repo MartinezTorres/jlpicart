@@ -7,7 +7,7 @@
 //   POLICY_ALLOW_USB_COLLECTION_INSTALL — UsbInstallScanner::run_scan()
 //   POLICY_ALLOW_UNSIGNED_COLLECTIONS   — Installer::run() unsigned path
 
-#include "identity/device_identity.h"
+#include "spine/device_identity.h"
 #include "msx/api/api_window.h"
 #include "msx/api/services/core_service.h"
 #include "msx/api/api_types.h"
@@ -15,18 +15,18 @@
 #include "spine/policy_store.h"
 #include "spine/security_posture.h"
 #include "spine/policy_types.h"
-#include "boards/board_descriptor.h"
+#include "platform/board_descriptor.h"
 #include "spine/driver_descriptor.h"
 #include "spine/otp_reader.h"
 #include "content/installer.h"
 #include "content/manifest.h"
 #include "content/collection_format.h"
 #include "content/content_store.h"
-#include "storage/fat_util.h"
+#include "filesystem/fat_util.h"
 #include "usb/usb_host.h"
 #include "usb/usb_install_scanner.h"
 #include "crypto/sha256.h"
-#include "profiles/profile_store.h"
+#include "store/profile_store.h"
 
 #include "fat_test_env.h"
 #include "test_helpers.h"

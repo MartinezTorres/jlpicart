@@ -55,7 +55,7 @@ DiagStatus TransportEspAt::http_request(uint8_t, bool, const char*,
 
 #else
 
-#include "boards/gpio_defs.h"
+#include "platform/gpio_defs.h"
 #include "hardware/uart.h"
 #include "hardware/gpio.h"
 #include "pico/time.h"

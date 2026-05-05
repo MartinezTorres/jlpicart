@@ -5,7 +5,7 @@
 //          GUEST_BEGIN (stub), GUEST_END (stub).
 
 #include "msx/api/api_types.h"
-#include "profiles/profile_store.h"
+#include "store/profile_store.h"
 
 class ApiWindow;
 

@@ -1,7 +1,7 @@
 #pragma once
 // profile_format.h — Persistent profile record format.
 
-#include "storage/uuid.h"
+#include "store/uuid.h"
 #include <cstdint>
 #include <cstddef>
 

@@ -10,7 +10,7 @@
 #include "msx/api/services/userstats_service.h"
 #include "net/network_service.h"
 #include "net/transport_esp_at.h"
-#include "identity/device_identity.h"
+#include "spine/device_identity.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------

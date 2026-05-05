@@ -1,11 +1,11 @@
 // test_bus_mapper.cc — Stage 9: mapper setup, MappingPlan, and manifest bridge tests.
 
 #include "bus/mapping_plan.h"
-#include "mappers/mappers.h"
+#include "bus/mappers.h"
 #include "bus/cartridge.h"
 #include "content/manifest.h"
 #include "content/manifest_parser.h"
-#include "boards/gpio_defs.h"
+#include "platform/gpio_defs.h"
 
 #include <cassert>
 #include <cstring>

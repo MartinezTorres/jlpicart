@@ -1,6 +1,6 @@
 // flash_device.cc — FlashDevice implementation (host sim or RP2350 hardware).
 
-#include "storage/flash_device.h"
+#include "filesystem/flash_device.h"
 #include <cstring>
 #include <algorithm>
 

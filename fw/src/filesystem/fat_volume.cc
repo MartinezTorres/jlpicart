@@ -1,6 +1,6 @@
 // fat_volume.cc — FatVolume implementation.
 
-#include "storage/fat_volume.h"
+#include "filesystem/fat_volume.h"
 #include "diag/log.h"
 #include <cstdio>
 

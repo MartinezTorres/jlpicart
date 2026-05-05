@@ -4,9 +4,9 @@
 //   FlashDevice: bounds, read/write/erase, power-loss injection.
 //   KvStore: roundtrip/overwrite/delete/power-loss/reinit.
 
-#include "storage/flash_device.h"
-#include "storage/flash_layout.h"
-#include "storage/kv_store.h"
+#include "filesystem/flash_device.h"
+#include "filesystem/flash_layout.h"
+#include "store/kv_store.h"
 #include "fat_test_env.h"
 
 #include <cstdio>

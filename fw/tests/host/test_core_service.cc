@@ -8,11 +8,11 @@
 #include "msx/api/api_window.h"
 #include "msx/api/api_types.h"
 #include "msx/menu/menu_host_abi.h"
-#include "profiles/profile_store.h"
+#include "store/profile_store.h"
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
-#include "boards/board_descriptor.h"
+#include "platform/board_descriptor.h"
 #include "spine/driver_descriptor.h"
 #include "menu/menu_app.h"
 

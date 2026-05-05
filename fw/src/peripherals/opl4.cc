@@ -28,7 +28,7 @@
 //   VIB depth: ~±0, ±3.4, ±6.7, ±13.4 cents. AM depth: ~0, 1.8, 2.5, 3.0 dB.
 
 #include "peripherals/opl4.h"
-#include "boards/gpio_defs.h"
+#include "platform/gpio_defs.h"
 #include <cstring>
 
 #ifndef JLPICART_HOST_TEST

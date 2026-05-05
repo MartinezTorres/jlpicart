@@ -19,8 +19,8 @@
 
 #include "menu/menu_app.h"
 #include "msx/menu/menu_host_abi.h"
-#include "profiles/profile_store.h"
-#include "profiles/profile_format.h"
+#include "store/profile_store.h"
+#include "store/profile_format.h"
 
 #include "fat_test_env.h"
 #include "test_helpers.h"

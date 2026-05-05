@@ -12,7 +12,7 @@ set(PICO_SDK_PATH "${CMAKE_CURRENT_LIST_DIR}/.pico-sdk/sdk/${sdkVersion}")
 message(STATUS "Using Pico SDK at ${PICO_SDK_PATH}")
 set(PICO_BOARD jlpicart_board CACHE STRING "Board type")
 set(PICO_PLATFORM rp2350-arm-s CACHE STRING "Platform type")
-set(PICO_BOARD_HEADER_DIRS ${CMAKE_CURRENT_LIST_DIR}/src/boards)
+set(PICO_BOARD_HEADER_DIRS ${CMAKE_CURRENT_LIST_DIR}/src/platform)
 
 get_filename_component(PICO_SDK_PATH "${PICO_SDK_PATH}" REALPATH BASE_DIR "${CMAKE_BINARY_DIR}")
 if (NOT EXISTS "${PICO_SDK_PATH}/pico_sdk_init.cmake")
@@ -56,7 +56,7 @@ add_executable(jlpicart
     src/spine/policy_store.cc
 
     # Capability descriptors and registry
-    src/boards/board_descriptor_jlpicart.cc
+    src/platform/board_descriptor_jlpicart.cc
     src/spine/driver_descriptor_table.cc
     src/spine/capability_registry.cc
 
@@ -72,14 +72,14 @@ add_executable(jlpicart
     src/menu/menu_app.cc
 
     # System Settings (Stage 17)
-    src/settings/system_settings_store.cc
+    src/store/system_settings_store.cc
 
     # Save store and Storage service (Stage 19)
-    src/storage/save_store.cc
+    src/store/save_store.cc
     src/msx/api/services/storage_service.cc
 
     # Stats store and UserStats service (Stage 21)
-    src/stats/stats_store.cc
+    src/store/stats_store.cc
     src/msx/api/services/userstats_service.cc
 
     # ESP32 AT transport and Network service (Stage 32)
@@ -87,14 +87,13 @@ add_executable(jlpicart
     src/net/network_service.cc
 
     # Device Identity Key and GET_DEVICE_ID (Stage 22/24)
-    src/identity/device_identity.cc
+    src/spine/device_identity.cc
 
     # Monocypher — vendored ed25519 / Argon2 (Stage 24)
     src/crypto/monocypher/monocypher.c
 
-    # Storage substrate (Stage 6)
-    src/storage/flash_device.cc
-    src/storage/append_log.cc
+    # Filesystem substrate
+    src/filesystem/flash_device.cc
 
     # Allocator (Stage 8 + gap #2 HW probes)
     src/allocator/allocator.cc
@@ -105,7 +104,7 @@ add_executable(jlpicart
     src/spine/activation.cc
 
     # Mappers (Stage 9)
-    src/mappers/mappers.cc
+    src/bus/mappers.cc
 
     # Bus loop (Stage 9)
     src/bus/bus.cc
@@ -142,7 +141,7 @@ add_executable(jlpicart
     src/peripherals/sunrise_ide.cc
 
     # User Profiles (Stage 15)
-    src/profiles/profile_store.cc
+    src/store/profile_store.cc
 
     # USB host (Stage 14)
     src/usb/usb_host.cc
@@ -154,9 +153,9 @@ add_executable(jlpicart
     src/usb/usb_device.cc
 
     # FAT volume on internal flash
-    src/storage/diskio_flash.cc
-    src/storage/diskio.cc
-    src/storage/fat_volume.cc
+    src/filesystem/diskio_flash.cc
+    src/filesystem/diskio.cc
+    src/filesystem/fat_volume.cc
 
     # FatFs (Stage 14) — from bundled tinyusb lib
     ext/tinyusb/lib/fatfs/source/ff.c
@@ -218,7 +217,7 @@ target_link_libraries(jlpicart
 )
 
 set_target_properties(jlpicart PROPERTIES
-    PICO_TARGET_LINKER_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/src/boards/memmap_jlpicart.ld
+    PICO_TARGET_LINKER_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/src/platform/memmap_jlpicart.ld
 )
 
 pico_add_extra_outputs(jlpicart)

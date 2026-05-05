@@ -3,8 +3,8 @@
 // Host test path: OpenSSL EVP ed25519.
 // Hardware path: pico_rand + Monocypher ed25519.
 
-#include "identity/device_identity.h"
-#include "storage/fat_util.h"
+#include "spine/device_identity.h"
+#include "filesystem/fat_util.h"
 #include "crypto/smk.h"
 #include <cstring>
 

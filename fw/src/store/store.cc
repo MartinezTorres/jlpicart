@@ -1,7 +1,7 @@
 // event_log.cc — FAT-backed append-only event log.
 
-#include "storage/store.h"
-#include "storage/fat_util.h"
+#include "store/store.h"
+#include "filesystem/fat_util.h"
 #include "crypto/crc32.h"
 #include "diag/log.h"
 #include "ff.h"

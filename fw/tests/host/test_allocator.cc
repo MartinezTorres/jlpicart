@@ -6,7 +6,7 @@
 #include "spine/capability_registry.h"
 #include "spine/activation.h"
 #include "peripherals/peripheral_manager.h"
-#include "boards/board_descriptor.h"
+#include "platform/board_descriptor.h"
 #include "spine/driver_descriptor.h"
 #include "spine/policy_types.h"
 #include "content/manifest.h"

@@ -8,8 +8,8 @@
 #include "menu/menu_app.h"
 #include "menu/input_decoder.h"
 #include "content/content_store.h"
-#include "profiles/profile_store.h"
-#include "settings/system_settings_store.h"
+#include "store/profile_store.h"
+#include "store/system_settings_store.h"
 #include "msx/api/api_window.h"
 #include <cstring>
 #include <cstdio>

@@ -1,20 +1,20 @@
 // test_stats_store.cc — host tests for StatsStore and UserStats service (Stage 21).
 
-#include "stats/stats_store.h"
-#include "identity/device_identity.h"
+#include "store/stats_store.h"
+#include "spine/device_identity.h"
 #include <openssl/evp.h>
-#include "profiles/profile_store.h"
-#include "storage/store.h"
+#include "store/profile_store.h"
+#include "store/store.h"
 #include "msx/api/api_window.h"
 #include "msx/api/api_types.h"
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
-#include "boards/board_descriptor.h"
+#include "platform/board_descriptor.h"
 #include "spine/driver_descriptor.h"
 
 #include "fat_test_env.h"
-#include "storage/fat_util.h"
+#include "filesystem/fat_util.h"
 #include "test_helpers.h"
 #include <cstring>
 #include <cstdio>

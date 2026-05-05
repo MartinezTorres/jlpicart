@@ -16,7 +16,7 @@
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
-#include "boards/board_descriptor.h"
+#include "platform/board_descriptor.h"
 #include "spine/driver_descriptor.h"
 #include "spine/otp_reader.h"
 #include <cstring>

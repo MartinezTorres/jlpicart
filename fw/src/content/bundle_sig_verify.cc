@@ -1,7 +1,7 @@
 // bundle_sig_verify.cc — ed25519 bundle signature verification.
 
 #include "content/bundle_sig_verify.h"
-#include "storage/fat_util.h"
+#include "filesystem/fat_util.h"
 #include "crypto/monocypher/monocypher.h"
 #include <cstring>
 

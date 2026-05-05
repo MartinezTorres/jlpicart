@@ -9,7 +9,7 @@
 // calling write() or erase().
 
 #include "diag/diag.h"
-#include "storage/flash_layout.h"
+#include "filesystem/flash_layout.h"
 #include <cstddef>
 #include <cstdint>
 

@@ -7,7 +7,7 @@
 #include "content/content_store.h"
 #include "content/installer.h"
 #include "bus/mapping_plan.h"
-#include "storage/fat_util.h"
+#include "filesystem/fat_util.h"
 #include "spine/policy_store.h"
 #include "spine/security_posture.h"
 #include "spine/otp_reader.h"

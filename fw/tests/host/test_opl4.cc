@@ -17,7 +17,7 @@
 
 #include "peripherals/opl4.h"
 #include "bus/cartridge.h"
-#include "boards/gpio_defs.h"
+#include "platform/gpio_defs.h"
 
 #include "test_helpers.h"
 #include <cstring>

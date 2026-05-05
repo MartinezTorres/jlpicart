@@ -4,7 +4,7 @@
 // Backed by 1:/system/settings.bin (raw binary blob).
 // FatVolume must be mounted before calling init().
 
-#include "settings/system_settings.h"
+#include "store/system_settings.h"
 #include "diag/diag.h"
 
 class ProfileStore;

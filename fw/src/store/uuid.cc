@@ -1,6 +1,6 @@
 // uuid.cc — UUID generation and formatting.
 
-#include "storage/uuid.h"
+#include "store/uuid.h"
 #include <cstring>
 
 #ifndef JLPICART_HOST_TEST

@@ -7,7 +7,7 @@
 // Collision probability across typical game libraries (<=10k distinct IDs)
 // is negligible (<1e-4).
 
-#include "storage/uuid.h"
+#include "store/uuid.h"
 #include <cstdint>
 #include <cstring>
 

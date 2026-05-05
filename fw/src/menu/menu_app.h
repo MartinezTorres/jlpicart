@@ -9,7 +9,7 @@
 
 #include "msx/menu/menu_host_abi.h"   // MenuMailbox, HostInfo, InputSnapshot
 #include "content/collection_format.h" // CollectionRecord
-#include "profiles/profile_format.h"  // ProfileRecord, PROF_MAX_PROFILES, PROF_ID_NONE
+#include "store/profile_format.h"  // ProfileRecord, PROF_MAX_PROFILES, PROF_ID_NONE
 #include <cstdint>
 
 // Forward declarations — full types are only needed in the .cc file.

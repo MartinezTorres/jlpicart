@@ -8,7 +8,7 @@
 //   // ... create stores, call init(), do test ...
 //   env.reset();              // re-format to blank state between tests
 
-#include "storage/fat_volume.h"
+#include "filesystem/fat_volume.h"
 #include <cassert>
 
 // Declared in diskio_ram.cc.

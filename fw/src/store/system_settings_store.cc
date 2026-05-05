@@ -1,8 +1,8 @@
 // system_settings_store.cc — SystemSettings load/save over FAT.
 
-#include "settings/system_settings_store.h"
-#include "storage/fat_util.h"
-#include "profiles/profile_store.h"
+#include "store/system_settings_store.h"
+#include "filesystem/fat_util.h"
+#include "store/profile_store.h"
 #include <cstring>
 
 SystemSettings SystemSettingsStore::defaults()

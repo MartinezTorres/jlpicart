@@ -9,7 +9,7 @@
 //
 // Thread safety: NOT thread-safe.
 
-#include "profiles/profile_format.h"
+#include "store/profile_format.h"
 #include "diag/diag.h"
 #include <cstdint>
 

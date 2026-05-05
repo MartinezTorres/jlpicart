@@ -10,7 +10,7 @@
 #ifndef JLPICART_HOST_TEST
 
 #include "bus/bus.h"
-#include "boards/gpio_defs.h"
+#include "platform/gpio_defs.h"
 
 #include <hardware/structs/sio.h>
 #include <hardware/structs/systick.h>

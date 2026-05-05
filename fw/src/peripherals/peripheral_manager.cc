@@ -7,7 +7,7 @@
 #include "peripherals/sunrise_ide.h"
 #include "bus/bus_map.h"
 #include "bus/bus.h"
-#include "mappers/mappers.h"
+#include "bus/mappers.h"
 #include "content/content_store.h"
 #include "platform/platform.h"
 #include "diag/log.h"

@@ -5,12 +5,12 @@
 // 64-byte Store inline limit); a compact LEADER_ENTRY Store record
 // (score+timestamp, 8 bytes) is appended best-effort for sync tracking.
 
-#include "stats/stats_store.h"
-#include "identity/device_identity.h"
-#include "storage/fat_util.h"
-#include "storage/store.h"
-#include "storage/store_record.h"
-#include "profiles/profile_store.h"
+#include "store/stats_store.h"
+#include "spine/device_identity.h"
+#include "filesystem/fat_util.h"
+#include "store/store.h"
+#include "store/store_record.h"
+#include "store/profile_store.h"
 #include <cstring>
 #include <cstdio>
 

@@ -4,20 +4,20 @@
 // The tests verify: key generation, persistence (idempotency), sign/verify,
 // and scoped device ID derivation via GET_DEVICE_ID.
 
-#include "identity/device_identity.h"
+#include "spine/device_identity.h"
 #include "msx/api/api_window.h"
 #include "msx/api/api_types.h"
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
-#include "boards/board_descriptor.h"
+#include "platform/board_descriptor.h"
 #include "spine/driver_descriptor.h"
 
 // ed25519 verify via OpenSSL (host only).
 #include <openssl/evp.h>
 
 #include "fat_test_env.h"
-#include "storage/fat_util.h"
+#include "filesystem/fat_util.h"
 #include "test_helpers.h"
 #include <cstring>
 #include <cstdio>

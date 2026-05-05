@@ -2,8 +2,8 @@
 
 #include "msx/api/services/userstats_service.h"
 #include "msx/api/api_window.h"
-#include "stats/stats_store.h"
-#include "identity/device_identity.h"
+#include "store/stats_store.h"
+#include "spine/device_identity.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------

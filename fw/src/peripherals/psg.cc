@@ -18,7 +18,7 @@
 #include <cstring>
 
 #ifndef JLPICART_HOST_TEST
-#  include "boards/gpio_defs.h"
+#  include "platform/gpio_defs.h"
 #  include "hardware/gpio.h"
 #  include "hardware/pwm.h"
 #  include "pico/time.h"

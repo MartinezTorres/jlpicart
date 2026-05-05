@@ -15,7 +15,7 @@
 //   crc32(u32)        @ 156  CRC32 of bytes 0..155
 //                     = 160 bytes total
 
-#include "storage/store_key.h"
+#include "store/store_key.h"
 #include <cstdint>
 
 // ---------------------------------------------------------------------------

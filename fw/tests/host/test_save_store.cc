@@ -1,13 +1,13 @@
 // test_save_store.cc — host tests for SaveStore and Storage service (Stage 19).
 
-#include "storage/save_store.h"
-#include "profiles/profile_store.h"
+#include "store/save_store.h"
+#include "store/profile_store.h"
 #include "msx/api/api_window.h"
 #include "msx/api/api_types.h"
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
-#include "boards/board_descriptor.h"
+#include "platform/board_descriptor.h"
 #include "spine/driver_descriptor.h"
 
 #include "fat_test_env.h"
