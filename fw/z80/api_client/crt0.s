@@ -12,7 +12,7 @@
         .area   _HEADER (ABS)
         .org    0x4000
 
-        ; MSX ROM identification header (spec.md §5.1: Subslot 1 — System).
+        ; MSX ROM identification header.
         .db     0x41, 0x42      ; 'AB' — MSX ROM magic
         .dw     _rom_init       ; INIT routine address
         .dw     0x0000          ; STATEMENT entry (not used)

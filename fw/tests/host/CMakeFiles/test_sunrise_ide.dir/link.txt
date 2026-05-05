@@ -1,1 +1,0 @@
-/usr/bin/c++ -g CMakeFiles/test_sunrise_ide.dir/test_sunrise_ide.cc.o CMakeFiles/test_sunrise_ide.dir/home/claude/repos/jlpicart/fw/src/peripherals/sunrise_ide.cc.o CMakeFiles/test_sunrise_ide.dir/home/claude/repos/jlpicart/fw/src/diag/diag.cc.o -o test_sunrise_ide  /usr/lib/x86_64-linux-gnu/libcrypto.so 

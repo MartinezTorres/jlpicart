@@ -1,1 +1,0 @@
-/usr/bin/c++ -g CMakeFiles/test_menu_stub.dir/test_menu_stub.cc.o CMakeFiles/test_menu_stub.dir/home/claude/repos/jlpicart/fw/src/msx/menu/menu_host_abi.cc.o -o test_menu_stub  /usr/lib/x86_64-linux-gnu/libcrypto.so 

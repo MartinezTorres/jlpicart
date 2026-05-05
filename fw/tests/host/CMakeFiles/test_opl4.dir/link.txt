@@ -1,1 +1,0 @@
-/usr/bin/c++ -g CMakeFiles/test_opl4.dir/test_opl4.cc.o CMakeFiles/test_opl4.dir/home/claude/repos/jlpicart/fw/src/peripherals/opl3fm.cc.o CMakeFiles/test_opl4.dir/home/claude/repos/jlpicart/fw/src/peripherals/opl4.cc.o CMakeFiles/test_opl4.dir/home/claude/repos/jlpicart/fw/src/diag/diag.cc.o -o test_opl4  /usr/lib/x86_64-linux-gnu/libcrypto.so 

@@ -1,7 +1,7 @@
 ; crt0.s — Menu stub page layout for JLPiCart.
 ;
 ; The Menu Page is 16KB, mapped at Z80 page 1 (0x4000–0x7FFF, subslot 1).
-; Layout per spec.md §8:
+; ROM header layout:
 ;   0x4000–0x403F  MenuStubHeader (64 bytes, "JLMN")
 ;   0x4040–0x407F  MenuMailboxRegs (64 bytes, zeroed)
 ;   0x4080–0x40FF  Reserved (128 bytes)

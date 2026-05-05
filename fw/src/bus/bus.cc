@@ -4,9 +4,8 @@
 // The guard below is a belt-and-suspenders check; the CMakeLists.txt
 // already omits this file from test_bus_mapper.
 //
-// Logic adapted from old_src/bus/bus.cc.  GPIO constants come from
-// boards/gpio_defs.h; Pico SDK hardware-register headers are the only
-// SDK dependency here.
+// GPIO constants come from boards/gpio_defs.h; Pico SDK hardware-register
+// headers are the only SDK dependency here.
 
 #ifndef JLPICART_HOST_TEST
 

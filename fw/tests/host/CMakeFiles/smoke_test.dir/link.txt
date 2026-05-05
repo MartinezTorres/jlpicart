@@ -1,1 +1,0 @@
-/usr/bin/c++ -g CMakeFiles/smoke_test.dir/smoke_test.cc.o -o smoke_test  /usr/lib/x86_64-linux-gnu/libcrypto.so 

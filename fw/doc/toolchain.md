@@ -8,8 +8,7 @@ Run once per fresh clone to populate the SDK and toolchain:
 bash tools/fetch_pico_sdk.sh
 ```
 
-This creates `fw/.pico-sdk/` with the pinned SDK, ARM toolchain, and
-picotool. See `tools/README.md` for details.
+This creates `fw/.pico-sdk/` with the pinned SDK, ARM toolchain, and picotool.
 
 ## Building the firmware
 

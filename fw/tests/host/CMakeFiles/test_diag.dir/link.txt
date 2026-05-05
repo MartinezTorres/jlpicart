@@ -1,1 +1,0 @@
-/usr/bin/c++ -g CMakeFiles/test_diag.dir/test_diag.cc.o CMakeFiles/test_diag.dir/home/claude/repos/jlpicart/fw/src/diag/diag.cc.o -o test_diag  /usr/lib/x86_64-linux-gnu/libcrypto.so 
