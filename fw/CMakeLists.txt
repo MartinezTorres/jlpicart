@@ -12,7 +12,7 @@ set(PICO_SDK_PATH "${CMAKE_CURRENT_LIST_DIR}/.pico-sdk/sdk/${sdkVersion}")
 message(STATUS "Using Pico SDK at ${PICO_SDK_PATH}")
 set(PICO_BOARD jlpicart_board CACHE STRING "Board type")
 set(PICO_PLATFORM rp2350-arm-s CACHE STRING "Platform type")
-set(PICO_BOARD_HEADER_DIRS ${CMAKE_CURRENT_LIST_DIR}/sdk)
+set(PICO_BOARD_HEADER_DIRS ${CMAKE_CURRENT_LIST_DIR}/src/boards)
 
 get_filename_component(PICO_SDK_PATH "${PICO_SDK_PATH}" REALPATH BASE_DIR "${CMAKE_BINARY_DIR}")
 if (NOT EXISTS "${PICO_SDK_PATH}/pico_sdk_init.cmake")
@@ -218,7 +218,7 @@ target_link_libraries(jlpicart
 )
 
 set_target_properties(jlpicart PROPERTIES
-    PICO_TARGET_LINKER_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/sdk/memmap_jlpicart.ld
+    PICO_TARGET_LINKER_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/src/boards/memmap_jlpicart.ld
 )
 
 pico_add_extra_outputs(jlpicart)

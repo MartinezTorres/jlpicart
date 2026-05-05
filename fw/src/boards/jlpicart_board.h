@@ -11,8 +11,8 @@
 
 // pico_cmake_set PICO_PLATFORM=rp2350
 
-#ifndef _BOARDS_MEGAPI_H
-#define _BOARDS_MEGAPI_H
+#ifndef _BOARDS_JLPICART_H
+#define _BOARDS_JLPICART_H
 
 // --- RP2350 VARIANT ---
 #define PICO_RP2350A 0
