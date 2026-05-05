@@ -12,8 +12,8 @@
 
 #include "ff.h"
 #include "diskio.h"
-#include "usb/diskio_tuh.h"
-#include "filesystem/diskio_flash.h"
+#include "filesystem/diskio.h"
+#include "filesystem/diskio.h"
 
 DSTATUS disk_status(BYTE pdrv) {
     if (pdrv == 0) return tuh_disk_status(pdrv);

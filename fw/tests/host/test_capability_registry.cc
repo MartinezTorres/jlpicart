@@ -1,9 +1,9 @@
 // test_capability_registry.cc — unit tests for CapabilityRegistry.
 #include "test_helpers.h"
 #include "spine/capability_registry.h"
-#include "platform/board_descriptor.h"
+#include "platform/platform.h"
 #include "spine/driver_descriptor.h"
-#include "spine/policy_types.h"
+#include "spine/policy_store.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------

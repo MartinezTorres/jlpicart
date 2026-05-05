@@ -1,6 +1,6 @@
 // bus_map.cc — BusMap implementation.
 
-#include "bus/bus_map.h"
+#include "bus/bus.h"
 #include "bus/bus.h"
 #include "bus/cartridge.h"
 

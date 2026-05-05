@@ -3,8 +3,8 @@
 #include "store/save_store.h"
 #include "filesystem/fat_util.h"
 #include "store/store.h"
-#include "store/store_record.h"
-#include "store/store_key.h"
+#include "store/store.h"
+#include "store/store.h"
 #include "store/profile_store.h"
 #include <cstring>
 #include <cstdio>

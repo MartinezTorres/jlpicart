@@ -49,6 +49,13 @@
 #include "bus/cartridge.h"
 #include <cstdint>
 
+// If NEXTOR_ROM_DATA is not defined, sunrise_ide falls back to nullptr
+// (slot returns 0xFF — Z80 will not boot Nextor until a real ROM is provided).
+#ifndef NEXTOR_ROM_DATA
+#  define NEXTOR_ROM_DATA  nullptr
+#  define NEXTOR_ROM_SIZE  0u
+#endif
+
 // ---------------------------------------------------------------------------
 // IDE state — one ATA device (device 0 / master) on one IDE channel
 // ---------------------------------------------------------------------------

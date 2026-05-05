@@ -1,7 +1,7 @@
 // board_descriptor_jlpicart.cc — hardware capability declarations for jlpicart_board.
 // Add new hardware via BoardDescriptor entries here, not compile-time flags.
 
-#include "board_descriptor.h"
+#include "platform/platform.h"
 
 // ---------------------------------------------------------------------------
 // Declared hardware capabilities for the JLPiCart reference board.

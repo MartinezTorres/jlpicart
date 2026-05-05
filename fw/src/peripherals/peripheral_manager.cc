@@ -5,7 +5,7 @@
 #include "peripherals/scc.h"
 #include "peripherals/opl4.h"
 #include "peripherals/sunrise_ide.h"
-#include "bus/bus_map.h"
+#include "bus/bus.h"
 #include "bus/bus.h"
 #include "bus/mappers.h"
 #include "content/content_store.h"

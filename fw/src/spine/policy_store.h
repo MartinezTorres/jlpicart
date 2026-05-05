@@ -1,7 +1,50 @@
 #pragma once
-#include "spine/policy_types.h"
 #include "diag/diag.h"
 #include "spine/security_posture.h"
+#include <cstdint>
+
+// ---------------------------------------------------------------------------
+// Policy types
+// ---------------------------------------------------------------------------
+
+using PolicyFlags = uint64_t;
+
+static constexpr PolicyFlags POLICY_ALLOW_USB_COLLECTION_INSTALL     = (1ULL << 0);
+static constexpr PolicyFlags POLICY_ALLOW_NETWORK_COLLECTION_INSTALL = (1ULL << 1);
+static constexpr PolicyFlags POLICY_ALLOW_UNSIGNED_COLLECTIONS       = (1ULL << 2);
+static constexpr PolicyFlags POLICY_ALLOW_USER_REPLACE_COLLECTIONS   = (1ULL << 3);
+static constexpr PolicyFlags POLICY_REQUIRE_PUBLISHER_SIGNATURE      = (1ULL << 4);
+static constexpr PolicyFlags POLICY_ALLOW_BOOT_KEY_ENROLLMENT        = (1ULL << 5);
+static constexpr PolicyFlags POLICY_ALLOW_BOOT_KEY_REVOCATION        = (1ULL << 6);
+static constexpr PolicyFlags POLICY_EXPOSE_STABLE_DEVICE_ID          = (1ULL << 7);
+
+static constexpr PolicyFlags POLICY_SAFE_DEFAULTS = 0ULL;
+static constexpr PolicyFlags POLICY_DEV_DEFAULTS =
+    POLICY_ALLOW_USB_COLLECTION_INSTALL     |
+    POLICY_ALLOW_UNSIGNED_COLLECTIONS       |
+    POLICY_ALLOW_USER_REPLACE_COLLECTIONS   |
+    POLICY_ALLOW_BOOT_KEY_ENROLLMENT        |
+    POLICY_EXPOSE_STABLE_DEVICE_ID;
+
+static constexpr uint32_t POLICY_VERSION_V1 = 1u;
+
+#pragma pack(push, 1)
+struct PolicyDocument {
+    uint32_t    version;
+    PolicyFlags flags;
+    uint8_t     reserved[4];
+    uint8_t     hmac_tag[32];
+};
+#pragma pack(pop)
+static_assert(sizeof(PolicyDocument) == 4 + 8 + 4 + 32, "PolicyDocument layout");
+
+struct PolicyInfo {
+    PolicyFlags flags;
+    uint8_t     digest16[16];
+    uint32_t    version;
+};
+
+// ---------------------------------------------------------------------------
 
 // policy_store.h — load, verify, and expose the signed policy document.
 //

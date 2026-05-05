@@ -4,11 +4,11 @@
 // frame_len == 0 is a wrap marker; consumer must wrap tail to 0 and re-read.
 
 #include "msx/api/api_window.h"
-#include "msx/api/services/core_service.h"
-#include "msx/api/services/identity_service.h"
-#include "msx/api/services/storage_service.h"
-#include "msx/api/services/userstats_service.h"
-#include "net/network_service.h"
+#include "msx/api/services/services.h"
+#include "msx/api/services/services.h"
+#include "msx/api/services/services.h"
+#include "msx/api/services/services.h"
+#include "net/transport_esp_at.h"
 #include "net/transport_esp_at.h"
 #include "spine/device_identity.h"
 #include <cstring>

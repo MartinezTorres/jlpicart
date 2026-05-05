@@ -1,6 +1,6 @@
 // network_service.cc — Network service (0x02) implementation.
 
-#include "net/network_service.h"
+#include "net/transport_esp_at.h"
 #include "net/transport_esp_at.h"
 #include "msx/api/api_window.h"
 #include <cstring>

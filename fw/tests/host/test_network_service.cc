@@ -12,11 +12,11 @@
 #include "msx/api/api_window.h"
 #include "msx/api/api_types.h"
 #include "net/transport_esp_at.h"
-#include "net/network_service.h"
+#include "net/transport_esp_at.h"
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
-#include "platform/board_descriptor.h"
+#include "platform/platform.h"
 #include "spine/driver_descriptor.h"
 #include "spine/otp_reader.h"
 #include <cstring>

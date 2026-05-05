@@ -12,9 +12,9 @@
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
-#include "platform/board_descriptor.h"
+#include "platform/platform.h"
 #include "spine/driver_descriptor.h"
-#include "menu/menu_app.h"
+#include "msx/menu/menu_app.h"
 
 #include "fat_test_env.h"
 #include "test_helpers.h"

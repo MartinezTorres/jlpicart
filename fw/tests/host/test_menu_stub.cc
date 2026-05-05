@@ -7,7 +7,7 @@
 //   4. Data exchange buffer is not overwritten by stub placement.
 
 #include "msx/menu/menu_host_abi.h"
-#include "msx/menu/menu_stub_bin.h"
+#include "msx/menu/menu_host_abi.h"
 
 #include <cassert>
 #include <cstdio>

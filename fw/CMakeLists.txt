@@ -69,7 +69,7 @@ add_executable(jlpicart
     src/msx/menu/menu_host_abi.cc
 
     # Menu Application (Stage 16)
-    src/menu/menu_app.cc
+    src/msx/menu/menu_app.cc
 
     # System Settings (Stage 17)
     src/store/system_settings_store.cc
@@ -147,7 +147,7 @@ add_executable(jlpicart
     src/usb/usb_host.cc
     src/usb/usb_install_reader.cc
     src/usb/usb_install_scanner.cc
-    src/usb/diskio_tuh.cc
+    src/filesystem/diskio_tuh.cc
 
     # USB device / config mode
     src/usb/usb_device.cc

@@ -17,7 +17,7 @@
 //   tick_to_cmd()            — processes READ_INPUT ack (input handling), issues first
 //                              command of next screen/re-render, returns it
 
-#include "menu/menu_app.h"
+#include "msx/menu/menu_app.h"
 #include "msx/menu/menu_host_abi.h"
 #include "store/profile_store.h"
 #include "store/profile_format.h"

@@ -1,6 +1,6 @@
 // identity_service.cc — Identity service (0x03) implementation.
 
-#include "msx/api/services/identity_service.h"
+#include "msx/api/services/services.h"
 #include "msx/api/api_window.h"
 #include <cstring>
 #include <cstdint>

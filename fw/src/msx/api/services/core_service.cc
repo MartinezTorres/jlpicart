@@ -3,7 +3,7 @@
 //   GET_RANDOM (0x03), RESET_TO_MENU (0x04),
 //   GET_SECURITY_INFO (0x05), GET_POLICY_FLAGS (0x06).
 
-#include "msx/api/services/core_service.h"
+#include "msx/api/services/services.h"
 #include "msx/api/api_window.h"
 #include "spine/device_identity.h"
 #include <cstring>

@@ -4,7 +4,7 @@
 // The Z80 stub (fw/src/msx/menu/stub/) implements the other half.
 
 #include "msx/menu/menu_host_abi.h"
-#include "msx/menu/menu_stub_bin.h"  // kMenuStubBin, kMenuStubBin_SIZE
+#include "msx/menu/menu_host_abi.h"  // kMenuStubBin, kMenuStubBin_SIZE
 
 // ---------------------------------------------------------------------------
 // init

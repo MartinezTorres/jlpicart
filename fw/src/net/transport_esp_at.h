@@ -14,6 +14,7 @@
 // In host tests (JLPICART_HOST_TEST), all methods return stub/offline results.
 
 #include "diag/diag.h"
+#include "msx/api/api_types.h"
 #include <cstddef>
 #include <cstdint>
 
@@ -88,3 +89,15 @@ private:
     static uint32_t parse_ipv4(const char* s);
 #endif
 };
+
+// ---------------------------------------------------------------------------
+// Network service (0x02) handler — declared here, implemented in network_service.cc
+// ---------------------------------------------------------------------------
+
+class ApiWindow;
+
+void network_service_handle(const MsgHeader& req,
+                             const uint8_t*   payload,
+                             uint16_t         payload_len,
+                             ApiWindow&       win,
+                             TransportEspAt&  transport);

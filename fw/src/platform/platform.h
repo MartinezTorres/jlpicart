@@ -8,7 +8,29 @@
 // All other platform differences (PIO, DMA, GPIO) live in their own drivers
 // and do not need to appear here.
 
+#include "spine/resource_model.h"
+#include <cstddef>
 #include <cstdint>
+
+// ---------------------------------------------------------------------------
+// Board capability declarations
+// ---------------------------------------------------------------------------
+
+struct BoardCapabilityDecl {
+    const char*          name;
+    bool                 safe_verify;
+    ResourceRequirements resources = {};
+};
+
+struct BoardDescriptor {
+    const char*                  board_id;
+    const BoardCapabilityDecl*   capabilities;
+    size_t                       capability_count;
+
+    static const BoardDescriptor& for_current_board();
+};
+
+// ---------------------------------------------------------------------------
 
 namespace Platform {
 

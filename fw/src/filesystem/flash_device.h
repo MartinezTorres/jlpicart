@@ -9,9 +9,30 @@
 // calling write() or erase().
 
 #include "diag/diag.h"
-#include "filesystem/flash_layout.h"
 #include <cstddef>
 #include <cstdint>
+
+// ---------------------------------------------------------------------------
+// Flash partition map
+// ---------------------------------------------------------------------------
+// All offsets are from the start of external flash (RP2350 XIP base 0x10000000).
+
+static constexpr uint32_t FLASH_SIZE_BYTES   = 16u * 1024u * 1024u;
+static constexpr uint32_t FLASH_SECTOR_SIZE  = 4096u;
+static constexpr uint32_t FLASH_PAGE_SIZE    = 256u;
+
+static constexpr uint32_t FLASH_FIRMWARE_OFS  = 0x000000u;
+static constexpr uint32_t FLASH_FIRMWARE_SIZE = 0x200000u;  // 2 MB
+
+static constexpr uint32_t FLASH_FAT_OFS  = 0x200000u;
+static constexpr uint32_t FLASH_FAT_SIZE = 0xE00000u;  // 14 MB
+
+static_assert(FLASH_FIRMWARE_OFS + FLASH_FIRMWARE_SIZE == FLASH_FAT_OFS,
+              "FAT volume must immediately follow firmware");
+static_assert(FLASH_FAT_OFS + FLASH_FAT_SIZE == FLASH_SIZE_BYTES,
+              "Partitions must exactly cover FLASH_SIZE_BYTES");
+static_assert((FLASH_FAT_OFS  % FLASH_SECTOR_SIZE) == 0, "FAT must be sector-aligned");
+static_assert((FLASH_FAT_SIZE % FLASH_SECTOR_SIZE) == 0, "FAT size must be sector-aligned");
 
 #ifdef JLPICART_HOST_TEST
 #include <vector>

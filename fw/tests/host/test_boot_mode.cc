@@ -8,7 +8,7 @@
 //   - The LAUNCH screen loops on READ_INPUT and cancels back to MAIN on any key.
 //   - ApiWindow::active_payload_id() reflects the launch state.
 
-#include "menu/menu_app.h"
+#include "msx/menu/menu_app.h"
 #include "msx/menu/menu_host_abi.h"
 #include "msx/api/api_window.h"
 #include "msx/api/api_types.h"
@@ -18,7 +18,7 @@
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
-#include "platform/board_descriptor.h"
+#include "platform/platform.h"
 #include "spine/driver_descriptor.h"
 #include "filesystem/fat_util.h"
 

@@ -1,8 +1,8 @@
 // test_store.cc — Host tests for the append-only Store.
 
 #include "store/uuid.h"
-#include "store/store_key.h"
-#include "store/store_record.h"
+#include "store/store.h"
+#include "store/store.h"
 #include "store/store.h"
 #include "filesystem/fat_util.h"
 #include "fat_test_env.h"

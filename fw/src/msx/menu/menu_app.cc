@@ -5,8 +5,8 @@
 // completes, the "process" step decodes input and resets step_=0 (re-render)
 // or calls switch_screen() to transition.
 
-#include "menu/menu_app.h"
-#include "menu/input_decoder.h"
+#include "msx/menu/menu_app.h"
+#include "msx/menu/input_decoder.h"
 #include "content/content_store.h"
 #include "store/profile_store.h"
 #include "store/system_settings_store.h"

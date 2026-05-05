@@ -16,11 +16,114 @@
 //   Ratio of current file size to STORE_MAX_BYTES (320 KB ≈ 2048 records).
 //   At >= 0.8 the caller should compact or warn the user.
 
-#include "store/store_key.h"
-#include "store/store_record.h"
 #include "store/uuid.h"
 #include "diag/diag.h"
 #include <cstddef>
+#include <cstdint>
+#include <cstring>
+
+// ---------------------------------------------------------------------------
+// StoreKey — 32-byte key identifying what an event record modifies.
+// ---------------------------------------------------------------------------
+
+enum class StoreKeyType : uint8_t {
+    SAVE         = 0x01,
+    ACHIEVEMENT  = 0x02,
+    STAT         = 0x03,
+    LEADER_ENTRY = 0x04,
+    PROFILE      = 0x05,
+};
+
+struct StoreKey {
+    uint8_t data[32] = {};
+
+    StoreKeyType type() const { return static_cast<StoreKeyType>(data[0]); }
+    bool operator==(const StoreKey& o) const { return memcmp(data, o.data, 32) == 0; }
+    bool operator!=(const StoreKey& o) const { return !(*this == o); }
+
+    static StoreKey for_save(const Uuid& profile, const char* slot_str);
+    static StoreKey for_achievement(const Uuid& profile, const char* payload_id,
+                                     const char* ach_id);
+    static StoreKey for_stat(const Uuid& profile, const char* payload_id,
+                              const char* stat_name);
+    static StoreKey for_leaderboard(const Uuid& profile, const char* payload_id,
+                                     const char* board_id);
+    static StoreKey for_profile(const Uuid& profile);
+
+private:
+    static uint32_t fnv32(const char* s) {
+        uint32_t h = 2166136261u;
+        for (; *s; ++s) { h ^= static_cast<uint8_t>(*s); h *= 16777619u; }
+        return h;
+    }
+    static void put_u32le(uint8_t* dst, uint32_t v) {
+        dst[0] = v & 0xFFu; dst[1] = (v >> 8) & 0xFFu;
+        dst[2] = (v >> 16) & 0xFFu; dst[3] = (v >> 24) & 0xFFu;
+    }
+};
+
+inline StoreKey StoreKey::for_save(const Uuid& p, const char* slot_str) {
+    StoreKey k; k.data[0] = static_cast<uint8_t>(StoreKeyType::SAVE);
+    memcpy(k.data + 1, p.bytes, 16); put_u32le(k.data + 17, fnv32(slot_str)); return k;
+}
+inline StoreKey StoreKey::for_achievement(const Uuid& p, const char* pid, const char* aid) {
+    StoreKey k; k.data[0] = static_cast<uint8_t>(StoreKeyType::ACHIEVEMENT);
+    memcpy(k.data + 1, p.bytes, 16); put_u32le(k.data + 17, fnv32(pid));
+    put_u32le(k.data + 21, fnv32(aid)); return k;
+}
+inline StoreKey StoreKey::for_stat(const Uuid& p, const char* pid, const char* sname) {
+    StoreKey k; k.data[0] = static_cast<uint8_t>(StoreKeyType::STAT);
+    memcpy(k.data + 1, p.bytes, 16); put_u32le(k.data + 17, fnv32(pid));
+    put_u32le(k.data + 21, fnv32(sname)); return k;
+}
+inline StoreKey StoreKey::for_leaderboard(const Uuid& p, const char* pid, const char* bid) {
+    StoreKey k; k.data[0] = static_cast<uint8_t>(StoreKeyType::LEADER_ENTRY);
+    memcpy(k.data + 1, p.bytes, 16); put_u32le(k.data + 17, fnv32(pid));
+    put_u32le(k.data + 21, fnv32(bid)); return k;
+}
+inline StoreKey StoreKey::for_profile(const Uuid& p) {
+    StoreKey k; k.data[0] = static_cast<uint8_t>(StoreKeyType::PROFILE);
+    memcpy(k.data + 1, p.bytes, 16); return k;
+}
+
+// ---------------------------------------------------------------------------
+// StoreRecord — Fixed-size 160-byte record for the append-only event log.
+// ---------------------------------------------------------------------------
+
+enum class StoreEntryType : uint8_t {
+    SAVE         = 0x01,
+    ACHIEVEMENT  = 0x02,
+    STAT         = 0x03,
+    STAT_DELTA   = 0x04,
+    LEADER_ENTRY = 0x05,
+    PROFILE      = 0x06,
+};
+
+enum class SyncState : uint8_t {
+    PENDING    = 0x00,
+    SYNCED     = 0x01,
+    CHECKPOINT = 0x02,
+};
+
+static constexpr uint8_t STORE_RECORD_MAGIC[4] = { 0x45, 0x4C, 0x47, 0x21 };
+static constexpr size_t  STORE_INLINE_MAX       = 64u;
+
+struct StoreRecord {
+    uint8_t  magic[4];
+    uint8_t  uuid[16];
+    uint8_t  parent[16];
+    uint8_t  key[32];
+    uint8_t  device_uuid[16];
+    uint32_t timestamp;
+    uint16_t payload_len;
+    uint8_t  event_type;
+    uint8_t  sync_state;
+    uint8_t  payload[64];
+    uint32_t crc32;
+};
+static_assert(sizeof(StoreRecord) == 160, "StoreRecord must be exactly 160 bytes");
+
+// ---------------------------------------------------------------------------
 
 static constexpr size_t STORE_MAX_BYTES = 320u * 1024u;
 

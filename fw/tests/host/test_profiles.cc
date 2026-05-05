@@ -11,11 +11,11 @@
 #include "store/profile_store.h"
 #include "msx/api/api_types.h"
 #include "msx/api/api_window.h"
-#include "msx/api/services/identity_service.h"
+#include "msx/api/services/services.h"
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
-#include "platform/board_descriptor.h"
+#include "platform/platform.h"
 #include "spine/driver_descriptor.h"
 #include "spine/otp_reader.h"
 

@@ -12,7 +12,7 @@
 #include "content/installer.h"
 #include "content/manifest.h"
 #include "content/manifest_parser.h"
-#include "content/bundle_sig_verify.h"
+#include "content/installer.h"
 #include "crypto/sha256.h"
 #include "spine/policy_store.h"
 #include "filesystem/fat_util.h"

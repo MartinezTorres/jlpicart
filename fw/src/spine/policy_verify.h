@@ -1,5 +1,5 @@
 #pragma once
-#include "policy_types.h"
+#include "spine/policy_store.h"
 #include "diag/diag.h"
 #include "spine/security_posture.h"
 

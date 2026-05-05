@@ -404,7 +404,7 @@ add_host_test(test_usb_scanner
 # Stage 16 tests
 # ---------------------------------------------------------------------------
 
-set(SRC_MENU_APP          "${FW_SRC}/menu/menu_app.cc")
+set(SRC_MENU_APP          "${FW_SRC}/msx/menu/menu_app.cc")
 
 add_host_test(test_menu_app
     host/test_menu_app.cc

@@ -47,3 +47,20 @@ namespace BUS {
     [[noreturn]] void start();
 
 }  // namespace BUS
+
+// ---------------------------------------------------------------------------
+// BusMap — map flat SRAM regions into BUS::cartridges[] segments.
+// Must not be called after BUS::start().
+// On host test builds (JLPICART_HOST_TEST), both functions are no-ops.
+// ---------------------------------------------------------------------------
+
+namespace BusMap {
+
+    // Map a read-only 16 KB region into BUS::cartridges[subslot] at page_base.
+    // page_base must be one of: 0x0000, 0x4000, 0x8000, 0xC000.
+    void map_ro_region(uint8_t subslot, uint16_t page_base, const uint8_t* data);
+
+    // Map a read-write 16 KB region (Z80 can write back, e.g., mailbox).
+    void map_rw_region(uint8_t subslot, uint16_t page_base, uint8_t* data);
+
+}  // namespace BusMap

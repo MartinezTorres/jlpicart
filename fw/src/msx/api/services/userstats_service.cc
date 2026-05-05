@@ -1,6 +1,6 @@
 // userstats_service.cc — UserStats service (0x04) implementation.
 
-#include "msx/api/services/userstats_service.h"
+#include "msx/api/services/services.h"
 #include "msx/api/api_window.h"
 #include "store/stats_store.h"
 #include "spine/device_identity.h"

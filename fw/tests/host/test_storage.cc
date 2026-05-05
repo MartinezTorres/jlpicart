@@ -5,7 +5,7 @@
 //   KvStore: roundtrip/overwrite/delete/power-loss/reinit.
 
 #include "filesystem/flash_device.h"
-#include "filesystem/flash_layout.h"
+#include "filesystem/flash_device.h"
 #include "store/kv_store.h"
 #include "fat_test_env.h"
 

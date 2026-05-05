@@ -10,7 +10,7 @@
 //   7. policy_get_publisher_anchor() — absent key returns false
 //   8. policy_get_publisher_anchor() — wrong-length key returns false
 
-#include "content/bundle_sig_verify.h"
+#include "content/installer.h"
 #include "content/collection_format.h"
 #include "crypto/monocypher/monocypher.h"
 #include <cassert>

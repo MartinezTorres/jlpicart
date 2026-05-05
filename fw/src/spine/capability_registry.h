@@ -1,9 +1,9 @@
 #pragma once
 #include <cstddef>
 #include "spine/resource_model.h"
-#include "platform/board_descriptor.h"
+#include "platform/platform.h"
 #include "spine/driver_descriptor.h"
-#include "spine/policy_types.h"
+#include "spine/policy_store.h"
 
 // capability_registry.h — Declared → Allowed → Activated capability pipeline.
 //

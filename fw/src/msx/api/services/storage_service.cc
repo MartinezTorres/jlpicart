@@ -1,6 +1,6 @@
 // storage_service.cc — Storage service (0x01) implementation.
 
-#include "msx/api/services/storage_service.h"
+#include "msx/api/services/services.h"
 #include "msx/api/api_window.h"
 #include "store/save_store.h"
 #include <cstring>
