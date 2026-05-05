@@ -265,9 +265,9 @@ add_host_test(test_store
 set(SRC_MANIFEST_PARSER    "${FW_SRC}/content/manifest_parser.cc")
 set(SRC_INSTALLER          "${FW_SRC}/content/installer.cc")
 set(SRC_BUNDLE_SIG_VERIFY  "${FW_SRC}/content/bundle_sig_verify.cc")
-set(SRC_RESOURCE_MODEL  "${FW_SRC}/allocator/resource_model.cc")
-set(SRC_ALLOCATOR       "${FW_SRC}/allocator/allocator.cc"
-                        "${FW_SRC}/allocator/hw_probe.cc")
+set(SRC_RESOURCE_MODEL  "${FW_SRC}/spine/resource_model.cc")
+set(SRC_ALLOCATOR       "${FW_SRC}/spine/allocator.cc"
+                        "${FW_SRC}/spine/hw_probe.cc")
 set(SRC_ACTIVATION      "${FW_SRC}/spine/activation.cc")
 set(SRC_BUS_MAP         "${FW_SRC}/bus/bus_map.cc"
                         "${FW_SRC}/bus/bus_state.cc")
@@ -282,7 +282,7 @@ set(SRC_OPL4            "${FW_SRC}/peripherals/opl3fm.cc"
 set(SRC_SUNRISE_IDE     "${FW_SRC}/peripherals/sunrise_ide.cc")
 set(SRC_MAPPERS         "${FW_SRC}/bus/mappers.cc")
 set(SRC_DEVICE_TYPE     "${FW_SRC}/bus/device_type.cc")
-set(SRC_DEVICE_CHECK    "${FW_SRC}/allocator/device_check.cc")
+set(SRC_DEVICE_CHECK    "${FW_SRC}/spine/device_check.cc")
 set(SRC_MAPPING_PLAN    "${FW_SRC}/bus/mapping_plan.cc"
                         "${FW_SRC}/bus/device_type.cc")
 

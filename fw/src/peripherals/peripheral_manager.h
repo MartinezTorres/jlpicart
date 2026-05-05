@@ -13,7 +13,7 @@
 //
 // Thread safety: NOT thread-safe. Use only from the boot/preflight path.
 
-#include "allocator/allocator.h"
+#include "spine/allocator.h"
 #include "bus/mapping_plan.h"
 #include "peripherals/psg.h"
 #include "peripherals/scc.h"

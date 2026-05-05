@@ -1,7 +1,7 @@
 // allocator.cc — Allocator implementation.
 
-#include "allocator/allocator.h"
-#include "allocator/hw_probe.h"
+#include "spine/allocator.h"
+#include "spine/hw_probe.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------

@@ -1,8 +1,8 @@
 // test_allocator.cc — Stage 8: Allocator, ResourceModel, PeripheralManager,
 //                     and requested_from_manifest() host tests.
 
-#include "allocator/allocator.h"
-#include "allocator/resource_model.h"
+#include "spine/allocator.h"
+#include "spine/resource_model.h"
 #include "spine/capability_registry.h"
 #include "spine/activation.h"
 #include "peripherals/peripheral_manager.h"

@@ -2,7 +2,7 @@
 // activation.h — Convert a manifest payload entry to RequestedCapabilities
 // for the Allocator.
 
-#include "allocator/allocator.h"
+#include "spine/allocator.h"
 #include "content/manifest.h"
 
 // Compile-time guard: CAP_ID_MAX and PAYLOAD_CAP_ID_MAX must stay in sync.

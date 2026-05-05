@@ -18,7 +18,7 @@
 //
 // Thread safety: NOT thread-safe. Use only from the boot/preflight path.
 
-#include "allocator/resource_model.h"
+#include "spine/resource_model.h"
 #include "spine/capability_registry.h"
 #include <cstdint>
 #include <cstddef>

@@ -1,6 +1,6 @@
 // resource_model.cc — ResourceModel implementation.
 
-#include "allocator/resource_model.h"
+#include "spine/resource_model.h"
 
 ResourceModel::ResourceModel() {
     sram_used_    = 0;

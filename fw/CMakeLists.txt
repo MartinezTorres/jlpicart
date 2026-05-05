@@ -96,9 +96,9 @@ add_executable(jlpicart
     src/filesystem/flash_device.cc
 
     # Allocator (Stage 8 + gap #2 HW probes)
-    src/allocator/allocator.cc
-    src/allocator/hw_probe.cc
-    src/allocator/resource_model.cc
+    src/spine/allocator.cc
+    src/spine/hw_probe.cc
+    src/spine/resource_model.cc
 
     # Activation (Stage 8)
     src/spine/activation.cc

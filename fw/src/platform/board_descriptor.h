@@ -1,6 +1,6 @@
 #pragma once
 #include <cstddef>
-#include "allocator/resource_model.h"
+#include "spine/resource_model.h"
 
 // board_descriptor.h — hardware capability declarations for JLPiCart.
 //

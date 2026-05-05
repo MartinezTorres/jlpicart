@@ -1,6 +1,6 @@
 // test_device_check.cc — Tests for check_device_compatibility()
 
-#include "allocator/device_check.h"
+#include "spine/device_check.h"
 #include <cassert>
 #include <cstdio>
 

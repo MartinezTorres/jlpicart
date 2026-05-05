@@ -1,6 +1,6 @@
 #pragma once
 #include <cstddef>
-#include "allocator/resource_model.h"
+#include "spine/resource_model.h"
 
 // driver_descriptor.h — software capability declarations.
 //

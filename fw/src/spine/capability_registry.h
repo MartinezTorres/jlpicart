@@ -1,6 +1,6 @@
 #pragma once
 #include <cstddef>
-#include "allocator/resource_model.h"
+#include "spine/resource_model.h"
 #include "platform/board_descriptor.h"
 #include "spine/driver_descriptor.h"
 #include "spine/policy_types.h"

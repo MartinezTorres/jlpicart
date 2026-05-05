@@ -1,6 +1,6 @@
 // device_check.cc — Compatibility check for a list of collection devices.
 
-#include "allocator/device_check.h"
+#include "spine/device_check.h"
 
 DeviceCheckResult check_device_compatibility(const DeviceCheckEntry* devices,
                                               size_t count,

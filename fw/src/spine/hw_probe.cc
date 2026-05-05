@@ -6,7 +6,7 @@
 //   io.usb_host — RP2350 silicon (always present)
 //   io.adc      — RP2350 silicon (always present)
 
-#include "allocator/hw_probe.h"
+#include "spine/hw_probe.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------
