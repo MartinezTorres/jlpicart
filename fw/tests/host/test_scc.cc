@@ -17,7 +17,7 @@
 
 #include "peripherals/scc.h"
 #include "bus/mappers.h"
-#include "bus/mapping_plan.h"
+#include "bus/mappers.h"
 #include "bus/cartridge.h"
 #include "platform/gpio_defs.h"
 

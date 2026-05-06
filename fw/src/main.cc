@@ -34,7 +34,7 @@
 #include "spine/resource_model.h"
 #include "peripherals/peripheral_manager.h"
 #include "spine/driver_descriptor.h"
-#include "bus/mapping_plan.h"
+#include "bus/mappers.h"
 #include "content/content_store.h"
 #include "platform/platform.h"
 #include "msx/api/api_window.h"

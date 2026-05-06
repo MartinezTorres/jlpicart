@@ -6,7 +6,7 @@
 #include "content/manifest_parser.h"
 #include "content/content_store.h"
 #include "content/installer.h"
-#include "bus/mapping_plan.h"
+#include "bus/mappers.h"
 #include "filesystem/fat_util.h"
 #include "spine/policy_store.h"
 #include "spine/security_posture.h"

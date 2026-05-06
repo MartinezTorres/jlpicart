@@ -1,6 +1,6 @@
 // test_bus_mapper.cc — Stage 9: mapper setup, MappingPlan, and manifest bridge tests.
 
-#include "bus/mapping_plan.h"
+#include "bus/mappers.h"
 #include "bus/mappers.h"
 #include "bus/cartridge.h"
 #include "content/manifest.h"

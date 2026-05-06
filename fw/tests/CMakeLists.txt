@@ -280,11 +280,10 @@ set(SRC_OPL3FM          "${FW_SRC}/peripherals/opl3fm.cc")
 set(SRC_OPL4            "${FW_SRC}/peripherals/opl3fm.cc"
                         "${FW_SRC}/peripherals/opl4.cc")
 set(SRC_SUNRISE_IDE     "${FW_SRC}/peripherals/sunrise_ide.cc")
-set(SRC_MAPPERS         "${FW_SRC}/bus/mappers.cc")
-set(SRC_DEVICE_TYPE     "${FW_SRC}/bus/device_type.cc")
+set(SRC_PERIPH_DESC     "${FW_SRC}/peripherals/peripheral_descriptor.cc")
+set(SRC_MAPPERS         "${FW_SRC}/bus/mappers.cc"
+                        "${FW_SRC}/peripherals/peripheral_descriptor.cc")
 set(SRC_DEVICE_CHECK    "${FW_SRC}/spine/device_check.cc")
-set(SRC_MAPPING_PLAN    "${FW_SRC}/bus/mapping_plan.cc"
-                        "${FW_SRC}/bus/device_type.cc")
 
 # ---------------------------------------------------------------------------
 # Stage 8 tests
@@ -304,7 +303,6 @@ add_host_test(test_allocator
     ${SRC_OPL4}
     ${SRC_SUNRISE_IDE}
     ${SRC_MAPPERS}
-    ${SRC_MAPPING_PLAN}
     ${SRC_CAP_REG}
     ${SRC_BOARD_DESC}
     ${SRC_DRV_TABLE}
@@ -322,7 +320,6 @@ add_host_test(test_bus_mapper
     host/test_bus_mapper.cc
     ${SRC_SCC}
     ${SRC_MAPPERS}
-    ${SRC_MAPPING_PLAN}
     ${SRC_MANIFEST_PARSER}
     ${SRC_DIAG}
     # Note: bus.cc (Core 0 hardware loop) is intentionally excluded here.
@@ -332,7 +329,7 @@ add_host_test(test_bus_mapper
 add_host_test(test_collections
     host/test_collections.cc
     ${SRC_MANIFEST_PARSER}
-    ${SRC_DEVICE_TYPE}
+    ${SRC_PERIPH_DESC}
     ${SRC_INSTALLER}
     ${SRC_BUNDLE_SIG_VERIFY}
     ${SRC_MONOCYPHER}
@@ -385,7 +382,7 @@ add_host_test(test_usb_scanner
     host/test_usb_scanner.cc
     ${SRC_USB_HOST}
     ${SRC_USB_SCANNER}
-    ${SRC_DEVICE_TYPE}
+    ${SRC_PERIPH_DESC}
     ${SRC_MANIFEST_PARSER}
     ${SRC_INSTALLER}
     ${SRC_BUNDLE_SIG_VERIFY}
@@ -628,7 +625,7 @@ add_host_test(test_policy_enforcement
     ${SRC_DEVICE_IDENTITY}
     ${SRC_USB_HOST}
     ${SRC_USB_SCANNER}
-    ${SRC_DEVICE_TYPE}
+    ${SRC_PERIPH_DESC}
     ${SRC_MANIFEST_PARSER}
     ${SRC_INSTALLER}
     ${SRC_BUNDLE_SIG_VERIFY}
@@ -677,7 +674,6 @@ add_host_test(test_scc
     host/test_scc.cc
     ${SRC_SCC}
     ${SRC_MAPPERS}
-    ${SRC_MAPPING_PLAN}
     ${SRC_MANIFEST_PARSER}
     ${SRC_DIAG}
 )
@@ -692,7 +688,6 @@ add_host_test(test_rom_loading
     ${SRC_BUNDLE_SIG_VERIFY}
     ${SRC_MONOCYPHER}
     ${SRC_CONTENT_STORE}
-    ${SRC_MAPPING_PLAN}
     ${SRC_SCC}
     ${SRC_MAPPERS}
     ${SRC_MANIFEST_PARSER}
@@ -712,7 +707,6 @@ add_host_test(test_rom_loading
 add_host_test(test_content_store
     host/test_content_store.cc
     ${SRC_CONTENT_STORE}
-    ${SRC_MAPPING_PLAN}
     ${SRC_SCC}
     ${SRC_MAPPERS}
     ${SRC_MANIFEST_PARSER}
@@ -746,6 +740,6 @@ add_host_test(test_bundle_sig
 
 add_host_test(test_device_check
     host/test_device_check.cc
-    ${SRC_DEVICE_TYPE}
+    ${SRC_PERIPH_DESC}
     ${SRC_DEVICE_CHECK}
 )

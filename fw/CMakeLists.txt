@@ -103,13 +103,10 @@ add_executable(jlpicart
     # Activation (Stage 8)
     src/spine/activation.cc
 
-    # Mappers (Stage 9)
-    src/bus/mappers.cc
-
-    # Bus loop (Stage 9)
+    # Bus loop + Mappers (Stage 9)
     src/bus/bus.cc
     src/bus/bus_state.cc
-    src/bus/mapping_plan.cc
+    src/bus/mappers.cc
 
     # Platform HAL (RP2350 implementation)
     src/platform/platform_rp2350.cc
@@ -126,6 +123,9 @@ add_executable(jlpicart
 
     # Peripheral bus wiring (Stage 9 + Stage 13)
     src/peripherals/peripheral_manager.cc
+
+    # Peripheral descriptor registry
+    src/peripherals/peripheral_descriptor.cc
 
     # PSG audio emulation (Stage 27)
     src/peripherals/psg.cc

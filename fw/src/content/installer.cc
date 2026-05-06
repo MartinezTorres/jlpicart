@@ -203,7 +203,7 @@ DiagStatus Installer::run(InstallReader& reader,
         for (uint8_t di = 0; di < pe.device_count && di < PAYLOAD_DEVICES_MAX; ++di) {
             const ManifestDeviceEntry& de = pe.devices[di];
             PayloadDeviceRecord& pdr = pr.devices[di];
-            pdr.type     = static_cast<uint8_t>(de.type);
+            pdr.type     = de.descriptor ? de.descriptor->type_id : 0u;
             pdr.subslot  = de.subslot;
             pdr.optional = de.optional ? 1u : 0u;
             pdr._pad     = 0u;

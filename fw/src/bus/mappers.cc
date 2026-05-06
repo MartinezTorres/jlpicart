@@ -212,3 +212,110 @@ void mapper_setup_ram(Cartridge& c, uint8_t* ram_base, size_t ram_size) {
         c.memory_write_addresses[i] = &ram_base[i * 8192u];
     }
 }
+
+// ---------------------------------------------------------------------------
+// MappingPlan builders (moved from mapping_plan.cc)
+// ---------------------------------------------------------------------------
+
+#include <cstring>
+
+MapperType mapper_type_from_string(const char* s) {
+    if (!s || s[0] == '\0')           return MapperType::NONE;
+    if (strcmp(s, "rom")              == 0) return MapperType::ROM;
+    if (strcmp(s, "rom_32k_mirrored") == 0) return MapperType::ROM_32K_MIRRORED;
+    if (strcmp(s, "konami")           == 0) return MapperType::KONAMI;
+    if (strcmp(s, "konami_scc")       == 0) return MapperType::KONAMI_SCC;
+    if (strcmp(s, "konami_z")         == 0) return MapperType::KONAMI_Z;
+    if (strcmp(s, "ascii8")           == 0) return MapperType::ASCII8;
+    if (strcmp(s, "ascii16")          == 0) return MapperType::ASCII16;
+    if (strcmp(s, "ram")              == 0) return MapperType::RAM;
+    return MapperType::NONE;
+}
+
+const char* mapper_type_to_string(MapperType t) {
+    switch (t) {
+        case MapperType::ROM:              return "rom";
+        case MapperType::ROM_32K_MIRRORED: return "rom_32k_mirrored";
+        case MapperType::KONAMI:           return "konami";
+        case MapperType::KONAMI_SCC:       return "konami_scc";
+        case MapperType::KONAMI_Z:         return "konami_z";
+        case MapperType::ASCII8:           return "ascii8";
+        case MapperType::ASCII16:          return "ascii16";
+        case MapperType::RAM:              return "ram";
+        case MapperType::NONE:             return "none";
+    }
+    return "none";
+}
+
+MappingPlan mapping_plan_from_payload_record(const PayloadRecord& record)
+{
+    MappingPlan plan = {};
+    MapperType mt = mapper_type_from_string(record.mapper_type);
+    if (mt != MapperType::NONE && record.data_size > 0) {
+        MappingEntry& entry = plan.entries[0];
+        entry.mapper_type   = mt;
+        entry.subslot       = record.subslot;
+        entry.rom_size      = record.data_size;
+        entry.ram_data      = nullptr;
+        entry.ram_size      = 0;
+#ifndef JLPICART_HOST_TEST
+        static constexpr uint32_t XIP_BASE = 0x10000000u;
+        entry.rom_data = reinterpret_cast<const uint8_t*>(XIP_BASE + record.data_flash_offset);
+#else
+        entry.rom_data = nullptr;
+#endif
+        plan.entry_count = 1;
+        plan.expanded    = false;
+    }
+    for (uint8_t i = 0; i < record.device_count && i < PAYLOAD_DEVICES_MAX; ++i) {
+        const PayloadDeviceRecord& pdr = record.devices[i];
+        const PeripheralDescriptor* desc = find_peripheral_by_id(pdr.type);
+        if (!desc || desc->memory_mapped) continue;
+        if (plan.io_device_count >= MAPPING_MAX_IO_DEVICES) break;
+        IoDeviceEntry& io = plan.io_devices[plan.io_device_count++];
+        if (strcmp(desc->name, "psg") == 0) {
+            io.type = IoDeviceType::PSG;
+        } else if (strcmp(desc->name, "opl4") == 0) {
+            io.type = IoDeviceType::OPL4;
+            size_t plen = strnlen(pdr.params, sizeof(pdr.params));
+            if (plen > 0 && plen < PAYLOAD_ID_MAX)
+                memcpy(io.wave_payload_id, pdr.params, plen + 1u);
+        }
+    }
+    return plan;
+}
+
+MappingPlan mapper_plan_from_manifest(const CollectionManifest& manifest,
+                                       uint8_t payload_index)
+{
+    MappingPlan plan = {};
+    if (payload_index >= manifest.payload_count) return plan;
+    const PayloadEntry& pe = manifest.payloads[payload_index];
+    MapperType mt = mapper_type_from_string(pe.mapper_type);
+    if (mt == MapperType::NONE) return plan;
+    MappingEntry& entry  = plan.entries[0];
+    entry.mapper_type    = mt;
+    entry.subslot        = pe.subslot;
+    entry.rom_data       = nullptr;
+    entry.rom_size       = 0;
+    entry.ram_data       = nullptr;
+    entry.ram_size       = 0;
+    plan.entry_count = 1;
+    plan.expanded    = false;
+    for (uint8_t i = 0; i < pe.device_count && i < PAYLOAD_DEVICES_MAX; ++i) {
+        const ManifestDeviceEntry& de = pe.devices[i];
+        const PeripheralDescriptor* desc = de.descriptor;
+        if (!desc || desc->memory_mapped) continue;
+        if (plan.io_device_count >= MAPPING_MAX_IO_DEVICES) break;
+        IoDeviceEntry& io = plan.io_devices[plan.io_device_count++];
+        if (strcmp(desc->name, "psg") == 0) {
+            io.type = IoDeviceType::PSG;
+        } else if (strcmp(desc->name, "opl4") == 0) {
+            io.type = IoDeviceType::OPL4;
+            size_t plen = strnlen(de.params, sizeof(de.params));
+            if (plen > 0 && plen < PAYLOAD_ID_MAX)
+                memcpy(io.wave_payload_id, de.params, plen + 1u);
+        }
+    }
+    return plan;
+}

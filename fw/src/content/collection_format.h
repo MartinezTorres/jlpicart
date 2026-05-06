@@ -1,7 +1,6 @@
 #pragma once
 // collection_format.h — Collection bundle layout constants and types.
 
-#include "bus/device_type.h"
 #include <cstdint>
 #include <cstddef>
 
@@ -77,7 +76,7 @@ static_assert(sizeof(CollectionRecord) == 357, "CollectionRecord layout has chan
 
 #pragma pack(push, 1)
 struct PayloadDeviceRecord {
-    uint8_t type;                      //  1 byte  (DeviceType enum value)
+    uint8_t type;                      //  1 byte  (PeripheralDescriptor.type_id)
     uint8_t subslot;                   //  1 byte  (0–3; for memory-mapped devices)
     uint8_t optional;                  //  1 byte  (0=required, 1=optional)
     uint8_t _pad;                      //  1 byte

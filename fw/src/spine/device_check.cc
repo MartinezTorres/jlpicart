@@ -12,7 +12,7 @@ DeviceCheckResult check_device_compatibility(const DeviceCheckEntry* devices,
     uint32_t sram_used = 0u;
 
     for (size_t i = 0; i < count; ++i) {
-        const DeviceTypeInfo* info_i = device_type_info(devices[i].type);
+        const PeripheralDescriptor* info_i = devices[i].descriptor;
         if (!info_i) {
             result.ok       = false;
             result.conflict = DeviceConflict::UNKNOWN_TYPE;
@@ -31,7 +31,7 @@ DeviceCheckResult check_device_compatibility(const DeviceCheckEntry* devices,
 
         // Check against all earlier devices for port and subslot conflicts.
         for (size_t j = 0; j < i; ++j) {
-            const DeviceTypeInfo* info_j = device_type_info(devices[j].type);
+            const PeripheralDescriptor* info_j = devices[j].descriptor;
             if (!info_j) continue;
 
             // IO port conflict: two IO-only devices with overlapping port ranges.

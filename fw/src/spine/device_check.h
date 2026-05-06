@@ -4,15 +4,15 @@
 // Call check_device_compatibility() before activating a payload's device list
 // to ensure no IO port conflicts, subslot conflicts, or SRAM overruns.
 
-#include "bus/device_type.h"
+#include "peripherals/peripheral_descriptor.h"
 #include <cstddef>
 #include <cstdint>
 
 static constexpr size_t DEVICE_CHECK_MAX = 8;
 
 struct DeviceCheckEntry {
-    DeviceType type;
-    uint8_t    subslot;  // for memory-mapped devices; 0 for IO-only
+    const PeripheralDescriptor* descriptor;  // nullptr = unknown/invalid
+    uint8_t                     subslot;     // for memory-mapped devices; 0 for IO-only
 };
 
 enum class DeviceConflict : uint8_t {
@@ -20,7 +20,7 @@ enum class DeviceConflict : uint8_t {
     IO_PORT_CONFLICT,   // two IO devices with overlapping port ranges
     SUBSLOT_CONFLICT,   // two memory-mapped devices in the same subslot
     SRAM_EXCEEDED,      // combined SRAM cost exceeds budget
-    UNKNOWN_TYPE,       // DeviceType::UNKNOWN or unrecognised type
+    UNKNOWN_TYPE,       // null descriptor — peripheral not recognised
 };
 
 struct DeviceCheckResult {

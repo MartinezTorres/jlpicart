@@ -1,7 +1,7 @@
 // manifest_parser.cc — Minimal strict JSON parser for Collection manifests.
 
 #include "content/manifest_parser.h"
-#include "bus/device_type.h"
+#include "peripherals/peripheral_descriptor.h"
 #include <cstring>
 #include <cctype>
 
@@ -295,8 +295,8 @@ static DiagStatus parse_device_entry(Scanner& s, ManifestDeviceEntry& de) {
         Tok vt = s.next();
         if (strcmp(key, "type") == 0) {
             if (vt != Tok::STR) return kBadManifest;
-            de.type = device_type_from_string(s.sv);
-            if (de.type == DeviceType::UNKNOWN) return kBadManifest;
+            de.descriptor = find_peripheral_by_name(s.sv);
+            if (!de.descriptor) return kBadManifest;
         } else if (strcmp(key, "subslot") == 0) {
             if (vt != Tok::NUM) return kBadManifest;
             if (s.sv_len != 1 || s.sv[0] < '0' || s.sv[0] > '3') return kBadManifest;
@@ -330,7 +330,7 @@ static DiagStatus parse_device_entry(Scanner& s, ManifestDeviceEntry& de) {
         if (t == Tok::COMMA) t = s.next();
         else if (t != Tok::RBRACE) return kBadManifest;
     }
-    if (de.type == DeviceType::UNKNOWN) return kBadManifest; // "type" required
+    if (!de.descriptor) return kBadManifest; // "type" required
     return DiagStatus::success();
 }
 

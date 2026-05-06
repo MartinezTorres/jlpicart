@@ -1,18 +1,76 @@
 #pragma once
-// mappers.h — MSX mapper setup functions for jlpicart_board.
+// mappers.h — MSX mapper types, MappingPlan, and Cartridge setup functions.
 //
-// Each function initialises a Cartridge for a specific mapper type.
-// Call Cartridge::clear() is handled internally (each setup starts fresh).
-//
-// ROM data is passed as a const pointer (lives in XIP flash or a SRAM buffer).
-// RAM data is passed as a mutable pointer (lives in SRAM).
-//
-// The switch callbacks defined in mappers.cc are annotated with RAMFUNC so
-// they run from SRAM on hardware and never stall on XIP cache misses.
+// Adding a new mapper requires touching this file (MapperType enum + setup fn),
+// mappers.cc (implementation), and nothing else — the plan builders here
+// translate manifest strings to MapperType automatically.
 
 #include "bus/cartridge.h"
+#include "content/collection_format.h"
+#include "peripherals/peripheral_descriptor.h"
+#include "content/manifest.h"
 #include "peripherals/scc.h"
 #include <cstddef>
+#include <cstdint>
+
+// ---------------------------------------------------------------------------
+// MapperType — canonical mapper identifier (mirrors manifest "mapper_type" strings)
+// ---------------------------------------------------------------------------
+
+enum class MapperType : uint8_t {
+    ROM,               // Linear ROM (up to 64 KB, mirrored if smaller)
+    ROM_32K_MIRRORED,  // 32 KB ROM with header at 0x4000, mirrored pattern
+    KONAMI,            // Konami 8 KB banking (pages 2–5 switchable)
+    KONAMI_SCC,        // Konami SCC: Konami banking + SCC sound chip registers
+    KONAMI_Z,          // Konami without 0x6000 register (pages 4–5 switchable)
+    ASCII8,            // ASCII 8 KB banking
+    ASCII16,           // ASCII 16 KB banking
+    RAM,               // Flat RAM (no banking)
+    NONE,              // No mapper (slot disabled)
+};
+
+MapperType  mapper_type_from_string(const char* s);
+const char* mapper_type_to_string(MapperType t);
+
+// ---------------------------------------------------------------------------
+// MappingPlan — what to wire on the bus for one collection payload
+// ---------------------------------------------------------------------------
+
+struct MappingEntry {
+    MapperType     mapper_type;
+    uint8_t        subslot;
+    const uint8_t* rom_data;
+    size_t         rom_size;
+    uint8_t*       ram_data;
+    size_t         ram_size;
+};
+
+static constexpr size_t MAPPING_MAX_ENTRIES = 4;
+
+enum class IoDeviceType : uint8_t {
+    NONE = 0,
+    PSG,
+    OPL4,
+};
+
+struct IoDeviceEntry {
+    IoDeviceType type;
+    char         wave_payload_id[PAYLOAD_ID_MAX];
+};
+
+static constexpr size_t MAPPING_MAX_IO_DEVICES = 4;
+
+struct MappingPlan {
+    MappingEntry  entries[MAPPING_MAX_ENTRIES];
+    size_t        entry_count;
+    IoDeviceEntry io_devices[MAPPING_MAX_IO_DEVICES];
+    size_t        io_device_count;
+    bool          expanded;
+};
+
+MappingPlan mapping_plan_from_payload_record(const PayloadRecord& record);
+MappingPlan mapper_plan_from_manifest(const CollectionManifest& manifest,
+                                       uint8_t payload_index);
 
 // ---------------------------------------------------------------------------
 // ROM mappers (read-only; no SRAM allocation needed)

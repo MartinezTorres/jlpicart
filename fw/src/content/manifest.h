@@ -2,6 +2,7 @@
 // manifest.h — In-memory representation of a parsed Collection Manifest.
 
 #include "content/collection_format.h"
+#include "peripherals/peripheral_descriptor.h"
 #include <cstdint>
 
 // Max capability entries per payload and max capability id length.
@@ -13,10 +14,10 @@ static constexpr size_t PAYLOAD_CAP_ID_MAX  = 64;
 
 // One device entry parsed from a payload's "devices" array in the manifest.
 struct ManifestDeviceEntry {
-    DeviceType type;                    // device chip type
-    uint8_t    subslot;                 // MSX subslot (0–3); for memory-mapped devices
-    bool       optional;                // true → user may choose to deactivate
-    char       params[PAYLOAD_ID_MAX];  // device-specific; OPL4: wave_payload_id
+    const PeripheralDescriptor* descriptor; // resolved at parse time; nullptr = unknown
+    uint8_t subslot;                        // MSX subslot (0–3); for memory-mapped devices
+    bool    optional;                       // true → user may choose to deactivate
+    char    params[PAYLOAD_ID_MAX];         // device-specific; OPL4: wave_payload_id
 };
 
 struct PayloadEntry {
