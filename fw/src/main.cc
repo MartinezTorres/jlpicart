@@ -40,10 +40,7 @@
 #include "msx/api/api_window.h"
 #include "msx/menu/menu_host_abi.h"
 #include "msx/menu/menu_app.h"
-#include "store/profile_store.h"
-#include "store/system_settings_store.h"
-#include "store/save_store.h"
-#include "store/stats_store.h"
+#include "store/user_data_store.h"
 #include "spine/device_identity.h"
 #include "crypto/smk.h"
 #include "usb/usb_host.h"
@@ -52,7 +49,6 @@
 #include "usb/usb_install_scanner.h"
 #include "filesystem/flash_device.h"
 #include "filesystem/fat_volume.h"
-#include "store/store.h"
 #include "platform/platform.h"
 #include <cstdio>
 #include <cstring>
@@ -70,32 +66,13 @@ int main() {
     static FatVolume fat_vol;
     fat_vol.mount();
 
-    // 3. FAT-backed stores.
-    static Store store;
+    // 3. FAT-backed stores (unified).
+    static UserDataStore user_data;
     {
-        DiagStatus s = store.init();
-        if (s.ok()) log_info("event store ready");
-        else        log_warn("event store unavailable — sync disabled");
+        DiagStatus s = user_data.init();
+        if (!s.ok()) log_warn("user data init failed");
+        else         log_info("user data stores ready");
     }
-
-    static ProfileStore profile_store;
-    {
-        profile_store.bind_store(store);
-        DiagStatus s = profile_store.init();
-        if (!s.ok()) log_warn("profiles unavailable");
-        else         log_info("profiles ready");
-    }
-
-    static SystemSettingsStore settings_store;
-    settings_store.init();
-    log_info("system settings loaded");
-
-    static SaveStore save_store;
-    save_store.bind_store(store);
-    save_store.init(profile_store);
-
-    static StatsStore stats_store;
-    stats_store.init(profile_store);
 
     // 4. Read security posture from OTP (exactly once).
     const OtpReader& otp = get_hardware_otp_reader();
@@ -209,15 +186,13 @@ int main() {
     // 11. API window.
     static ApiWindow api_win;
     api_win.init(posture, policy_store, registry);
-    if (profile_store.initialized())    api_win.bind_profile_store(profile_store);
-    if (save_store.initialized())       api_win.bind_save_store(save_store);
-    if (stats_store.initialized())      api_win.bind_stats_store(stats_store);
+    if (user_data.initialized())        api_win.bind_user_data(user_data);
     if (device_identity.initialized())  api_win.bind_device_identity(device_identity);
 
     // 12. Network transport: init ESP32 UART and join WiFi if configured.
     static TransportEspAt net_transport;
     {
-        const SystemSettings& ss = settings_store.get();
+        const SystemSettings& ss = user_data.settings();
         if (ss.network_enabled) {
             net_transport.init();
             if (ss.wifi_ssid[0] != '\0') {
@@ -238,8 +213,7 @@ int main() {
     menu_mbx.init(menu_page, MENU_DATA_OFS);
 
     static MenuApp menu_app;
-    menu_app.init(menu_mbx, profile_store);
-    menu_app.bind_settings_store(settings_store);
+    menu_app.init(menu_mbx, user_data);
 
     api_win.set_reset_menu_fn([]() { menu_app.request_reset_to_menu(); });
     menu_app.bind_api_window(api_win);

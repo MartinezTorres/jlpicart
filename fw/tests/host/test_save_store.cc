@@ -1,7 +1,6 @@
-// test_save_store.cc — host tests for SaveStore and Storage service (Stage 19).
+// test_save_store.cc — host tests for save operations and Storage service (Stage 19).
 
-#include "store/save_store.h"
-#include "store/profile_store.h"
+#include "store/user_data_store.h"
 #include "msx/api/api_window.h"
 #include "msx/api/api_types.h"
 #include "spine/security_posture.h"
@@ -16,20 +15,18 @@
 #include <cstdio>
 
 struct SaveFixture {
-    FatTestEnv   env;
-    ProfileStore ps;
-    SaveStore    ss;
+    FatTestEnv    env;
+    UserDataStore uds;
 
     SaveFixture() {
-        ps.init();
-        ss.init(ps);
+        uds.init();
     }
 
     uint8_t begin(uint16_t profile_id, uint16_t blob_id,
                   uint16_t total_len, uint16_t flags = 0u)
     {
         uint8_t h = 0xFF;
-        ss.write_begin(profile_id, blob_id, total_len, flags, &h);
+        uds.save_write_begin(profile_id, blob_id, total_len, flags, &h);
         return h;
     }
 
@@ -37,8 +34,8 @@ struct SaveFixture {
                                 const uint8_t* data, uint16_t len)
     {
         uint8_t h = begin(profile_id, blob_id, len);
-        ss.write_chunk(h, 0, data, len);
-        return ss.write_commit(h);
+        uds.save_write_chunk(h, 0, data, len);
+        return uds.save_write_commit(h);
     }
 };
 
@@ -55,7 +52,7 @@ static void test_save_write_read()
     CHECK(s.ok());
 
     uint8_t out[8] = {};
-    DiagStatus r = f.ss.read(1u, 1u, 0, out, sizeof(out));
+    DiagStatus r = f.uds.save_read(1u, 1u, 0, out, sizeof(out));
     CHECK(r.ok());
     CHECK(memcmp(out, data, sizeof(data)) == 0);
 }
@@ -74,10 +71,9 @@ static void test_save_list()
     CHECK(f.commit_with_data(1u, 2u, d2, sizeof(d2)).ok());
 
     BlobInfo infos[4];
-    uint8_t n = f.ss.list(1u, 0u, infos, 4u);
+    uint8_t n = f.uds.save_list(1u, 0u, infos, 4u);
     CHECK(n == 2u);
 
-    // Check that both blob IDs are present (order may vary).
     bool found1 = false, found2 = false;
     for (uint8_t i = 0; i < n; ++i) {
         if (infos[i].blob_id == 1u && infos[i].size == 4u)  found1 = true;
@@ -98,14 +94,14 @@ static void test_save_delete()
     uint8_t data[4] = {1, 2, 3, 4};
     CHECK(f.commit_with_data(1u, 1u, data, sizeof(data)).ok());
 
-    CHECK(f.ss.delete_blob(1u, 1u).ok());
+    CHECK(f.uds.save_delete(1u, 1u).ok());
 
     BlobInfo infos[4];
-    uint8_t n = f.ss.list(1u, 0u, infos, 4u);
+    uint8_t n = f.uds.save_list(1u, 0u, infos, 4u);
     CHECK(n == 0u);
 
     uint8_t out[4];
-    DiagStatus r = f.ss.read(1u, 1u, 0, out, sizeof(out));
+    DiagStatus r = f.uds.save_read(1u, 1u, 0, out, sizeof(out));
     CHECK(r.code == DiagCode::STORAGE_NOT_FOUND);
 }
 
@@ -120,14 +116,12 @@ static void test_save_profile_isolation()
     uint8_t data[4] = {0xAA, 0xBB, 0xCC, 0xDD};
     CHECK(f.commit_with_data(1u, 1u, data, sizeof(data)).ok());
 
-    // Profile 2 should see no blobs.
     BlobInfo infos[4];
-    uint8_t n = f.ss.list(2u, 0u, infos, 4u);
+    uint8_t n = f.uds.save_list(2u, 0u, infos, 4u);
     CHECK(n == 0u);
 
-    // Read from profile 2 should fail.
     uint8_t out[4];
-    DiagStatus r = f.ss.read(2u, 1u, 0, out, sizeof(out));
+    DiagStatus r = f.uds.save_read(2u, 1u, 0, out, sizeof(out));
     CHECK(r.code == DiagCode::STORAGE_NOT_FOUND);
 }
 
@@ -143,21 +137,19 @@ static void test_save_concurrent_writes()
     for (int i = 0; i < SAVE_WRITE_HANDLES; ++i) {
         uint8_t data[4] = {static_cast<uint8_t>(i), 0, 0, 0};
         uint8_t h = 0xFF;
-        DiagStatus s = f.ss.write_begin(1u, static_cast<uint16_t>(i + 1),
-                                        4u, 0u, &h);
+        DiagStatus s = f.uds.save_write_begin(1u, static_cast<uint16_t>(i + 1),
+                                              4u, 0u, &h);
         CHECK(s.ok());
         handles[i] = h;
-        f.ss.write_chunk(h, 0, data, 4u);
+        f.uds.save_write_chunk(h, 0, data, 4u);
     }
 
-    // One more should fail.
     uint8_t h_extra = 0xFF;
-    DiagStatus extra = f.ss.write_begin(1u, 99u, 4u, 0u, &h_extra);
+    DiagStatus extra = f.uds.save_write_begin(1u, 99u, 4u, 0u, &h_extra);
     CHECK(extra.code == DiagCode::STORAGE_FULL);
 
-    // Commit all.
     for (int i = 0; i < SAVE_WRITE_HANDLES; ++i) {
-        CHECK(f.ss.write_commit(handles[i]).ok());
+        CHECK(f.uds.save_write_commit(handles[i]).ok());
     }
 }
 
@@ -166,25 +158,22 @@ static void test_save_concurrent_writes()
 // ---------------------------------------------------------------------------
 
 struct ApiFixture2 {
-    FatTestEnv        env;
-    ProfileStore      ps;
-    SaveStore         ss;
-    SecurityPosture   posture;
-    PolicyStore       policy_store;
+    FatTestEnv         env;
+    UserDataStore      uds;
+    SecurityPosture    posture;
+    PolicyStore        policy_store;
     CapabilityRegistry registry;
-    ApiWindow         win;
+    ApiWindow          win;
 
     ApiFixture2() {
-        ps.init();
-        ss.init(ps);
+        uds.init();
         posture = {};
         policy_store.load(posture);
         registry.init(BoardDescriptor::for_current_board(),
                       kDriverDescriptors, kDriverDescriptorCount,
                       policy_store.info());
         win.init(posture, policy_store, registry);
-        win.bind_profile_store(ps);
-        win.bind_save_store(ss);
+        win.bind_user_data(uds);
     }
 
     void push_req(uint16_t seq, uint8_t method,
@@ -286,7 +275,6 @@ static void test_storage_api_roundtrip()
         CHECK(rsp.status == API_OK);
         CHECK(rsp.scratch_len == 4u);
 
-        // Verify data in c2h scratch.
         const uint8_t* out = f.win.buf() + API_C2H_SCRATCH_OFS;
         CHECK(out[0] == 0xCA);
         CHECK(out[1] == 0xFE);

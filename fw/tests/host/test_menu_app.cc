@@ -19,8 +19,7 @@
 
 #include "msx/menu/menu_app.h"
 #include "msx/menu/menu_host_abi.h"
-#include "store/profile_store.h"
-#include "store/profile_format.h"
+#include "store/user_data_store.h"
 
 #include "fat_test_env.h"
 #include "test_helpers.h"
@@ -33,17 +32,17 @@
 // ---------------------------------------------------------------------------
 
 struct MenuFixture {
-    uint8_t      page[MENU_PAGE_SIZE];
-    FatTestEnv   env;
-    ProfileStore ps;
-    MenuMailbox  mbx;
-    MenuApp      app;
+    uint8_t       page[MENU_PAGE_SIZE];
+    FatTestEnv    env;
+    UserDataStore uds;
+    MenuMailbox   mbx;
+    MenuApp       app;
 
     MenuFixture() {
         memset(page, 0, sizeof(page));
         mbx.init(page, 0u);
-        ps.init();
-        app.init(mbx, ps);
+        uds.init();
+        app.init(mbx, uds);
     }
 
     // Simulate Z80 stub completing its own initialisation by writing host_caps.
@@ -249,8 +248,8 @@ static void test_menu_profiles_renders() {
 
     // Create one profile.
     uint16_t pid = 0u;
-    CHECK(f.ps.create("Alice", "en", &pid).ok());
-    CHECK(f.ps.set_active(pid).ok());
+    CHECK(f.uds.profile_create("Alice", "en", &pid).ok());
+    CHECK(f.uds.profile_set_active(pid).ok());
 
     f.boot_to_main();
 
@@ -313,8 +312,8 @@ static void test_menu_profiles_create() {
     CHECK(cmd == MENU_CMD_CLEAR); // re-render PROFILES
 
     // Profile should now exist.
-    CHECK(f.ps.count() == 1u);
-    CHECK(f.ps.active() != PROF_ID_NONE);
+    CHECK(f.uds.profile_count() == 1u);
+    CHECK(f.uds.profile_active() != PROF_ID_NONE);
 }
 
 // ---------------------------------------------------------------------------

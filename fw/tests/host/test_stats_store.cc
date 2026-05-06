@@ -1,10 +1,8 @@
-// test_stats_store.cc — host tests for StatsStore and UserStats service (Stage 21).
+// test_stats_store.cc — host tests for stats/achievements/leaderboards and UserStats service (Stage 21).
 
-#include "store/stats_store.h"
+#include "store/user_data_store.h"
 #include "spine/device_identity.h"
 #include <openssl/evp.h>
-#include "store/profile_store.h"
-#include "store/store.h"
 #include "msx/api/api_window.h"
 #include "msx/api/api_types.h"
 #include "spine/security_posture.h"
@@ -20,17 +18,11 @@
 #include <cstdio>
 
 struct StatsFixture {
-    FatTestEnv   env;
-    Store        store;
-    ProfileStore ps;
-    StatsStore   ss;
+    FatTestEnv    env;
+    UserDataStore uds;
 
     StatsFixture() {
-        store.init();
-        ps.bind_store(store);
-        ps.init();
-        ss.bind_store(store);
-        ss.init(ps);
+        uds.init();
     }
 };
 
@@ -42,16 +34,15 @@ static void test_stat_set_get()
 {
     StatsFixture f;
 
-    DiagStatus s = f.ss.stat_set(1u, "game-001", 1u, 42, 0u);
+    DiagStatus s = f.uds.stat_set(1u, "game-001", 1u, 42, 0u);
     CHECK(s.ok());
 
     int32_t val = -1;
-    CHECK(f.ss.stat_get(1u, "game-001", 1u, &val).ok());
+    CHECK(f.uds.stat_get(1u, "game-001", 1u, &val).ok());
     CHECK(val == 42);
 
-    // Absent stat returns 0 without error.
     int32_t absent = -1;
-    CHECK(f.ss.stat_get(1u, "game-001", 99u, &absent).ok());
+    CHECK(f.uds.stat_get(1u, "game-001", 99u, &absent).ok());
     CHECK(absent == 0);
 }
 
@@ -63,15 +54,15 @@ static void test_stat_add()
 {
     StatsFixture f;
 
-    f.ss.stat_set(1u, "game-001", 1u, 10, 0u);
+    f.uds.stat_set(1u, "game-001", 1u, 10, 0u);
 
-    CHECK(f.ss.stat_set(1u, "game-001", 1u, 5, 1u).ok()); // add 5
+    CHECK(f.uds.stat_set(1u, "game-001", 1u, 5, 1u).ok());
     int32_t val = 0;
-    CHECK(f.ss.stat_get(1u, "game-001", 1u, &val).ok());
+    CHECK(f.uds.stat_get(1u, "game-001", 1u, &val).ok());
     CHECK(val == 15);
 
-    CHECK(f.ss.stat_set(1u, "game-001", 1u, -5, 1u).ok()); // add -5
-    CHECK(f.ss.stat_get(1u, "game-001", 1u, &val).ok());
+    CHECK(f.uds.stat_set(1u, "game-001", 1u, -5, 1u).ok());
+    CHECK(f.uds.stat_get(1u, "game-001", 1u, &val).ok());
     CHECK(val == 10);
 }
 
@@ -83,15 +74,15 @@ static void test_stat_max()
 {
     StatsFixture f;
 
-    f.ss.stat_set(1u, "game-001", 1u, 10, 0u);
+    f.uds.stat_set(1u, "game-001", 1u, 10, 0u);
 
-    CHECK(f.ss.stat_set(1u, "game-001", 1u, 8, 2u).ok());
+    CHECK(f.uds.stat_set(1u, "game-001", 1u, 8, 2u).ok());
     int32_t val = 0;
-    CHECK(f.ss.stat_get(1u, "game-001", 1u, &val).ok());
+    CHECK(f.uds.stat_get(1u, "game-001", 1u, &val).ok());
     CHECK(val == 10);
 
-    CHECK(f.ss.stat_set(1u, "game-001", 1u, 20, 2u).ok());
-    CHECK(f.ss.stat_get(1u, "game-001", 1u, &val).ok());
+    CHECK(f.uds.stat_set(1u, "game-001", 1u, 20, 2u).ok());
+    CHECK(f.uds.stat_get(1u, "game-001", 1u, &val).ok());
     CHECK(val == 20);
 }
 
@@ -103,18 +94,15 @@ static void test_ach_unlock()
 {
     StatsFixture f;
 
-    // Unlock achievement 5.
-    CHECK(f.ss.ach_unlock(1u, "game-001", 5u).ok());
+    CHECK(f.uds.ach_unlock(1u, "game-001", 5u).ok());
 
-    // Verify via ach_get (achievements are Store-backed, not FAT files).
     bool unlocked = false;
-    CHECK(f.ss.ach_get(1u, "game-001", 5u, &unlocked).ok());
+    CHECK(f.uds.ach_get(1u, "game-001", 5u, &unlocked).ok());
     CHECK(unlocked);
 
-    // Re-unlock is idempotent.
-    CHECK(f.ss.ach_unlock(1u, "game-001", 5u).ok());
+    CHECK(f.uds.ach_unlock(1u, "game-001", 5u).ok());
     unlocked = false;
-    CHECK(f.ss.ach_get(1u, "game-001", 5u, &unlocked).ok());
+    CHECK(f.uds.ach_get(1u, "game-001", 5u, &unlocked).ok());
     CHECK(unlocked);
 }
 
@@ -128,21 +116,19 @@ static void test_leaderboard_submit()
 
     uint8_t token[STATS_TOKEN_LEN] = {};
     uint8_t handle = 0xFFu;
-    CHECK(f.ss.leader_begin(1u, "game-001", 2u, token, &handle).ok());
+    CHECK(f.uds.leader_begin(1u, "game-001", 2u, token, &handle).ok());
     CHECK(handle < STATS_TOKEN_SLOTS);
 
-    CHECK(f.ss.leader_submit(handle, 9999u, 0u, nullptr, 0u).ok());
+    CHECK(f.uds.leader_submit(handle, 9999u, 0u, nullptr, 0u).ok());
 
-    // Entry should be stored on FAT.
     LeaderEntry entry = {};
     size_t actual = 0u;
     CHECK(fat_read_file("1:/saves/0001/st_game-001_l_0002.bin", &entry, sizeof(entry), &actual));
     CHECK(actual == sizeof(LeaderEntry));
     CHECK(entry.score == 9999u);
 
-    // Handle should be freed: try to allocate it again.
     uint8_t handle2 = 0xFFu;
-    CHECK(f.ss.leader_begin(1u, "game-001", 2u, nullptr, &handle2).ok());
+    CHECK(f.uds.leader_begin(1u, "game-001", 2u, nullptr, &handle2).ok());
     CHECK(handle2 < STATS_TOKEN_SLOTS);
 }
 
@@ -154,11 +140,10 @@ static void test_stats_profile_isolation()
 {
     StatsFixture f;
 
-    f.ss.stat_set(1u, "game-001", 1u, 100, 0u);
+    f.uds.stat_set(1u, "game-001", 1u, 100, 0u);
 
-    // Profile 2 should see 0 for the same stat/payload.
     int32_t val = -1;
-    CHECK(f.ss.stat_get(2u, "game-001", 1u, &val).ok());
+    CHECK(f.uds.stat_get(2u, "game-001", 1u, &val).ok());
     CHECK(val == 0);
 }
 
@@ -168,28 +153,21 @@ static void test_stats_profile_isolation()
 
 struct StatsApiFixture {
     FatTestEnv         env;
-    Store              store;
-    ProfileStore       ps;
-    StatsStore         ss;
+    UserDataStore      uds;
     SecurityPosture    posture;
     PolicyStore        policy_store;
     CapabilityRegistry registry;
     ApiWindow          win;
 
     StatsApiFixture() {
-        store.init();
-        ps.bind_store(store);
-        ps.init();
-        ss.bind_store(store);
-        ss.init(ps);
+        uds.init();
         posture = {};
         policy_store.load(posture);
         registry.init(BoardDescriptor::for_current_board(),
                       kDriverDescriptors, kDriverDescriptorCount,
                       policy_store.info());
         win.init(posture, policy_store, registry);
-        win.bind_profile_store(ps);
-        win.bind_stats_store(ss);
+        win.bind_user_data(uds);
         win.set_active_payload("test-payload");
     }
 
@@ -284,15 +262,9 @@ static bool ed25519_verify(const uint8_t* msg, size_t msg_len,
 
 static void test_leaderboard_signed()
 {
-    FatTestEnv   env;
-    Store        store;
-    ProfileStore ps;
-    StatsStore   ss;
-    store.init();
-    ps.bind_store(store);
-    ps.init();
-    ss.bind_store(store);
-    ss.init(ps);
+    FatTestEnv    env;
+    UserDataStore uds;
+    uds.init();
 
     DeviceIdentity dik;
     CHECK(dik.init_or_load().ok());
@@ -302,13 +274,12 @@ static void test_leaderboard_signed()
     uint8_t handle = 0xFFu;
     const uint16_t profile_id = 1u;
     const uint16_t lb_id      = 7u;
-    CHECK(ss.leader_begin(profile_id, "game-002", lb_id, token, &handle).ok());
+    CHECK(uds.leader_begin(profile_id, "game-002", lb_id, token, &handle).ok());
     CHECK(handle < STATS_TOKEN_SLOTS);
 
     const uint32_t score = 88888u;
-    CHECK(ss.leader_submit(handle, score, 0u, nullptr, 0u, &dik).ok());
+    CHECK(uds.leader_submit(handle, score, 0u, nullptr, 0u, &dik).ok());
 
-    // Read back the stored entry from FAT.
     char path[64];
     snprintf(path, sizeof(path), "1:/saves/%04x/st_game-002_l_%04x.bin",
              static_cast<unsigned>(profile_id),
@@ -319,14 +290,11 @@ static void test_leaderboard_signed()
     CHECK(actual == sizeof(LeaderEntry));
     CHECK(entry.score == score);
 
-    // Signature must be non-zero.
     bool any_nonzero = false;
     for (size_t i = 0; i < LEADER_SIG_LEN; ++i)
         any_nonzero |= (entry.signature[i] != 0u);
     CHECK(any_nonzero);
 
-    // Rebuild canonical message and verify with DIK public key.
-    // Canonical layout: score(4) || timestamp(4) || token(16) || profile_id(2) || lb_id(2)
     uint8_t msg[28];
     memcpy(msg + 0,  &entry.score,     4u);
     memcpy(msg + 4,  &entry.timestamp, 4u);

@@ -26,7 +26,7 @@
 #include "usb/usb_host.h"
 #include "usb/usb_install_scanner.h"
 #include "crypto/sha256.h"
-#include "store/profile_store.h"
+#include "store/user_data_store.h"
 
 #include "fat_test_env.h"
 #include "test_helpers.h"
@@ -133,7 +133,7 @@ static const char kManifest[] =
 
 struct PolicyApiFixture {
     FatTestEnv         env;
-    ProfileStore       ps;
+    UserDataStore      uds;
     SecurityPosture    posture;
     PolicyStore        policy_store;
     CapabilityRegistry registry;
@@ -142,14 +142,14 @@ struct PolicyApiFixture {
 
     explicit PolicyApiFixture(PolicyFlags flags)
     {
-        ps.init();
+        uds.init();
         posture      = {};
         policy_store = make_policy(flags);
         registry.init(BoardDescriptor::for_current_board(),
                       kDriverDescriptors, kDriverDescriptorCount,
                       policy_store.info());
         win.init(posture, policy_store, registry);
-        win.bind_profile_store(ps);
+        win.bind_user_data(uds);
         dik.init_or_load();
         win.bind_device_identity(dik);
     }

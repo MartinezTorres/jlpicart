@@ -1,11 +1,6 @@
-// test_system_settings.cc — host tests for SystemSettingsStore (Stage 17).
-//
-// Tests verify: defaults, round-trip persistence, missing-key fallback,
-// corrupt-blob fallback, and factory reset operations.
+// test_system_settings.cc — host tests for system settings via UserDataStore.
 
-#include "store/system_settings_store.h"
-#include "store/system_settings.h"
-#include "store/profile_store.h"
+#include "store/user_data_store.h"
 
 #include "fat_test_env.h"
 #include "filesystem/fat_util.h"
@@ -21,10 +16,10 @@ static void test_settings_defaults()
 {
     FatTestEnv env;
 
-    SystemSettingsStore store;
-    store.init();
+    UserDataStore uds;
+    uds.init();
 
-    const SystemSettings& cfg = store.get();
+    const SystemSettings& cfg = uds.settings();
     CHECK(cfg.wifi_ssid[0] == '\0');
     CHECK(cfg.wifi_pass[0] == '\0');
     CHECK(strcmp(cfg.language, "en") == 0);
@@ -45,7 +40,7 @@ static void test_settings_roundtrip()
 {
     FatTestEnv env;
 
-    SystemSettings s = SystemSettingsStore::defaults();
+    SystemSettings s = UserDataStore::settings_defaults();
     strncpy(s.wifi_ssid, "MyNetwork", sizeof(s.wifi_ssid) - 1u);
     strncpy(s.wifi_pass, "hunter2",   sizeof(s.wifi_pass) - 1u);
     strncpy(s.language,  "fr",        sizeof(s.language)  - 1u);
@@ -54,17 +49,16 @@ static void test_settings_roundtrip()
     s.guest_allowed   = 0u;
 
     {
-        SystemSettingsStore store;
-        store.init();
-        DiagStatus ds = store.set(s);
+        UserDataStore uds;
+        uds.init();
+        DiagStatus ds = uds.settings_set(s);
         CHECK(ds.ok());
     }
 
-    // Reload from same FAT volume (simulates reboot using same flash device).
     {
-        SystemSettingsStore store2;
-        store2.init();
-        const SystemSettings& cfg = store2.get();
+        UserDataStore uds2;
+        uds2.init();
+        const SystemSettings& cfg = uds2.settings();
         CHECK(strcmp(cfg.wifi_ssid, "MyNetwork") == 0);
         CHECK(strcmp(cfg.wifi_pass, "hunter2")   == 0);
         CHECK(strcmp(cfg.language,  "fr")         == 0);
@@ -82,23 +76,18 @@ static void test_settings_missing_key()
 {
     FatTestEnv env;
 
-    // Don't write anything; just init the store.
-    SystemSettingsStore store;
-    DiagStatus init_status = DiagStatus::success(); // init() calls load() internally
-    store.init();
-    // init() succeeds even with a missing file (load() returns NOT_FOUND internally).
-    CHECK(store.initialized());
+    UserDataStore uds;
+    uds.init();
+    CHECK(uds.initialized());
 
     // Explicit load() should return STORAGE_NOT_FOUND.
-    DiagStatus s = store.load();
+    DiagStatus s = uds.settings_load();
     CHECK(s.code == DiagCode::STORAGE_NOT_FOUND);
 
-    // get() must still return defaults (not garbage).
-    const SystemSettings& cfg = store.get();
+    // settings() must still return defaults (not garbage).
+    const SystemSettings& cfg = uds.settings();
     CHECK(strcmp(cfg.language, "en") == 0);
     CHECK(cfg.network_enabled == 1u);
-
-    (void)init_status;
 }
 
 // ---------------------------------------------------------------------------
@@ -109,19 +98,18 @@ static void test_settings_corrupt()
 {
     FatTestEnv env;
 
-    // Write a blob that is too short to be a valid SystemSettings.
     uint8_t garbage[4] = {0xDE, 0xAD, 0xBE, 0xEF};
     fat_ensure_dir("1:/system");
     fat_write_file("1:/system/settings.bin", garbage, sizeof(garbage));
 
-    SystemSettingsStore store;
-    store.init();
+    UserDataStore uds;
+    uds.init();
 
     // load() should detect wrong size and apply defaults.
-    DiagStatus s = store.load();
+    DiagStatus s = uds.settings_load();
     CHECK(s.code == DiagCode::STORAGE_IO_ERROR);
 
-    const SystemSettings& cfg = store.get();
+    const SystemSettings& cfg = uds.settings();
     CHECK(strcmp(cfg.language, "en") == 0);
 }
 
@@ -133,32 +121,26 @@ static void test_wipe_user_data()
 {
     FatTestEnv env;
 
-    ProfileStore profiles;
-    profiles.init();
+    UserDataStore uds;
+    uds.init();
 
-    // Write a system settings value.
-    SystemSettingsStore store;
-    store.init();
-    SystemSettings cfg = SystemSettingsStore::defaults();
+    SystemSettings cfg = UserDataStore::settings_defaults();
     strncpy(cfg.language, "de", sizeof(cfg.language) - 1u);
-    store.set(cfg);
+    uds.settings_set(cfg);
 
-    // Write a profile.
     uint16_t pid = 0u;
-    CHECK(profiles.create("Alice", "en", &pid).ok());
-    CHECK(profiles.count() == 1u);
+    CHECK(uds.profile_create("Alice", "en", &pid).ok());
+    CHECK(uds.profile_count() == 1u);
 
-    // Wipe user data.
-    DiagStatus ws = store.wipe_user_data(profiles);
+    DiagStatus ws = uds.wipe_user_data();
     CHECK(ws.ok());
 
-    // Profiles should be gone.
-    CHECK(profiles.count() == 0u);
-    CHECK(profiles.active() == PROF_ID_NONE);
+    CHECK(uds.profile_count() == 0u);
+    CHECK(uds.profile_active() == PROF_ID_NONE);
 
     // System settings should still be present.
-    store.load();
-    CHECK(strcmp(store.get().language, "de") == 0);
+    uds.settings_load();
+    CHECK(strcmp(uds.settings().language, "de") == 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -169,27 +151,21 @@ static void test_full_wipe()
 {
     FatTestEnv env;
 
-    ProfileStore profiles;
-    profiles.init();
+    UserDataStore uds;
+    uds.init();
 
-    SystemSettingsStore store;
-    store.init();
-
-    // Write non-default settings.
-    SystemSettings cfg = SystemSettingsStore::defaults();
+    SystemSettings cfg = UserDataStore::settings_defaults();
     strncpy(cfg.language, "ja", sizeof(cfg.language) - 1u);
-    store.set(cfg);
-    CHECK(strcmp(store.get().language, "ja") == 0);
+    uds.settings_set(cfg);
+    CHECK(strcmp(uds.settings().language, "ja") == 0);
 
-    // Full wipe.
-    DiagStatus ws = store.full_wipe(profiles);
+    DiagStatus ws = uds.full_wipe();
     CHECK(ws.ok());
 
     // After reload, settings should be defaults again.
-    DiagStatus ls = store.load();
-    // File is gone — STORAGE_NOT_FOUND expected.
+    DiagStatus ls = uds.settings_load();
     CHECK(ls.code == DiagCode::STORAGE_NOT_FOUND);
-    CHECK(strcmp(store.get().language, "en") == 0);
+    CHECK(strcmp(uds.settings().language, "en") == 0);
 }
 
 // ---------------------------------------------------------------------------

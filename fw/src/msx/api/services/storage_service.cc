@@ -2,7 +2,6 @@
 
 #include "msx/api/services/services.h"
 #include "msx/api/api_window.h"
-#include "store/save_store.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------
@@ -24,32 +23,27 @@ static uint16_t diag_to_api(DiagCode code)
 {
     switch (code) {
         case DiagCode::STORAGE_NOT_FOUND: return API_E_NOT_FOUND;
-        case DiagCode::STORAGE_FULL:      return API_E_RING_FULL; // nearest "full" code
+        case DiagCode::STORAGE_FULL:      return API_E_RING_FULL;
         default:                           return API_E_INTERNAL;
     }
 }
 
 // ---------------------------------------------------------------------------
 // STG_LIST_BLOBS (0x00)
-//
-// Request payload: { u8 blob_kind }
-// Response payload: { u16 count, entry... }
-//   entry: { u16 blob_id, u16 flags, u16 size, u16 max_bytes }
 // ---------------------------------------------------------------------------
 
 static void handle_list_blobs(const MsgHeader& req,
                                const uint8_t* payload, uint16_t payload_len,
-                               ApiWindow& win, SaveStore& ss,
-                               uint16_t profile_id)
+                               ApiWindow& win, UserDataStore& uds)
 {
     uint8_t kind = 0u;
     if (payload_len >= 1u) kind = payload[0];
 
     BlobInfo infos[16];
-    uint8_t n = ss.list(profile_id, kind, infos,
-                        static_cast<uint8_t>(sizeof(infos)/sizeof(infos[0])));
+    uint16_t pid = uds.profile_active();
+    uint8_t n = uds.save_list(pid, kind, infos,
+                              static_cast<uint8_t>(sizeof(infos)/sizeof(infos[0])));
 
-    // Build payload: u16 count + n × 8-byte entries.
     uint8_t buf[2 + 16 * 8];
     buf[0] = static_cast<uint8_t>(n);
     buf[1] = 0;
@@ -65,15 +59,11 @@ static void handle_list_blobs(const MsgHeader& req,
 
 // ---------------------------------------------------------------------------
 // STG_READ_BLOB (0x01)
-//
-// Request payload: { u16 blob_id, u32 offset, u16 len }
-// Response: data placed in c2h scratch; response scratch_len = bytes_read.
 // ---------------------------------------------------------------------------
 
 static void handle_read_blob(const MsgHeader& req,
                               const uint8_t* payload, uint16_t payload_len,
-                              ApiWindow& win, SaveStore& ss,
-                              uint16_t profile_id)
+                              ApiWindow& win, UserDataStore& uds)
 {
     if (payload_len < 8u) { send_err(win, req, API_E_BAD_REQ); return; }
 
@@ -86,14 +76,14 @@ static void handle_read_blob(const MsgHeader& req,
 
     if (len > API_C2H_SCRATCH_LEN) len = static_cast<uint16_t>(API_C2H_SCRATCH_LEN);
 
+    uint16_t pid = uds.profile_active();
     uint8_t* scratch = win.buf() + API_C2H_SCRATCH_OFS;
-    DiagStatus s = ss.read(profile_id, blob_id, offset, scratch, len);
+    DiagStatus s = uds.save_read(pid, blob_id, offset, scratch, len);
     if (!s.ok()) {
         send_err(win, req, diag_to_api(s.code));
         return;
     }
 
-    // Respond with scratch_len = bytes placed in scratch.
     MsgHeader rsp = {};
     rsp.seq         = req.seq;
     rsp.service     = req.service;
@@ -112,15 +102,11 @@ static void handle_read_blob(const MsgHeader& req,
 
 // ---------------------------------------------------------------------------
 // STG_WRITE_BLOB_BEGIN (0x02)
-//
-// Request payload: { u16 blob_id, u16 total_len, u16 flags }
-// Response payload: { u16 handle, u16 chunk_hint }
 // ---------------------------------------------------------------------------
 
 static void handle_write_begin(const MsgHeader& req,
                                 const uint8_t* payload, uint16_t payload_len,
-                                ApiWindow& win, SaveStore& ss,
-                                uint16_t profile_id)
+                                ApiWindow& win, UserDataStore& uds)
 {
     if (payload_len < 6u) { send_err(win, req, API_E_BAD_REQ); return; }
 
@@ -129,8 +115,9 @@ static void handle_write_begin(const MsgHeader& req,
     memcpy(&total_len, payload + 2, 2);
     memcpy(&flags,     payload + 4, 2);
 
+    uint16_t pid = uds.profile_active();
     uint8_t handle = 0;
-    DiagStatus s = ss.write_begin(profile_id, blob_id, total_len, flags, &handle);
+    DiagStatus s = uds.save_write_begin(pid, blob_id, total_len, flags, &handle);
     if (!s.ok()) { send_err(win, req, diag_to_api(s.code)); return; }
 
     uint8_t rsp_buf[4];
@@ -143,14 +130,11 @@ static void handle_write_begin(const MsgHeader& req,
 
 // ---------------------------------------------------------------------------
 // STG_WRITE_BLOB_CHUNK (0x03)
-//
-// Request payload: { u16 handle, u32 offset, u16 len }
-// Data comes from h2c scratch (req.scratch_ofs, req.scratch_len).
 // ---------------------------------------------------------------------------
 
 static void handle_write_chunk(const MsgHeader& req,
                                 const uint8_t* payload, uint16_t payload_len,
-                                ApiWindow& win, SaveStore& ss)
+                                ApiWindow& win, UserDataStore& uds)
 {
     if (payload_len < 8u) { send_err(win, req, API_E_BAD_REQ); return; }
 
@@ -167,14 +151,13 @@ static void handle_write_chunk(const MsgHeader& req,
     }
     uint8_t handle = static_cast<uint8_t>(handle16);
 
-    // Read data from h2c scratch.
     const uint8_t* data = win.buf() + API_H2C_SCRATCH_OFS;
     if (req.scratch_ofs != 0xFFFFu) {
         data = win.buf() + API_H2C_SCRATCH_OFS + req.scratch_ofs;
     }
     if (len > req.scratch_len) len = req.scratch_len;
 
-    DiagStatus s = ss.write_chunk(handle, offset, data, len);
+    DiagStatus s = uds.save_write_chunk(handle, offset, data, len);
     if (!s.ok()) { send_err(win, req, diag_to_api(s.code)); return; }
 
     send_ok(win, req);
@@ -182,13 +165,11 @@ static void handle_write_chunk(const MsgHeader& req,
 
 // ---------------------------------------------------------------------------
 // STG_WRITE_BLOB_COMMIT (0x04)
-//
-// Request payload: { u16 handle }
 // ---------------------------------------------------------------------------
 
 static void handle_write_commit(const MsgHeader& req,
                                  const uint8_t* payload, uint16_t payload_len,
-                                 ApiWindow& win, SaveStore& ss)
+                                 ApiWindow& win, UserDataStore& uds)
 {
     if (payload_len < 2u) { send_err(win, req, API_E_BAD_REQ); return; }
 
@@ -199,28 +180,26 @@ static void handle_write_commit(const MsgHeader& req,
         return;
     }
 
-    DiagStatus s = ss.write_commit(static_cast<uint8_t>(handle16));
+    DiagStatus s = uds.save_write_commit(static_cast<uint8_t>(handle16));
     if (!s.ok()) { send_err(win, req, diag_to_api(s.code)); return; }
     send_ok(win, req);
 }
 
 // ---------------------------------------------------------------------------
 // STG_DELETE_BLOB (0x05)
-//
-// Request payload: { u16 blob_id }
 // ---------------------------------------------------------------------------
 
 static void handle_delete_blob(const MsgHeader& req,
                                 const uint8_t* payload, uint16_t payload_len,
-                                ApiWindow& win, SaveStore& ss,
-                                uint16_t profile_id)
+                                ApiWindow& win, UserDataStore& uds)
 {
     if (payload_len < 2u) { send_err(win, req, API_E_BAD_REQ); return; }
 
     uint16_t blob_id;
     memcpy(&blob_id, payload, 2);
 
-    DiagStatus s = ss.delete_blob(profile_id, blob_id);
+    uint16_t pid = uds.profile_active();
+    DiagStatus s = uds.save_delete(pid, blob_id);
     if (!s.ok()) { send_err(win, req, diag_to_api(s.code)); return; }
     send_ok(win, req);
 }
@@ -233,31 +212,26 @@ void storage_service_handle(const MsgHeader& req,
                               const uint8_t*   payload,
                               uint16_t         payload_len,
                               ApiWindow&       win,
-                              SaveStore&       save_store,
-                              uint16_t         active_profile_id)
+                              UserDataStore&   uds)
 {
     switch (req.method) {
         case STG_LIST_BLOBS:
-            handle_list_blobs(req, payload, payload_len, win,
-                              save_store, active_profile_id);
+            handle_list_blobs(req, payload, payload_len, win, uds);
             break;
         case STG_READ_BLOB:
-            handle_read_blob(req, payload, payload_len, win,
-                             save_store, active_profile_id);
+            handle_read_blob(req, payload, payload_len, win, uds);
             break;
         case STG_WRITE_BLOB_BEGIN:
-            handle_write_begin(req, payload, payload_len, win,
-                               save_store, active_profile_id);
+            handle_write_begin(req, payload, payload_len, win, uds);
             break;
         case STG_WRITE_BLOB_CHUNK:
-            handle_write_chunk(req, payload, payload_len, win, save_store);
+            handle_write_chunk(req, payload, payload_len, win, uds);
             break;
         case STG_WRITE_BLOB_COMMIT:
-            handle_write_commit(req, payload, payload_len, win, save_store);
+            handle_write_commit(req, payload, payload_len, win, uds);
             break;
         case STG_DELETE_BLOB:
-            handle_delete_blob(req, payload, payload_len, win,
-                               save_store, active_profile_id);
+            handle_delete_blob(req, payload, payload_len, win, uds);
             break;
         default:
             win.write_response(req.seq, req.service, req.method,

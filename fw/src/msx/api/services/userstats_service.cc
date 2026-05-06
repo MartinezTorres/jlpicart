@@ -2,7 +2,6 @@
 
 #include "msx/api/services/services.h"
 #include "msx/api/api_window.h"
-#include "store/stats_store.h"
 #include "spine/device_identity.h"
 #include <cstring>
 
@@ -32,15 +31,12 @@ static uint16_t diag_to_api(DiagCode code)
 
 // ---------------------------------------------------------------------------
 // UST_STAT_GET (0x00)
-//
-// Request payload: { u16 stat_id }
-// Response payload: { s32 value }
 // ---------------------------------------------------------------------------
 
 static void handle_stat_get(const MsgHeader& req,
                               const uint8_t* payload, uint16_t payload_len,
-                              ApiWindow& win, StatsStore& ss,
-                              uint16_t profile_id, const char* payload_id)
+                              ApiWindow& win, UserDataStore& uds,
+                              const char* payload_id)
 {
     if (payload_len < 2u) { send_err(win, req, API_E_BAD_REQ); return; }
 
@@ -48,7 +44,7 @@ static void handle_stat_get(const MsgHeader& req,
     memcpy(&stat_id, payload, 2u);
 
     int32_t value = 0;
-    DiagStatus s = ss.stat_get(profile_id, payload_id, stat_id, &value);
+    DiagStatus s = uds.stat_get(uds.profile_active(), payload_id, stat_id, &value);
     if (!s.ok()) { send_err(win, req, diag_to_api(s.code)); return; }
 
     uint8_t rsp[4];
@@ -58,15 +54,12 @@ static void handle_stat_get(const MsgHeader& req,
 
 // ---------------------------------------------------------------------------
 // UST_STAT_SET (0x01)
-//
-// Request payload: { u16 stat_id, s32 value, u8 op }
-// Response: OK
 // ---------------------------------------------------------------------------
 
 static void handle_stat_set(const MsgHeader& req,
                               const uint8_t* payload, uint16_t payload_len,
-                              ApiWindow& win, StatsStore& ss,
-                              uint16_t profile_id, const char* payload_id)
+                              ApiWindow& win, UserDataStore& uds,
+                              const char* payload_id)
 {
     if (payload_len < 7u) { send_err(win, req, API_E_BAD_REQ); return; }
 
@@ -76,44 +69,38 @@ static void handle_stat_set(const MsgHeader& req,
     memcpy(&stat_id, payload + 0u, 2u);
     memcpy(&value,   payload + 2u, 4u);
 
-    DiagStatus s = ss.stat_set(profile_id, payload_id, stat_id, value, op);
+    DiagStatus s = uds.stat_set(uds.profile_active(), payload_id, stat_id, value, op);
     if (!s.ok()) { send_err(win, req, diag_to_api(s.code)); return; }
     send_ok(win, req);
 }
 
 // ---------------------------------------------------------------------------
 // UST_ACH_UNLOCK (0x02)
-//
-// Request payload: { u16 ach_id }
-// Response: OK
 // ---------------------------------------------------------------------------
 
 static void handle_ach_unlock(const MsgHeader& req,
                                 const uint8_t* payload, uint16_t payload_len,
-                                ApiWindow& win, StatsStore& ss,
-                                uint16_t profile_id, const char* payload_id)
+                                ApiWindow& win, UserDataStore& uds,
+                                const char* payload_id)
 {
     if (payload_len < 2u) { send_err(win, req, API_E_BAD_REQ); return; }
 
     uint16_t ach_id;
     memcpy(&ach_id, payload, 2u);
 
-    DiagStatus s = ss.ach_unlock(profile_id, payload_id, ach_id);
+    DiagStatus s = uds.ach_unlock(uds.profile_active(), payload_id, ach_id);
     if (!s.ok()) { send_err(win, req, diag_to_api(s.code)); return; }
     send_ok(win, req);
 }
 
 // ---------------------------------------------------------------------------
 // UST_LEADER_RUN_BEGIN (0x03)
-//
-// Request payload: { u16 lb_id }
-// Response payload: { u8 handle }; token placed in c2h scratch (scratch_len=16)
 // ---------------------------------------------------------------------------
 
 static void handle_leader_begin(const MsgHeader& req,
                                   const uint8_t* payload, uint16_t payload_len,
-                                  ApiWindow& win, StatsStore& ss,
-                                  uint16_t profile_id, const char* payload_id)
+                                  ApiWindow& win, UserDataStore& uds,
+                                  const char* payload_id)
 {
     if (payload_len < 2u) { send_err(win, req, API_E_BAD_REQ); return; }
 
@@ -122,11 +109,10 @@ static void handle_leader_begin(const MsgHeader& req,
 
     uint8_t* scratch = win.buf() + API_C2H_SCRATCH_OFS;
     uint8_t  handle  = 0u;
-    DiagStatus s = ss.leader_begin(profile_id, payload_id, lb_id,
-                                    scratch, &handle);
+    DiagStatus s = uds.leader_begin(uds.profile_active(), payload_id, lb_id,
+                                     scratch, &handle);
     if (!s.ok()) { send_err(win, req, diag_to_api(s.code)); return; }
 
-    // Respond: payload = {u8 handle}, scratch_len = STATS_TOKEN_LEN.
     MsgHeader rsp = {};
     rsp.seq         = req.seq;
     rsp.service     = req.service;
@@ -149,15 +135,12 @@ static void handle_leader_begin(const MsgHeader& req,
 
 // ---------------------------------------------------------------------------
 // UST_LEADER_SUBMIT (0x04)
-//
-// Request payload: { u8 handle, u32 score, u8 proof_kind, u16 proof_len }
-// proof data in h2c scratch.
-// Response: OK
 // ---------------------------------------------------------------------------
 
 static void handle_leader_submit(const MsgHeader& req,
                                    const uint8_t* payload, uint16_t payload_len,
-                                   ApiWindow& win, StatsStore& ss, DeviceIdentity* dik)
+                                   ApiWindow& win, UserDataStore& uds,
+                                   DeviceIdentity* dik)
 {
     if (payload_len < 8u) { send_err(win, req, API_E_BAD_REQ); return; }
 
@@ -174,7 +157,7 @@ static void handle_leader_submit(const MsgHeader& req,
     }
     if (proof_len > req.scratch_len) proof_len = req.scratch_len;
 
-    DiagStatus s = ss.leader_submit(handle, score, proof_kind, proof_buf, proof_len, dik);
+    DiagStatus s = uds.leader_submit(handle, score, proof_kind, proof_buf, proof_len, dik);
     if (!s.ok()) { send_err(win, req, diag_to_api(s.code)); return; }
     send_ok(win, req);
 }
@@ -187,30 +170,25 @@ void userstats_service_handle(const MsgHeader& req,
                                 const uint8_t*   payload,
                                 uint16_t         payload_len,
                                 ApiWindow&       win,
-                                StatsStore&      stats_store,
-                                uint16_t         active_profile_id,
+                                UserDataStore&   uds,
                                 const char*      active_payload_id,
                                 DeviceIdentity*  dik)
 {
     switch (req.method) {
         case UST_STAT_GET:
-            handle_stat_get(req, payload, payload_len, win,
-                            stats_store, active_profile_id, active_payload_id);
+            handle_stat_get(req, payload, payload_len, win, uds, active_payload_id);
             break;
         case UST_STAT_SET:
-            handle_stat_set(req, payload, payload_len, win,
-                            stats_store, active_profile_id, active_payload_id);
+            handle_stat_set(req, payload, payload_len, win, uds, active_payload_id);
             break;
         case UST_ACH_UNLOCK:
-            handle_ach_unlock(req, payload, payload_len, win,
-                              stats_store, active_profile_id, active_payload_id);
+            handle_ach_unlock(req, payload, payload_len, win, uds, active_payload_id);
             break;
         case UST_LEADER_RUN_BEGIN:
-            handle_leader_begin(req, payload, payload_len, win,
-                                stats_store, active_profile_id, active_payload_id);
+            handle_leader_begin(req, payload, payload_len, win, uds, active_payload_id);
             break;
         case UST_LEADER_SUBMIT:
-            handle_leader_submit(req, payload, payload_len, win, stats_store, dik);
+            handle_leader_submit(req, payload, payload_len, win, uds, dik);
             break;
         default:
             win.write_response(req.seq, req.service, req.method,

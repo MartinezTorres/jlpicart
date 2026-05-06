@@ -1,14 +1,10 @@
-// test_profiles.cc — host tests for ProfileStore and Identity API service.
+// test_profiles.cc — host tests for profile operations and Identity API service.
 //
 // Tests cover:
-//   ProfileStore: create / list / get / remove / set_active
+//   UserDataStore profiles: create / list / get / remove / set_active
 //   Identity service 0x03: LIST_PROFILES, SET/GET_ACTIVE_PROFILE
-//
-// No KvStore, no FlashDevice.  ProfileStore runs over an in-memory FAT volume
-// via FatTestEnv.
 
-#include "store/profile_format.h"
-#include "store/profile_store.h"
+#include "store/user_data_store.h"
 #include "msx/api/api_types.h"
 #include "msx/api/api_window.h"
 #include "msx/api/services/services.h"
@@ -29,13 +25,12 @@
 // Shared harness helpers
 // ---------------------------------------------------------------------------
 
-// Build a ProfileStore backed by an in-memory FAT volume.
 struct ProfileFixture {
     FatTestEnv    env;
-    ProfileStore  ps;
+    UserDataStore uds;
 
     ProfileFixture() {
-        DiagStatus s = ps.init();
+        DiagStatus s = uds.init();
         assert(s.ok());
     }
 };
@@ -48,9 +43,9 @@ static void test_profile_create_list() {
     ProfileFixture f;
 
     uint16_t id1 = 0, id2 = 0, id3 = 0;
-    CHECK(f.ps.create("Alice", "en", &id1).ok());
-    CHECK(f.ps.create("Bob",   "fr", &id2).ok());
-    CHECK(f.ps.create("Carol", "de", &id3).ok());
+    CHECK(f.uds.profile_create("Alice", "en", &id1).ok());
+    CHECK(f.uds.profile_create("Bob",   "fr", &id2).ok());
+    CHECK(f.uds.profile_create("Carol", "de", &id3).ok());
 
     CHECK(id1 != 0u);
     CHECK(id2 != 0u);
@@ -59,10 +54,10 @@ static void test_profile_create_list() {
     CHECK(id2 != id3);
     CHECK(id1 != id3);
 
-    CHECK(f.ps.count() == 3u);
+    CHECK(f.uds.profile_count() == 3u);
 
     ProfileRecord recs[8];
-    uint8_t n = f.ps.list(recs, 8);
+    uint8_t n = f.uds.profile_list(recs, 8);
     CHECK(n == 3u);
 }
 
@@ -74,10 +69,10 @@ static void test_profile_get() {
     ProfileFixture f;
 
     uint16_t id = 0;
-    CHECK(f.ps.create("Dave", "en", &id).ok());
+    CHECK(f.uds.profile_create("Dave", "en", &id).ok());
 
     ProfileRecord rec = {};
-    CHECK(f.ps.get(id, &rec).ok());
+    CHECK(f.uds.profile_get(id, &rec).ok());
     CHECK(strcmp(rec.name, "Dave") == 0);
     CHECK(strcmp(rec.lang, "en")   == 0);
     CHECK(rec.profile_id == id);
@@ -90,7 +85,7 @@ static void test_profile_get() {
 static void test_profile_get_not_found() {
     ProfileFixture f;
     ProfileRecord rec = {};
-    DiagStatus s = f.ps.get(42u, &rec);
+    DiagStatus s = f.uds.profile_get(42u, &rec);
     CHECK(!s.ok());
     CHECK(s.code == DiagCode::STORAGE_NOT_FOUND);
 }
@@ -102,18 +97,16 @@ static void test_profile_get_not_found() {
 static void test_profile_active() {
     ProfileFixture f;
 
-    // Fresh store has no active profile.
-    CHECK(f.ps.active() == PROF_ID_NONE);
+    CHECK(f.uds.profile_active() == PROF_ID_NONE);
 
     uint16_t id = 0;
-    CHECK(f.ps.create("Eve", "ja", &id).ok());
+    CHECK(f.uds.profile_create("Eve", "ja", &id).ok());
 
-    CHECK(f.ps.set_active(id).ok());
-    CHECK(f.ps.active() == id);
+    CHECK(f.uds.profile_set_active(id).ok());
+    CHECK(f.uds.profile_active() == id);
 
-    // Clear selection.
-    CHECK(f.ps.set_active(PROF_ID_NONE).ok());
-    CHECK(f.ps.active() == PROF_ID_NONE);
+    CHECK(f.uds.profile_set_active(PROF_ID_NONE).ok());
+    CHECK(f.uds.profile_active() == PROF_ID_NONE);
 }
 
 // ---------------------------------------------------------------------------
@@ -125,19 +118,18 @@ static void test_profile_active_persists() {
     uint16_t id = 0;
 
     {
-        ProfileStore ps;
-        CHECK(ps.init().ok());
-        CHECK(ps.create("Frank", "es", &id).ok());
-        CHECK(ps.set_active(id).ok());
+        UserDataStore uds;
+        CHECK(uds.init().ok());
+        CHECK(uds.profile_create("Frank", "es", &id).ok());
+        CHECK(uds.profile_set_active(id).ok());
     }
 
-    // Re-init from same flash.
     {
-        ProfileStore ps2;
-        CHECK(ps2.init().ok());
-        CHECK(ps2.active() == id);
+        UserDataStore uds2;
+        CHECK(uds2.init().ok());
+        CHECK(uds2.profile_active() == id);
         ProfileRecord rec = {};
-        CHECK(ps2.get(id, &rec).ok());
+        CHECK(uds2.profile_get(id, &rec).ok());
         CHECK(strcmp(rec.name, "Frank") == 0);
     }
 }
@@ -150,22 +142,20 @@ static void test_profile_remove() {
     ProfileFixture f;
 
     uint16_t id1 = 0, id2 = 0;
-    CHECK(f.ps.create("Grace", "en", &id1).ok());
-    CHECK(f.ps.create("Heidi", "en", &id2).ok());
+    CHECK(f.uds.profile_create("Grace", "en", &id1).ok());
+    CHECK(f.uds.profile_create("Heidi", "en", &id2).ok());
 
-    CHECK(f.ps.set_active(id1).ok());
-    CHECK(f.ps.remove(id1).ok());
+    CHECK(f.uds.profile_set_active(id1).ok());
+    CHECK(f.uds.profile_remove(id1).ok());
 
-    CHECK(f.ps.count() == 1u);
-    CHECK(f.ps.active() == PROF_ID_NONE);  // active was removed
+    CHECK(f.uds.profile_count() == 1u);
+    CHECK(f.uds.profile_active() == PROF_ID_NONE);
 
-    // id2 still accessible.
     ProfileRecord rec = {};
-    CHECK(f.ps.get(id2, &rec).ok());
+    CHECK(f.uds.profile_get(id2, &rec).ok());
     CHECK(strcmp(rec.name, "Heidi") == 0);
 
-    // id1 gone.
-    CHECK(!f.ps.get(id1, &rec).ok());
+    CHECK(!f.uds.profile_get(id1, &rec).ok());
 }
 
 // ---------------------------------------------------------------------------
@@ -179,12 +169,12 @@ static void test_profile_full() {
         char name[8];
         snprintf(name, sizeof(name), "u%d", i);
         uint16_t id = 0;
-        CHECK(f.ps.create(name, "en", &id).ok());
+        CHECK(f.uds.profile_create(name, "en", &id).ok());
     }
-    CHECK(f.ps.count() == PROF_MAX_PROFILES);
+    CHECK(f.uds.profile_count() == PROF_MAX_PROFILES);
 
     uint16_t id = 0;
-    DiagStatus s = f.ps.create("overflow", "en", &id);
+    DiagStatus s = f.uds.profile_create("overflow", "en", &id);
     CHECK(!s.ok());
     CHECK(s.code == DiagCode::STORAGE_FULL);
 }
@@ -193,7 +183,6 @@ static void test_profile_full() {
 // Identity service helpers
 // ---------------------------------------------------------------------------
 
-// Minimal spine references for ApiWindow::init().
 static SecurityPosture   g_posture;
 static PolicyStore       g_policy;
 static CapabilityRegistry g_registry;
@@ -211,8 +200,6 @@ static void ensure_spine() {
     g_spine_ready = true;
 }
 
-// Pop one response from the ApiWindow response ring.
-// Returns true on success; sets *status_out and fills payload_out[0..payload_max-1].
 static bool pop_response(ApiWindow& win, uint16_t* status_out,
                           uint8_t* payload_out, uint16_t payload_max,
                           uint16_t* payload_len_out)
@@ -234,7 +221,6 @@ static bool pop_response(ApiWindow& win, uint16_t* status_out,
     return true;
 }
 
-// Push a request into the ApiWindow request ring.
 static void push_request(ApiWindow& win, uint16_t seq,
                           uint8_t service, uint8_t method,
                           const uint8_t* payload, uint16_t payload_len)
@@ -260,22 +246,20 @@ static void push_request(ApiWindow& win, uint16_t seq,
 static void test_identity_list() {
     ensure_spine();
 
-    FatTestEnv     env;
-    ProfileStore   ps;
-    CHECK(ps.init().ok());
+    FatTestEnv    env;
+    UserDataStore uds;
+    CHECK(uds.init().ok());
 
     uint16_t id1 = 0, id2 = 0;
-    CHECK(ps.create("Ivan", "en", &id1).ok());
-    CHECK(ps.create("Judy", "fr", &id2).ok());
+    CHECK(uds.profile_create("Ivan", "en", &id1).ok());
+    CHECK(uds.profile_create("Judy", "fr", &id2).ok());
 
     static ApiWindow win;
     win.init(g_posture, g_policy, g_registry);
-    win.bind_profile_store(ps);
+    win.bind_user_data(uds);
 
-    // Feature bit should now be set.
     CHECK(win.initialized());
 
-    // Send LIST_PROFILES.
     push_request(win, 1u, SVC_IDENTITY, IDN_LIST_PROFILES, nullptr, 0);
     CHECK(win.service_once());
 
@@ -285,15 +269,13 @@ static void test_identity_list() {
     CHECK(pop_response(win, &status, payload, sizeof(payload), &payload_len));
     CHECK(status == API_OK);
 
-    // First two bytes: count (little-endian).
     uint16_t count = static_cast<uint16_t>(payload[0] | (payload[1] << 8u));
     CHECK(count == 2u);
 
-    // First entry: profile_id (2 bytes) + name_len (1 byte) + name_bytes.
     uint16_t entry_id = static_cast<uint16_t>(payload[2] | (payload[3] << 8u));
     CHECK(entry_id == id1);
     uint8_t name_len = payload[4];
-    CHECK(name_len == 4u);  // "Ivan"
+    CHECK(name_len == 4u);
     CHECK(memcmp(payload + 5, "Ivan", 4) == 0);
 }
 
@@ -304,18 +286,17 @@ static void test_identity_list() {
 static void test_identity_set_get_active() {
     ensure_spine();
 
-    FatTestEnv   env;
-    ProfileStore ps;
-    CHECK(ps.init().ok());
+    FatTestEnv    env;
+    UserDataStore uds;
+    CHECK(uds.init().ok());
 
     uint16_t id = 0;
-    CHECK(ps.create("Karl", "de", &id).ok());
+    CHECK(uds.profile_create("Karl", "de", &id).ok());
 
     static ApiWindow win2;
     win2.init(g_posture, g_policy, g_registry);
-    win2.bind_profile_store(ps);
+    win2.bind_user_data(uds);
 
-    // SET_ACTIVE_PROFILE
     uint8_t set_payload[2];
     set_payload[0] = static_cast<uint8_t>(id & 0xFFu);
     set_payload[1] = static_cast<uint8_t>(id >> 8u);
@@ -326,7 +307,6 @@ static void test_identity_set_get_active() {
     CHECK(pop_response(win2, &status, nullptr, 0, nullptr));
     CHECK(status == API_OK);
 
-    // GET_ACTIVE_PROFILE
     push_request(win2, 3u, SVC_IDENTITY, IDN_GET_ACTIVE_PROFILE, nullptr, 0u);
     CHECK(win2.service_once());
 
@@ -347,15 +327,15 @@ static void test_identity_set_get_active() {
 static void test_identity_set_active_not_found() {
     ensure_spine();
 
-    FatTestEnv   env;
-    ProfileStore ps;
-    CHECK(ps.init().ok());
+    FatTestEnv    env;
+    UserDataStore uds;
+    CHECK(uds.init().ok());
 
     static ApiWindow win3;
     win3.init(g_posture, g_policy, g_registry);
-    win3.bind_profile_store(ps);
+    win3.bind_user_data(uds);
 
-    uint8_t payload[2] = { 0x42, 0x00 };  // profile_id = 66 (doesn't exist)
+    uint8_t payload[2] = { 0x42, 0x00 };
     push_request(win3, 4u, SVC_IDENTITY, IDN_SET_ACTIVE_PROFILE, payload, 2u);
     CHECK(win3.service_once());
 
@@ -373,7 +353,7 @@ static void test_identity_no_store() {
 
     static ApiWindow win4;
     win4.init(g_posture, g_policy, g_registry);
-    // Deliberately do NOT call bind_profile_store.
+    // Deliberately do NOT call bind_user_data.
 
     push_request(win4, 5u, SVC_IDENTITY, IDN_LIST_PROFILES, nullptr, 0u);
     CHECK(win4.service_once());
@@ -391,17 +371,17 @@ static void test_guest_session_begin_end() {
     ProfileFixture f;
 
     uint16_t id = 0;
-    CHECK(f.ps.create("Leo", "en", &id).ok());
-    CHECK(f.ps.set_active(id).ok());
-    CHECK(f.ps.active() == id);
+    CHECK(f.uds.profile_create("Leo", "en", &id).ok());
+    CHECK(f.uds.profile_set_active(id).ok());
+    CHECK(f.uds.profile_active() == id);
 
-    f.ps.begin_guest();
-    CHECK(f.ps.active() == PROF_ID_GUEST);
-    CHECK(f.ps.in_guest_session());
+    f.uds.profile_begin_guest();
+    CHECK(f.uds.profile_active() == PROF_ID_GUEST);
+    CHECK(f.uds.profile_in_guest_session());
 
-    f.ps.end_guest();
-    CHECK(f.ps.active() == id);
-    CHECK(!f.ps.in_guest_session());
+    f.uds.profile_end_guest();
+    CHECK(f.uds.profile_active() == id);
+    CHECK(!f.uds.profile_in_guest_session());
 }
 
 // ---------------------------------------------------------------------------
@@ -411,15 +391,15 @@ static void test_guest_session_begin_end() {
 static void test_guest_session_no_prior() {
     ProfileFixture f;
 
-    CHECK(f.ps.active() == PROF_ID_NONE);
+    CHECK(f.uds.profile_active() == PROF_ID_NONE);
 
-    f.ps.begin_guest();
-    CHECK(f.ps.active() == PROF_ID_GUEST);
-    CHECK(f.ps.in_guest_session());
+    f.uds.profile_begin_guest();
+    CHECK(f.uds.profile_active() == PROF_ID_GUEST);
+    CHECK(f.uds.profile_in_guest_session());
 
-    f.ps.end_guest();
-    CHECK(f.ps.active() == PROF_ID_NONE);
-    CHECK(!f.ps.in_guest_session());
+    f.uds.profile_end_guest();
+    CHECK(f.uds.profile_active() == PROF_ID_NONE);
+    CHECK(!f.uds.profile_in_guest_session());
 }
 
 // ---------------------------------------------------------------------------
@@ -429,19 +409,18 @@ static void test_guest_session_no_prior() {
 static void test_guest_api_roundtrip() {
     ensure_spine();
 
-    FatTestEnv   env;
-    ProfileStore ps;
-    CHECK(ps.init().ok());
+    FatTestEnv    env;
+    UserDataStore uds;
+    CHECK(uds.init().ok());
 
     uint16_t id = 0;
-    CHECK(ps.create("Mia", "en", &id).ok());
-    CHECK(ps.set_active(id).ok());
+    CHECK(uds.profile_create("Mia", "en", &id).ok());
+    CHECK(uds.profile_set_active(id).ok());
 
     static ApiWindow win5;
     win5.init(g_posture, g_policy, g_registry);
-    win5.bind_profile_store(ps);
+    win5.bind_user_data(uds);
 
-    // IDN_GUEST_BEGIN → API_OK; payload = {u16 PROF_ID_GUEST}
     push_request(win5, 10u, SVC_IDENTITY, IDN_GUEST_BEGIN, nullptr, 0u);
     CHECK(win5.service_once());
 
@@ -453,9 +432,8 @@ static void test_guest_api_roundtrip() {
     CHECK(rsp_len == 2u);
     uint16_t guest_id = static_cast<uint16_t>(rsp[0] | (rsp[1] << 8u));
     CHECK(guest_id == PROF_ID_GUEST);
-    CHECK(ps.in_guest_session());
+    CHECK(uds.profile_in_guest_session());
 
-    // IDN_GUEST_END → API_OK; payload = {u16 restored_id}
     push_request(win5, 11u, SVC_IDENTITY, IDN_GUEST_END, nullptr, 0u);
     CHECK(win5.service_once());
 
@@ -466,8 +444,8 @@ static void test_guest_api_roundtrip() {
     CHECK(rsp_len == 2u);
     uint16_t restored_id = static_cast<uint16_t>(rsp[0] | (rsp[1] << 8u));
     CHECK(restored_id == id);
-    CHECK(!ps.in_guest_session());
-    CHECK(ps.active() == id);
+    CHECK(!uds.profile_in_guest_session());
+    CHECK(uds.profile_active() == id);
 }
 
 // ---------------------------------------------------------------------------

@@ -71,15 +71,11 @@ add_executable(jlpicart
     # Menu Application (Stage 16)
     src/msx/menu/menu_app.cc
 
-    # System Settings (Stage 17)
-    src/store/system_settings_store.cc
+    # User data store — profiles, settings, saves, stats (Stages 15/17/19/21)
+    src/store/user_data_store.cc
 
-    # Save store and Storage service (Stage 19)
-    src/store/save_store.cc
+    # Storage service and UserStats service (Stages 19/21)
     src/msx/api/services/storage_service.cc
-
-    # Stats store and UserStats service (Stage 21)
-    src/store/stats_store.cc
     src/msx/api/services/userstats_service.cc
 
     # ESP32 AT transport and Network service (Stage 32)
@@ -139,9 +135,6 @@ add_executable(jlpicart
 
     # Sunrise ATA-IDE emulation (Stage 34)
     src/peripherals/sunrise_ide.cc
-
-    # User Profiles (Stage 15)
-    src/store/profile_store.cc
 
     # USB host (Stage 14)
     src/usb/usb_host.cc

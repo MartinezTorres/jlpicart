@@ -13,8 +13,7 @@
 #include "msx/api/api_window.h"
 #include "msx/api/api_types.h"
 #include "content/collection_format.h"
-#include "store/profile_store.h"
-#include "store/profile_format.h"
+#include "store/user_data_store.h"
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
@@ -57,13 +56,12 @@ static void write_collection(const char* title,
 // ---------------------------------------------------------------------------
 
 struct BootFixture {
-    uint8_t      page[MENU_PAGE_SIZE];
-    FatTestEnv   env;
-    ProfileStore ps;
-    MenuMailbox  mbx;
-    MenuApp      app;
+    uint8_t       page[MENU_PAGE_SIZE];
+    FatTestEnv    env;
+    UserDataStore uds;
+    MenuMailbox   mbx;
+    MenuApp       app;
 
-    // ApiWindow support (optional — only needed for active_payload tests).
     SecurityPosture    posture;
     PolicyStore        policy_store;
     CapabilityRegistry registry;
@@ -72,8 +70,8 @@ struct BootFixture {
     BootFixture() {
         memset(page, 0, sizeof(page));
         mbx.init(page, 0u);
-        ps.init();
-        app.init(mbx, ps);
+        uds.init();
+        app.init(mbx, uds);
 
         posture = {};
         policy_store.load(posture);
@@ -81,7 +79,7 @@ struct BootFixture {
                       kDriverDescriptors, kDriverDescriptorCount,
                       policy_store.info());
         win.init(posture, policy_store, registry);
-        win.bind_profile_store(ps);
+        win.bind_user_data(uds);
     }
 
     void sim_stub_init() {

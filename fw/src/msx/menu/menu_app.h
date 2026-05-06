@@ -9,22 +9,16 @@
 
 #include "msx/menu/menu_host_abi.h"   // MenuMailbox, HostInfo, InputSnapshot
 #include "content/collection_format.h" // CollectionRecord
-#include "store/profile_format.h"  // ProfileRecord, PROF_MAX_PROFILES, PROF_ID_NONE
+#include "store/user_data_store.h"     // ProfileRecord, PROF_MAX_PROFILES, PROF_ID_NONE
 #include <cstdint>
 
 // Forward declarations — full types are only needed in the .cc file.
-class ProfileStore;
-class SystemSettingsStore;
 class ApiWindow;
 
 class MenuApp {
 public:
     // Attach subsystem references and enter BOOT state.
-    void init(MenuMailbox& mbx, ProfileStore& ps);
-
-    // Bind the system settings store (Stage 17+).
-    // Must be called after init().
-    void bind_settings_store(SystemSettingsStore& ss);
+    void init(MenuMailbox& mbx, UserDataStore& uds);
 
     // Request a transition to the MAIN screen (Stage 18).
     // Thread-safe-enough for Core 1 service loop: sets a flag read by tick().
@@ -51,23 +45,21 @@ public:
 
 private:
     enum class Screen : uint8_t {
-        BOOT = 0,   // waiting for Z80 stub to initialise
-        BOOT_INFO,  // sending GET_HOST_INFO
-        MAIN,       // top-level navigation
+        BOOT = 0,
+        BOOT_INFO,
+        MAIN,
         COLLECTIONS,
         PROFILES,
         SETTINGS,
-        LAUNCH,     // active payload running; stub shows "Launching…" (Stage 20)
-        RUNNING,    // game ROM is live; stub has jumped to 0x0000; mailbox silent
+        LAUNCH,
+        RUNNING,
     };
 
-    // --- Core state ---
     Screen   screen_      = Screen::BOOT;
-    int      step_        = 0;    // position within current screen's render sequence
-    int      cursor_      = 0;    // highlighted menu item index
+    int      step_        = 0;
+    int      cursor_      = 0;
     bool     initialized_ = false;
 
-    // --- Cached data refreshed at screen transitions ---
     HostInfo         host_info_         = {};
     bool             has_collection_    = false;
     CollectionRecord col_record_        = {};
@@ -75,30 +67,21 @@ private:
     uint8_t          profile_count_     = 0u;
     uint16_t         active_profile_id_ = PROF_ID_NONE;
 
-    // --- Reset-to-menu flag (Stage 18) ---
     bool          reset_requested_ = false;
-
-    // --- Wipe confirmation state (SETTINGS screen) ---
     bool          wipe_confirm_    = false;
 
-    // --- LAUNCH screen state (Stage 20) ---
-    char          launch_title_[64]      = {};  // title of the payload being launched
-    char          launch_payload_id_[64] = {};  // payload_id registered with ApiWindow
+    char          launch_title_[64]      = {};
+    char          launch_payload_id_[64] = {};
 
-    // --- Subsystem references ---
-    MenuMailbox*          mbx_       = nullptr;
-    ProfileStore*         ps_        = nullptr;
-    SystemSettingsStore*  ss_        = nullptr;  // nullptr until bind_settings_store()
-    ApiWindow*            api_win_   = nullptr;  // nullptr until bind_api_window()
+    MenuMailbox*   mbx_       = nullptr;
+    UserDataStore* uds_       = nullptr;
+    ApiWindow*     api_win_   = nullptr;
 
-    // Launch callback (optional; set by set_launch_fn)
     void*  launch_fn_ctx_ = nullptr;
     void (*launch_fn_)(void*, const char*) = nullptr;
 
-    // Scratch buffer for formatted strings
     char fmt_[64] = {};
 
-    // --- Per-screen tick handlers ---
     void tick_boot();
     void tick_boot_info();
     void tick_main();
@@ -108,25 +91,18 @@ private:
     void tick_launch();
     void tick_running();
 
-    // --- Data loaders ---
     void load_collection_data();
     void load_profile_data();
 
-    // --- State transition ---
     void switch_screen(Screen s, int cursor = 0);
 
-    // --- Mailbox helpers ---
-    // PUT_TEXT with arg0 = col | (row << 8), in_data = text.
     bool put_text(uint8_t col, uint8_t row, const char* text);
 
-    // --- Input processors (called at the "process" step of each screen) ---
     void handle_main_input();
     void handle_collections_input();
     void handle_profiles_input();
     void handle_settings_input();
     void handle_launch_input();
 
-    // Number of selectable items in the PROFILES screen.
-    // = profile_count_ + 2 (each profile + "New Profile..." + "Back").
     int profiles_item_count() const;
 };

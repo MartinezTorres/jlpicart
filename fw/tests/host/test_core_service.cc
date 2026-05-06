@@ -8,7 +8,7 @@
 #include "msx/api/api_window.h"
 #include "msx/api/api_types.h"
 #include "msx/menu/menu_host_abi.h"
-#include "store/profile_store.h"
+#include "store/user_data_store.h"
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
@@ -162,9 +162,9 @@ static void test_get_random_cap()
 
 static void test_menu_app_reset_flag()
 {
-    FatTestEnv   env;
-    ProfileStore ps;
-    ps.init();
+    FatTestEnv    env;
+    UserDataStore uds;
+    uds.init();
 
     uint8_t     page[MENU_PAGE_SIZE];
     MenuMailbox mbx;
@@ -172,7 +172,7 @@ static void test_menu_app_reset_flag()
     mbx.init(page, 0u);
 
     MenuApp app;
-    app.init(mbx, ps);
+    app.init(mbx, uds);
 
     // Simulate Z80 stub initialising and boot sequence reaching MAIN.
     MenuStubHeader* hdr = reinterpret_cast<MenuStubHeader*>(page + MENU_HEADER_OFS);

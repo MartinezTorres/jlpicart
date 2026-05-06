@@ -10,11 +10,9 @@
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
-#include "store/profile_store.h"
 #include <cstddef>
 
-class SaveStore;
-class StatsStore;
+class UserDataStore;
 class DeviceIdentity;
 class TransportEspAt;
 
@@ -34,35 +32,26 @@ public:
 
     bool initialized() const { return initialized_; }
 
-    // Bind a ProfileStore and enable API_FEATURE_IDENTITY in the window header.
+    // Bind a UserDataStore and enable API_FEATURE_IDENTITY, API_FEATURE_STORAGE,
+    // and API_FEATURE_USERSTATS in the window header.
     // Must be called after init().  Safe to call more than once (rebinds).
-    void bind_profile_store(ProfileStore& ps);
+    void bind_user_data(UserDataStore& uds);
 
-    // Register a callback invoked when the cartridge requests RESET_TO_MENU
-    // (Stage 18).  The callback is called from service_once() on Core 1.
+    // Register a callback invoked when the cartridge requests RESET_TO_MENU.
     // fn may be nullptr (disables the callback).
     void set_reset_menu_fn(void (*fn)());
-
-    // Bind a SaveStore and enable API_FEATURE_STORAGE (Stage 19).
-    void bind_save_store(SaveStore& ss);
-
-    // Bind a StatsStore and enable API_FEATURE_USERSTATS (Stage 21).
-    void bind_stats_store(StatsStore& ss);
 
     // Bind the ESP32 AT transport and enable API_FEATURE_NETWORK (Stage 32).
     void bind_network_transport(TransportEspAt& t);
 
     // Bind the Device Identity Key (Stage 22).
-    // Enables GET_DEVICE_ID to return a real scoped ID.
     void bind_device_identity(DeviceIdentity& dik);
 
-    // Active profile ID for storage and stats services (Stage 19+).
-    // Updated by bind_profile_store or set directly.
-    uint16_t active_profile_id() const { return active_profile_id_; }
+    // Active profile ID for storage and stats services.
+    // Returns the value from UserDataStore if bound, or 0 otherwise.
+    uint16_t active_profile_id() const;
 
     // Active payload ID for UserStats service keying (Stage 20+).
-    // Set by MenuApp when entering/leaving the LAUNCH screen.
-    // Empty string means no payload is currently active.
     void set_active_payload(const char* payload_id);
     const char* active_payload_id() const { return active_payload_id_; }
 
@@ -75,24 +64,13 @@ public:
     // Low-level ring operations (also used by host tests)
     // ---------------------------------------------------------------------------
 
-    // Push msg_len bytes of msg_bytes into the ring at ring_ofs as a framed message.
-    // Adds the 2-byte frame_len prefix internally.
-    // Returns API_OK or API_E_RING_FULL.
     uint16_t ring_push_msg(uint16_t ring_ofs, const uint8_t* msg, uint16_t msg_len);
 
-    // Pop one framed message from the ring at ring_ofs into dst (dst_max bytes).
-    // Sets *out_msg_len to the number of message bytes (frame_len - 2).
-    // Returns true if a frame was available; false if the ring was empty.
-    // On a malformed frame (frame_len < 2), consumes and sets *out_msg_len = 0.
     bool ring_pop_msg(uint16_t ring_ofs, uint8_t* dst, uint16_t dst_max,
                       uint16_t* out_msg_len);
 
-    // True when head == tail (ring is empty).
     bool ring_empty(uint16_t ring_ofs) const;
 
-    // Write a response (including MsgHeader) to the response ring.
-    // Called by service handlers (e.g. core_service) to post results.
-    // seq, service, method are echoed from the request header.
     void write_response(uint16_t seq, uint8_t service, uint8_t method,
                         uint16_t status,
                         const uint8_t* payload, uint16_t payload_len);
@@ -103,18 +81,14 @@ private:
     const SecurityPosture*    posture_          = nullptr;
     const PolicyStore*        policy_store_     = nullptr;
     const CapabilityRegistry* registry_         = nullptr;
-    ProfileStore*             profile_store_    = nullptr;
-    SaveStore*                save_store_        = nullptr;
-    StatsStore*               stats_store_       = nullptr;
-    DeviceIdentity*           device_identity_   = nullptr;
-    TransportEspAt*           net_transport_     = nullptr;
-    uint16_t                  active_profile_id_ = 0u;
+    UserDataStore*            user_data_        = nullptr;
+    DeviceIdentity*           device_identity_  = nullptr;
+    TransportEspAt*           net_transport_    = nullptr;
     char                      active_payload_id_[64] = {};
-    void                    (*reset_menu_fn_)()  = nullptr;
+    void                    (*reset_menu_fn_)() = nullptr;
 
     bool initialized_ = false;
 
-    // Typed accessors into buf_.
     ApiWindowHeader& header()    { return *reinterpret_cast<ApiWindowHeader*>(buf_); }
     ApiRegs&         regs()      { return *reinterpret_cast<ApiRegs*>(buf_ + API_REGS_OFS); }
     RingHeader& ring_hdr(uint16_t ring_ofs) {
@@ -123,5 +97,4 @@ private:
     uint8_t* ring_data(uint16_t ring_ofs) {
         return buf_ + ring_ofs + API_RING_HDR_SIZE;
     }
-
 };

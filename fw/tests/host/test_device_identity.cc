@@ -12,6 +12,7 @@
 #include "spine/capability_registry.h"
 #include "platform/platform.h"
 #include "spine/driver_descriptor.h"
+#include "store/user_data_store.h"
 
 // ed25519 verify via OpenSSL (host only).
 #include <openssl/evp.h>
@@ -173,7 +174,7 @@ static void test_get_device_id_scoped()
 
 struct DikApiFixture {
     FatTestEnv         env;
-    ProfileStore       ps;
+    UserDataStore      uds;
     SecurityPosture    posture;
     PolicyStore        policy_store;
     CapabilityRegistry registry;
@@ -182,14 +183,14 @@ struct DikApiFixture {
 
     DikApiFixture()
     {
-        ps.init();
+        uds.init();
         posture = {};
         policy_store.load(posture);
         registry.init(BoardDescriptor::for_current_board(),
                       kDriverDescriptors, kDriverDescriptorCount,
                       policy_store.info());
         win.init(posture, policy_store, registry);
-        win.bind_profile_store(ps);
+        win.bind_user_data(uds);
         dik.init_or_load();
         win.bind_device_identity(dik);
     }

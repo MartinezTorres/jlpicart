@@ -5,13 +5,11 @@
 #include "spine/security_posture.h"
 #include "spine/policy_store.h"
 #include "spine/capability_registry.h"
-#include "store/profile_store.h"
+#include "store/user_data_store.h"
 #include <cstdint>
 
 class ApiWindow;
 class DeviceIdentity;
-class SaveStore;
-class StatsStore;
 class TransportEspAt;
 
 // System service (0x00): GET_API_INFO, GET_DEVICE_ID, GET_CAPS, GET_RANDOM,
@@ -34,8 +32,7 @@ void storage_service_handle(const MsgHeader& req,
                              const uint8_t*   payload,
                              uint16_t         payload_len,
                              ApiWindow&       win,
-                             SaveStore&       save_store,
-                             uint16_t         active_profile_id);
+                             UserDataStore&   uds);
 
 // Network service (0x02): NET_STATUS, NET_HTTP_REQUEST.
 void network_service_handle(const MsgHeader& req,
@@ -50,14 +47,13 @@ void identity_service_handle(const MsgHeader&  req,
                               const uint8_t*    payload,
                               uint16_t          payload_len,
                               ApiWindow&        win,
-                              ProfileStore&     ps);
+                              UserDataStore&    uds);
 
 // UserStats service (0x04): achievements, stats, leaderboards.
 void userstats_service_handle(const MsgHeader& req,
                                const uint8_t*   payload,
                                uint16_t         payload_len,
                                ApiWindow&       win,
-                               StatsStore&      stats_store,
-                               uint16_t         active_profile_id,
+                               UserDataStore&   uds,
                                const char*      active_payload_id,
                                DeviceIdentity*  dik = nullptr);

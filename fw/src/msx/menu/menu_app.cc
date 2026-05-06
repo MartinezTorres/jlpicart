@@ -8,8 +8,7 @@
 #include "msx/menu/menu_app.h"
 #include "msx/menu/input_decoder.h"
 #include "content/content_store.h"
-#include "store/profile_store.h"
-#include "store/system_settings_store.h"
+#include "store/user_data_store.h"
 #include "msx/api/api_window.h"
 #include <cstring>
 #include <cstdio>
@@ -18,22 +17,16 @@
 // init
 // ---------------------------------------------------------------------------
 
-void MenuApp::init(MenuMailbox& mbx, ProfileStore& ps)
+void MenuApp::init(MenuMailbox& mbx, UserDataStore& uds)
 {
     mbx_          = &mbx;
-    ps_           = &ps;
-    ss_           = nullptr;
+    uds_          = &uds;
     api_win_      = nullptr;
     screen_       = Screen::BOOT;
     step_         = 0;
     cursor_       = 0;
     wipe_confirm_ = false;
     initialized_  = true;
-}
-
-void MenuApp::bind_settings_store(SystemSettingsStore& ss)
-{
-    ss_ = &ss;
 }
 
 void MenuApp::request_reset_to_menu()
@@ -124,8 +117,8 @@ void MenuApp::load_collection_data()
 
 void MenuApp::load_profile_data()
 {
-    profile_count_     = ps_->list(profiles_, PROF_MAX_PROFILES);
-    active_profile_id_ = ps_->active();
+    profile_count_     = uds_->profile_list(profiles_, PROF_MAX_PROFILES);
+    active_profile_id_ = uds_->profile_active();
 }
 
 // ---------------------------------------------------------------------------
@@ -440,8 +433,8 @@ static constexpr int SETTINGS_ITEMS             = 2;
 
 void MenuApp::tick_settings()
 {
-    if (!ss_) {
-        // Fallback: placeholder screen (no settings store bound).
+    if (!uds_) {
+        // Fallback: placeholder screen (no user data store bound).
         switch (step_) {
         case 0:
             mbx_->send_command(MENU_CMD_CLEAR, MENU_CLEAR_ALL);
@@ -485,7 +478,7 @@ void MenuApp::tick_settings()
         step_ = 2;
         break;
     case 2: {
-        const SystemSettings& cfg = ss_->get();
+        const SystemSettings& cfg = uds_->settings();
         if (cfg.wifi_ssid[0]) {
             snprintf(fmt_, sizeof(fmt_), "  WiFi: %.50s", cfg.wifi_ssid);
         } else {
@@ -497,7 +490,7 @@ void MenuApp::tick_settings()
         break;
     }
     case 3: {
-        const SystemSettings& cfg = ss_->get();
+        const SystemSettings& cfg = uds_->settings();
         snprintf(fmt_, sizeof(fmt_), "  Lang: %.7s", cfg.language);
         put_text(0u, 3u, fmt_);
         step_ = 4;
@@ -505,7 +498,7 @@ void MenuApp::tick_settings()
     }
     case 4: {
         static const char* const VMODES[] = {"auto", "crt", "vga"};
-        const SystemSettings& cfg = ss_->get();
+        const SystemSettings& cfg = uds_->settings();
         uint8_t vm = (cfg.video_mode < 3u) ? cfg.video_mode : 0u;
         snprintf(fmt_, sizeof(fmt_), "  Video: %s", VMODES[vm]);
         put_text(0u, 4u, fmt_);
@@ -513,7 +506,7 @@ void MenuApp::tick_settings()
         break;
     }
     case 5: {
-        const SystemSettings& cfg = ss_->get();
+        const SystemSettings& cfg = uds_->settings();
         snprintf(fmt_, sizeof(fmt_), "  Net: %s",
                  cfg.network_enabled ? "on" : "off");
         put_text(0u, 5u, fmt_);
@@ -635,7 +628,7 @@ void MenuApp::handle_profiles_input()
     } else if (key_return(inp) || joy1_trig(inp)) {
         if (cursor_ < static_cast<int>(profile_count_)) {
             // Set selected profile as active.
-            ps_->set_active(profiles_[cursor_].profile_id);
+            uds_->profile_set_active(profiles_[cursor_].profile_id);
             active_profile_id_ = profiles_[cursor_].profile_id;
         } else if (cursor_ == static_cast<int>(profile_count_)) {
             // Create a new profile with an auto-generated name.
@@ -644,8 +637,8 @@ void MenuApp::handle_profiles_input()
                 snprintf(name, sizeof(name), "Profile %d",
                          static_cast<int>(profile_count_) + 1);
                 uint16_t new_id = 0u;
-                if (ps_->create(name, "en", &new_id).ok()) {
-                    ps_->set_active(new_id);
+                if (uds_->profile_create(name, "en", &new_id).ok()) {
+                    uds_->profile_set_active(new_id);
                 }
                 load_profile_data();
                 cursor_ = 0;
@@ -665,7 +658,7 @@ void MenuApp::handle_profiles_input()
 
 void MenuApp::handle_settings_input()
 {
-    if (!ss_) {
+    if (!uds_) {
         // Fallback path: any key returns to MAIN.
         switch_screen(Screen::MAIN);
         return;
@@ -678,10 +671,7 @@ void MenuApp::handle_settings_input()
 
     if (wipe_confirm_) {
         if (key_return(inp) || joy1_trig(inp)) {
-            // Confirmed: execute wipe.
-            if (ss_) {
-                ss_->wipe_user_data(*ps_);
-            }
+            uds_->wipe_user_data();
         }
         // Any other key (or after wipe): cancel/clear confirmation and re-render.
         wipe_confirm_ = false;
