@@ -15,6 +15,8 @@
 
 #include "spine/allocator.h"
 #include "bus/mappers.h"
+#include "content/collection_format.h"
+#include "peripherals/peripheral_descriptor.h"
 #include "peripherals/psg.h"
 #include "peripherals/scc.h"
 #include "peripherals/opl4.h"
@@ -29,6 +31,10 @@ public:
     // Returns false if plan.ok is false (a hard requirement was not met).
     // Must not be called more than once on the same manager instance.
     bool apply(const LaunchPlan& plan, CapabilityRegistry& registry);
+
+    // Activate IO peripherals (PSG, OPL4, …) from a payload device list.
+    // Call after apply_mapping() with the PayloadRecord's device array.
+    void wire_io_devices(const PayloadDeviceRecord* devices, uint8_t count);
 
     // Apply the mapping plan: configure BUS::subslots[] from the mapping.
     // On hardware: calls mapper_setup_XXX() for entries with rom_data set.
@@ -64,7 +70,7 @@ public:
 
 private:
     void map_psg();
-    void map_opl4(const char* wave_payload_id);
+    void map_opl4(const char* params);
     void map_sunrise_ide(uint8_t slot, IdeState& state,
                          const uint8_t* nextor_rom, uint32_t nextor_size,
                          const uint8_t* disk_image, uint32_t disk_sectors);

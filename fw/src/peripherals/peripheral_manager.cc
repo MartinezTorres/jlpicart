@@ -87,22 +87,21 @@ bool PeripheralManager::apply_mapping(const MappingPlan& plan) {
     }
 
     BUS::is_expanded = plan.expanded;
-
-    for (size_t i = 0; i < plan.io_device_count; ++i) {
-        const IoDeviceEntry& d = plan.io_devices[i];
-        switch (d.type) {
-            case IoDeviceType::PSG:
-                map_psg();
-                break;
-            case IoDeviceType::OPL4:
-                map_opl4(d.wave_payload_id[0] ? d.wave_payload_id : nullptr);
-                break;
-            case IoDeviceType::NONE:
-                break;
-        }
-    }
-
     return true;
+}
+
+void PeripheralManager::wire_io_devices(const PayloadDeviceRecord* devices,
+                                         uint8_t count)
+{
+    for (uint8_t i = 0; i < count; ++i) {
+        const PayloadDeviceRecord& pdr = devices[i];
+        const PeripheralDescriptor* desc = find_peripheral_by_id(pdr.type);
+        if (!desc || desc->memory_mapped) continue;
+        if (strcmp(desc->name, "psg") == 0)
+            map_psg();
+        else if (strcmp(desc->name, "opl4") == 0)
+            map_opl4(pdr.params[0] ? pdr.params : nullptr);
+    }
 }
 
 void PeripheralManager::map_psg()
@@ -118,18 +117,18 @@ void PeripheralManager::map_psg()
     log_info(buf);
 }
 
-void PeripheralManager::map_opl4(const char* payload_id)
+void PeripheralManager::map_opl4(const char* params)
 {
     const size_t slot = next_io_subslot_++;
     opl4_reset(opl4_state_);
 
     const uint8_t* wave_rom  = nullptr;
     uint32_t       wave_size = 0u;
-    if (payload_id) {
+    if (params) {
         ContentStore cs;
         if (cs.has_active_collection()) {
             PayloadRecord pr = {};
-            if (cs.load_payload(payload_id, pr).ok() && pr.data_size > 0u) {
+            if (cs.load_payload(params, pr).ok() && pr.data_size > 0u) {
                 wave_rom  = Platform::xip_map(pr.data_flash_offset);
                 wave_size = pr.data_size;
                 log_info("OPL4: wave ROM mapped from XIP flash");

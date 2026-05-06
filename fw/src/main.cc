@@ -196,6 +196,7 @@ int main() {
                 log_info("mapping plan: payload ROM not loaded — standby");
             } else {
                 mapping_plan = mapping_plan_from_payload_record(pr);
+                map_mgr.wire_io_devices(pr.devices, pr.device_count);
                 log_info("mapping plan: active payload found");
             }
         } else {
@@ -250,6 +251,7 @@ int main() {
         PayloadRecord pr = {};
         if (!cs.load_payload(payload_id, pr).ok()) return;
         map_mgr.apply_mapping(mapping_plan_from_payload_record(pr));
+        map_mgr.wire_io_devices(pr.devices, pr.device_count);
     });
     log_info("menu mailbox initialised");
 

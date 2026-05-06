@@ -97,9 +97,15 @@ struct SccState {
 void scc_reset(SccState& state);
 
 // Register memory read/write callbacks for the SCC register space on a
-// Cartridge that was already set up as Konami SCC (mapper_setup_konami_scc).
-// Internal function — called automatically by mapper_setup_konami_scc().
+// Cartridge that is already wired as a Konami mapper.
+// Called by mapper_setup_konami_scc(); not for direct use.
 void scc_setup(Cartridge& c, SccState& state);
+
+// Set up a Konami SCC cartridge: Konami 8 KB banking + SCC register space.
+// Combines mapper_setup_konami() with SCC bus callbacks on segment 4.
+// SccState must outlive the Cartridge; the caller owns the SccState object.
+void mapper_setup_konami_scc(Cartridge& c, const uint8_t* rom_base,
+                              SccState& state);
 
 // One-time hardware audio init: arm the SCC sample register.
 // The SCC sample is mixed with the PSG sample in psg_service().

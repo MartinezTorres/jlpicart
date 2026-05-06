@@ -80,7 +80,7 @@ struct PayloadDeviceRecord {
     uint8_t subslot;                   //  1 byte  (0–3; for memory-mapped devices)
     uint8_t optional;                  //  1 byte  (0=required, 1=optional)
     uint8_t _pad;                      //  1 byte
-    char    params[PAYLOAD_ID_MAX];    // 64 bytes (device-specific; OPL4: wave_payload_id)
+    char    params[PAYLOAD_ID_MAX];    // 64 bytes (peripheral-specific pass-through params)
     // Total: 68 bytes
 };
 #pragma pack(pop)

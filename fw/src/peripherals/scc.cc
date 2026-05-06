@@ -3,6 +3,7 @@
 // See scc.h for register map and design notes.
 
 #include "peripherals/scc.h"
+#include "bus/mappers.h"
 #include "platform/gpio_defs.h"
 #include <cstring>
 
@@ -182,3 +183,23 @@ void scc_audio_init(SccState& state) { (void)state; }
 void scc_service(SccState& state)    { (void)state; }
 
 #endif // JLPICART_HOST_TEST
+
+// ---------------------------------------------------------------------------
+// mapper_setup_konami_scc
+// ---------------------------------------------------------------------------
+
+static void konami_scc_reset_fn(Cartridge& c) {
+    mapper_konami_reset(c);
+    if (c.ram_base) {
+        SccState* ss = reinterpret_cast<SccState*>(c.ram_base);
+        scc_reset(*ss);
+    }
+}
+
+void mapper_setup_konami_scc(Cartridge& c, const uint8_t* rom_base,
+                              SccState& state) {
+    mapper_setup_konami(c, rom_base);
+    scc_setup(c, state);
+    c.reset_fn = konami_scc_reset_fn;
+    c.name     = "konami_scc";
+}

@@ -17,7 +17,7 @@ struct ManifestDeviceEntry {
     const PeripheralDescriptor* descriptor; // resolved at parse time; nullptr = unknown
     uint8_t subslot;                        // MSX subslot (0–3); for memory-mapped devices
     bool    optional;                       // true → user may choose to deactivate
-    char    params[PAYLOAD_ID_MAX];         // device-specific; OPL4: wave_payload_id
+    char    params[PAYLOAD_ID_MAX];         // peripheral-specific pass-through params
 };
 
 struct PayloadEntry {

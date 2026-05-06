@@ -1,15 +1,13 @@
 #pragma once
 // mappers.h — MSX mapper types, MappingPlan, and Cartridge setup functions.
 //
-// Adding a new mapper requires touching this file (MapperType enum + setup fn),
-// mappers.cc (implementation), and nothing else — the plan builders here
-// translate manifest strings to MapperType automatically.
+// Adding a new mapper requires touching this file (MapperType enum + setup fn)
+// and mappers.cc (implementation) — the plan builders translate manifest
+// strings to MapperType automatically.
 
 #include "bus/cartridge.h"
 #include "content/collection_format.h"
-#include "peripherals/peripheral_descriptor.h"
 #include "content/manifest.h"
-#include "peripherals/scc.h"
 #include <cstddef>
 #include <cstdint>
 
@@ -47,25 +45,10 @@ struct MappingEntry {
 
 static constexpr size_t MAPPING_MAX_ENTRIES = 4;
 
-enum class IoDeviceType : uint8_t {
-    NONE = 0,
-    PSG,
-    OPL4,
-};
-
-struct IoDeviceEntry {
-    IoDeviceType type;
-    char         wave_payload_id[PAYLOAD_ID_MAX];
-};
-
-static constexpr size_t MAPPING_MAX_IO_DEVICES = 4;
-
 struct MappingPlan {
-    MappingEntry  entries[MAPPING_MAX_ENTRIES];
-    size_t        entry_count;
-    IoDeviceEntry io_devices[MAPPING_MAX_IO_DEVICES];
-    size_t        io_device_count;
-    bool          expanded;
+    MappingEntry entries[MAPPING_MAX_ENTRIES];
+    size_t       entry_count;
+    bool         expanded;
 };
 
 MappingPlan mapping_plan_from_payload_record(const PayloadRecord& record);
@@ -82,6 +65,10 @@ void mapper_setup_rom(Cartridge& c, const uint8_t* rom_base, size_t rom_size);
 // 32 KB ROM mirrored across all four 16 KB MSX pages using the ((i+2)%4) pattern.
 // Designed for cartridges that place their header at 0x4000 within the ROM file.
 void mapper_setup_rom_32k_mirrored(Cartridge& c, const uint8_t* rom_base);
+
+// Reset Konami bank state to power-on defaults.
+// Exposed so peripherals (e.g. SCC) can compose a combined reset function.
+void mapper_konami_reset(Cartridge& c);
 
 // Konami 8 KB banking.
 // Pages 2–5 (0x4000–0xBFFF) are switchable; writes to any of those pages
@@ -102,13 +89,6 @@ void mapper_setup_ascii8(Cartridge& c, const uint8_t* rom_base);
 // Two independent 16 KB windows in 0x4000–0xBFFF; each switched by a write
 // to page 3; segments are 16 KB (two consecutive 8 KB chunks).
 void mapper_setup_ascii16(Cartridge& c, const uint8_t* rom_base);
-
-// Konami SCC: 8 KB banking with SCC sound chip register space.
-// Pages 2–5 (0x4000–0xBFFF) are switchable; writing 0x3F to segment 4
-// (0x8000–0x97FF) enables the SCC register space at 0x9800–0x9FFF.
-// SccState must outlive the Cartridge; the caller owns the SccState object.
-void mapper_setup_konami_scc(Cartridge& c, const uint8_t* rom_base,
-                              SccState& state);
 
 // ---------------------------------------------------------------------------
 // RAM mapper (read-write; SRAM allocation by caller)
