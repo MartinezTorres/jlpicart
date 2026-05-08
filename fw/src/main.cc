@@ -3,7 +3,7 @@
 // Boot order:
 //   1.  Log init
 //   2.  FAT volume mount on internal flash
-//   3.  FAT-backed stores: profiles, settings, save, stats
+//   3.  FAT-backed stores: settings, save blobs
 //   4.  Security posture (OTP — read once, never again)
 //   5.  USB config mode check (no MSX clock + no secure boot → expose FAT via USB)
 //   6.  Device identity key (derived from OTP; must follow step 4)
@@ -27,7 +27,7 @@
 #include "diag/diag.h"
 #include "diag/log.h"
 #include "spine/security_posture.h"
-#include "spine/policy_store.h"
+#include "spine/policy.h"
 #include "spine/capability_registry.h"
 #include "spine/activation.h"
 #include "spine/allocator.h"

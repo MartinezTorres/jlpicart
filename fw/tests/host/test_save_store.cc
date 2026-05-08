@@ -4,7 +4,7 @@
 #include "msx/api/api_window.h"
 #include "msx/api/api_types.h"
 #include "spine/security_posture.h"
-#include "spine/policy_store.h"
+#include "spine/policy.h"
 #include "spine/capability_registry.h"
 #include "platform/platform.h"
 #include "spine/driver_descriptor.h"
@@ -22,18 +22,16 @@ struct SaveFixture {
         uds.init();
     }
 
-    uint8_t begin(uint16_t profile_id, uint16_t blob_id,
-                  uint16_t total_len, uint16_t flags = 0u)
+    uint8_t begin(uint16_t blob_id, uint16_t total_len, uint16_t flags = 0u)
     {
         uint8_t h = 0xFF;
-        uds.save_write_begin(profile_id, blob_id, total_len, flags, &h);
+        uds.save_write_begin(blob_id, total_len, flags, &h);
         return h;
     }
 
-    DiagStatus commit_with_data(uint16_t profile_id, uint16_t blob_id,
-                                const uint8_t* data, uint16_t len)
+    DiagStatus commit_with_data(uint16_t blob_id, const uint8_t* data, uint16_t len)
     {
-        uint8_t h = begin(profile_id, blob_id, len);
+        uint8_t h = begin(blob_id, len);
         uds.save_write_chunk(h, 0, data, len);
         return uds.save_write_commit(h);
     }
@@ -48,11 +46,11 @@ static void test_save_write_read()
     SaveFixture f;
 
     uint8_t data[8] = {0xDE, 0xAD, 0xBE, 0xEF, 1, 2, 3, 4};
-    DiagStatus s = f.commit_with_data(1u, 1u, data, sizeof(data));
+    DiagStatus s = f.commit_with_data(1u, data, sizeof(data));
     CHECK(s.ok());
 
     uint8_t out[8] = {};
-    DiagStatus r = f.uds.save_read(1u, 1u, 0, out, sizeof(out));
+    DiagStatus r = f.uds.save_read(1u, 0, out, sizeof(out));
     CHECK(r.ok());
     CHECK(memcmp(out, data, sizeof(data)) == 0);
 }
@@ -67,11 +65,11 @@ static void test_save_list()
 
     uint8_t d1[4] = {1, 2, 3, 4};
     uint8_t d2[8] = {5, 6, 7, 8, 9, 10, 11, 12};
-    CHECK(f.commit_with_data(1u, 1u, d1, sizeof(d1)).ok());
-    CHECK(f.commit_with_data(1u, 2u, d2, sizeof(d2)).ok());
+    CHECK(f.commit_with_data(1u, d1, sizeof(d1)).ok());
+    CHECK(f.commit_with_data(2u, d2, sizeof(d2)).ok());
 
     BlobInfo infos[4];
-    uint8_t n = f.uds.save_list(1u, 0u, infos, 4u);
+    uint8_t n = f.uds.save_list(0u, infos, 4u);
     CHECK(n == 2u);
 
     bool found1 = false, found2 = false;
@@ -92,36 +90,16 @@ static void test_save_delete()
     SaveFixture f;
 
     uint8_t data[4] = {1, 2, 3, 4};
-    CHECK(f.commit_with_data(1u, 1u, data, sizeof(data)).ok());
+    CHECK(f.commit_with_data(1u, data, sizeof(data)).ok());
 
-    CHECK(f.uds.save_delete(1u, 1u).ok());
+    CHECK(f.uds.save_delete(1u).ok());
 
     BlobInfo infos[4];
-    uint8_t n = f.uds.save_list(1u, 0u, infos, 4u);
+    uint8_t n = f.uds.save_list(0u, infos, 4u);
     CHECK(n == 0u);
 
     uint8_t out[4];
-    DiagStatus r = f.uds.save_read(1u, 1u, 0, out, sizeof(out));
-    CHECK(r.code == DiagCode::STORAGE_NOT_FOUND);
-}
-
-// ---------------------------------------------------------------------------
-// test_save_profile_isolation — blob under profile A not visible under profile B
-// ---------------------------------------------------------------------------
-
-static void test_save_profile_isolation()
-{
-    SaveFixture f;
-
-    uint8_t data[4] = {0xAA, 0xBB, 0xCC, 0xDD};
-    CHECK(f.commit_with_data(1u, 1u, data, sizeof(data)).ok());
-
-    BlobInfo infos[4];
-    uint8_t n = f.uds.save_list(2u, 0u, infos, 4u);
-    CHECK(n == 0u);
-
-    uint8_t out[4];
-    DiagStatus r = f.uds.save_read(2u, 1u, 0, out, sizeof(out));
+    DiagStatus r = f.uds.save_read(1u, 0, out, sizeof(out));
     CHECK(r.code == DiagCode::STORAGE_NOT_FOUND);
 }
 
@@ -137,7 +115,7 @@ static void test_save_concurrent_writes()
     for (int i = 0; i < SAVE_WRITE_HANDLES; ++i) {
         uint8_t data[4] = {static_cast<uint8_t>(i), 0, 0, 0};
         uint8_t h = 0xFF;
-        DiagStatus s = f.uds.save_write_begin(1u, static_cast<uint16_t>(i + 1),
+        DiagStatus s = f.uds.save_write_begin(static_cast<uint16_t>(i + 1),
                                               4u, 0u, &h);
         CHECK(s.ok());
         handles[i] = h;
@@ -145,7 +123,7 @@ static void test_save_concurrent_writes()
     }
 
     uint8_t h_extra = 0xFF;
-    DiagStatus extra = f.uds.save_write_begin(1u, 99u, 4u, 0u, &h_extra);
+    DiagStatus extra = f.uds.save_write_begin(99u, 4u, 0u, &h_extra);
     CHECK(extra.code == DiagCode::STORAGE_FULL);
 
     for (int i = 0; i < SAVE_WRITE_HANDLES; ++i) {
@@ -292,7 +270,6 @@ int main()
     test_save_write_read();
     test_save_list();
     test_save_delete();
-    test_save_profile_isolation();
     test_save_concurrent_writes();
     test_storage_api_roundtrip();
 

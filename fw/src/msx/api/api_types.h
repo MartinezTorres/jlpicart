@@ -46,15 +46,12 @@ static constexpr uint8_t API_HDR_FLAG_REGS  = (1u << 1); // ApiRegs doorbells en
 static constexpr uint8_t API_HDR_FLAGS_V1   = API_HDR_FLAG_RINGS | API_HDR_FLAG_REGS;
 
 // feature_bits: which services are implemented
-static constexpr uint32_t API_FEATURE_SYSTEM    = (1u << 0); // System service 0x00
-static constexpr uint32_t API_FEATURE_STORAGE   = (1u << 1); // Storage service 0x01
-static constexpr uint32_t API_FEATURE_NETWORK   = (1u << 2); // Network service 0x02
-static constexpr uint32_t API_FEATURE_IDENTITY  = (1u << 3); // Identity service 0x03
-static constexpr uint32_t API_FEATURE_USERSTATS = (1u << 4); // UserStats 0x04
+static constexpr uint32_t API_FEATURE_SYSTEM  = (1u << 0); // System service 0x00
+static constexpr uint32_t API_FEATURE_STORAGE = (1u << 1); // Storage service 0x01
+static constexpr uint32_t API_FEATURE_NETWORK = (1u << 2); // Network service 0x02
 
-// All non-network services currently implemented (network is bound conditionally).
-static constexpr uint32_t API_FEATURES_CURRENT =
-    API_FEATURE_SYSTEM | API_FEATURE_IDENTITY | API_FEATURE_STORAGE | API_FEATURE_USERSTATS;
+// Base feature set (storage added when UserDataStore is bound; network bound conditionally).
+static constexpr uint32_t API_FEATURES_CURRENT = API_FEATURE_SYSTEM;
 
 // ---------------------------------------------------------------------------
 // Packed structs — layout identical on RP2350 and Z80
@@ -145,10 +142,8 @@ static constexpr uint16_t API_E_POLICY      = 0x1010u; // operation blocked by p
 // ---------------------------------------------------------------------------
 
 static constexpr uint8_t SVC_SYSTEM   = 0x00u;
-static constexpr uint8_t SVC_STORAGE  = 0x01u;
-static constexpr uint8_t SVC_NETWORK  = 0x02u;
-static constexpr uint8_t SVC_IDENTITY = 0x03u;
-static constexpr uint8_t SVC_USERSTATS = 0x04u;
+static constexpr uint8_t SVC_STORAGE = 0x01u;
+static constexpr uint8_t SVC_NETWORK = 0x02u;
 
 // ---------------------------------------------------------------------------
 // System service (0x00) method IDs

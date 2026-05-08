@@ -14,7 +14,7 @@
 #include "content/manifest_parser.h"
 #include "content/installer.h"
 #include "crypto/sha256.h"
-#include "spine/policy_store.h"
+#include "spine/policy.h"
 #include "filesystem/fat_util.h"
 #include "diag/log.h"
 #include "ff.h"

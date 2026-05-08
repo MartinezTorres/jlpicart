@@ -5,7 +5,7 @@
 
 #include "usb/usb_host.h"
 #include "content/installer.h"
-#include "spine/policy_store.h"
+#include "spine/policy.h"
 #include <cstddef>
 
 static constexpr size_t INSTALL_SCAN_MAX_DIRS = 8;

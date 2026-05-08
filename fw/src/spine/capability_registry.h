@@ -3,7 +3,7 @@
 #include "spine/resource_model.h"
 #include "platform/platform.h"
 #include "spine/driver_descriptor.h"
-#include "spine/policy_store.h"
+#include "spine/policy.h"
 
 // capability_registry.h — Declared → Allowed → Activated capability pipeline.
 //

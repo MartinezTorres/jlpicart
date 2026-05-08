@@ -8,7 +8,7 @@
 #include "content/installer.h"
 #include "bus/mappers.h"
 #include "filesystem/fat_util.h"
-#include "spine/policy_store.h"
+#include "spine/policy.h"
 #include "spine/security_posture.h"
 #include "spine/otp_reader.h"
 #include "crypto/sha256.h"

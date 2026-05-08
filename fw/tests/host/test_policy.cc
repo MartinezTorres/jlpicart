@@ -1,9 +1,9 @@
 // test_policy.cc — unit tests for SHA-256, HMAC, policy verification, and PolicyStore.
 #include "test_helpers.h"
 #include "crypto/sha256.h"
-#include "spine/policy_store.h"
-#include "spine/policy_verify.h"
-#include "spine/policy_store.h"
+#include "spine/policy.h"
+#include "spine/policy.h"
+#include "spine/policy.h"
 #include "spine/security_posture.h"
 #include "spine/otp_reader.h"
 #include <cstring>

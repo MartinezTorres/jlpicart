@@ -65,9 +65,7 @@ void ApiWindow::init(const SecurityPosture& posture,
 void ApiWindow::bind_user_data(UserDataStore& uds)
 {
     user_data_ = &uds;
-    header().feature_bits |= API_FEATURE_IDENTITY
-                           |  API_FEATURE_STORAGE
-                           |  API_FEATURE_USERSTATS;
+    header().feature_bits |= API_FEATURE_STORAGE;
 }
 
 void ApiWindow::set_reset_menu_fn(void (*fn)())
@@ -94,11 +92,6 @@ void ApiWindow::set_active_payload(const char* payload_id)
     }
     strncpy(active_payload_id_, payload_id, sizeof(active_payload_id_) - 1u);
     active_payload_id_[sizeof(active_payload_id_) - 1u] = '\0';
-}
-
-uint16_t ApiWindow::active_profile_id() const
-{
-    return user_data_ ? user_data_->profile_active() : 0u;
 }
 
 // ---------------------------------------------------------------------------
@@ -309,16 +302,6 @@ bool ApiWindow::service_once()
                                 reset_menu_fn_, device_identity_);
             break;
 
-        case SVC_IDENTITY:
-            if (user_data_ != nullptr) {
-                identity_service_handle(req, payload, payload_len,
-                                        *this, *user_data_);
-            } else {
-                write_response(req.seq, req.service, req.method,
-                               API_E_UNSUPPORTED, nullptr, 0);
-            }
-            break;
-
         case SVC_NETWORK:
             if (net_transport_ != nullptr) {
                 network_service_handle(req, payload, payload_len,
@@ -333,18 +316,6 @@ bool ApiWindow::service_once()
             if (user_data_ != nullptr) {
                 storage_service_handle(req, payload, payload_len,
                                        *this, *user_data_);
-            } else {
-                write_response(req.seq, req.service, req.method,
-                               API_E_UNSUPPORTED, nullptr, 0);
-            }
-            break;
-
-        case SVC_USERSTATS:
-            if (user_data_ != nullptr) {
-                userstats_service_handle(req, payload, payload_len,
-                                          *this, *user_data_,
-                                          active_payload_id_,
-                                          device_identity_);
             } else {
                 write_response(req.seq, req.service, req.method,
                                API_E_UNSUPPORTED, nullptr, 0);

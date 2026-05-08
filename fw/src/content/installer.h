@@ -14,7 +14,7 @@
 #include "diag/diag.h"
 #include "content/collection_format.h"
 #include "crypto/sha256.h"
-#include "spine/policy_store.h"
+#include "spine/policy.h"
 #include <cstdint>
 #include <cstddef>
 

@@ -40,8 +40,7 @@ static void handle_list_blobs(const MsgHeader& req,
     if (payload_len >= 1u) kind = payload[0];
 
     BlobInfo infos[16];
-    uint16_t pid = uds.profile_active();
-    uint8_t n = uds.save_list(pid, kind, infos,
+    uint8_t n = uds.save_list(kind, infos,
                               static_cast<uint8_t>(sizeof(infos)/sizeof(infos[0])));
 
     uint8_t buf[2 + 16 * 8];
@@ -76,9 +75,8 @@ static void handle_read_blob(const MsgHeader& req,
 
     if (len > API_C2H_SCRATCH_LEN) len = static_cast<uint16_t>(API_C2H_SCRATCH_LEN);
 
-    uint16_t pid = uds.profile_active();
     uint8_t* scratch = win.buf() + API_C2H_SCRATCH_OFS;
-    DiagStatus s = uds.save_read(pid, blob_id, offset, scratch, len);
+    DiagStatus s = uds.save_read(blob_id, offset, scratch, len);
     if (!s.ok()) {
         send_err(win, req, diag_to_api(s.code));
         return;
@@ -115,9 +113,8 @@ static void handle_write_begin(const MsgHeader& req,
     memcpy(&total_len, payload + 2, 2);
     memcpy(&flags,     payload + 4, 2);
 
-    uint16_t pid = uds.profile_active();
     uint8_t handle = 0;
-    DiagStatus s = uds.save_write_begin(pid, blob_id, total_len, flags, &handle);
+    DiagStatus s = uds.save_write_begin(blob_id, total_len, flags, &handle);
     if (!s.ok()) { send_err(win, req, diag_to_api(s.code)); return; }
 
     uint8_t rsp_buf[4];
@@ -198,8 +195,7 @@ static void handle_delete_blob(const MsgHeader& req,
     uint16_t blob_id;
     memcpy(&blob_id, payload, 2);
 
-    uint16_t pid = uds.profile_active();
-    DiagStatus s = uds.save_delete(pid, blob_id);
+    DiagStatus s = uds.save_delete(blob_id);
     if (!s.ok()) { send_err(win, req, diag_to_api(s.code)); return; }
     send_ok(win, req);
 }

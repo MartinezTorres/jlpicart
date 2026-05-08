@@ -3,7 +3,7 @@
 #include "spine/capability_registry.h"
 #include "platform/platform.h"
 #include "spine/driver_descriptor.h"
-#include "spine/policy_store.h"
+#include "spine/policy.h"
 #include <cstring>
 
 // ---------------------------------------------------------------------------

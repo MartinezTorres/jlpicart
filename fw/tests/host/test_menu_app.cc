@@ -123,8 +123,8 @@ static constexpr uint8_t KEY_RETURN = 0x80u; // row 7 bit 7
 static constexpr uint8_t KEY_DOWN   = 0x40u; // row 8 bit 6
 
 // Number of rendering commands in one full MAIN screen pass (SET_MODE..footer).
-// SET_MODE + CLEAR + header + game_info + 3×items + footer = 8.
-static constexpr int MAIN_RENDER_CMDS = 8;
+// SET_MODE + CLEAR + header + game_info + 2×items + footer = 7.
+static constexpr int MAIN_RENDER_CMDS = 7;
 
 // ---------------------------------------------------------------------------
 // test_menu_boot_to_boot_info — no cmd issued until host_caps non-zero
@@ -178,10 +178,9 @@ static void test_menu_main_renders() {
         MENU_CMD_PUT_TEXT,   // step 2  banner
         MENU_CMD_PUT_TEXT,   // step 3  game info / no-collection line
         MENU_CMD_PUT_TEXT,   // step 4  item 0: Collections
-        MENU_CMD_PUT_TEXT,   // step 5  item 1: Profiles
-        MENU_CMD_PUT_TEXT,   // step 6  item 2: Settings
-        MENU_CMD_PUT_TEXT,   // step 7  footer
-        MENU_CMD_READ_INPUT, // step 8
+        MENU_CMD_PUT_TEXT,   // step 5  item 1: Settings
+        MENU_CMD_PUT_TEXT,   // step 6  footer
+        MENU_CMD_READ_INPUT, // step 7
     };
     for (uint16_t exp : expected) {
         uint16_t got = f.tick_to_cmd();
@@ -210,110 +209,6 @@ static void test_menu_main_navigation() {
     // Input processing moves cursor; re-render starts with SET_MODE.
     uint16_t cmd = f.tick_to_cmd();
     CHECK(cmd == MENU_CMD_SET_MODE);
-}
-
-// ---------------------------------------------------------------------------
-// test_menu_main_select_profiles — RETURN on item 1 switches to PROFILES
-// ---------------------------------------------------------------------------
-
-static void test_menu_main_select_profiles() {
-    MenuFixture f;
-    f.boot_to_main();
-
-    // First MAIN render (8 rendering commands + READ_INPUT).
-    f.advance(MAIN_RENDER_CMDS);
-    CHECK(f.tick_to_cmd() == MENU_CMD_READ_INPUT);
-
-    // DOWN: move cursor to 1 (Profiles).
-    f.ack_input(0xFFu, 0xFFu ^ KEY_DOWN);
-
-    // Second MAIN render (cursor = 1).
-    f.advance(MAIN_RENDER_CMDS);
-    CHECK(f.tick_to_cmd() == MENU_CMD_READ_INPUT);
-
-    // RETURN on item 1 → switch to PROFILES.
-    f.ack_input(0xFFu ^ KEY_RETURN, 0xFFu);
-
-    // PROFILES screen starts: first command is CLEAR.
-    uint16_t cmd = f.tick_to_cmd();
-    CHECK(cmd == MENU_CMD_CLEAR);
-}
-
-// ---------------------------------------------------------------------------
-// test_menu_profiles_renders — PROFILES lists profile then New/Back/footer
-// ---------------------------------------------------------------------------
-
-static void test_menu_profiles_renders() {
-    MenuFixture f;
-
-    // Create one profile.
-    uint16_t pid = 0u;
-    CHECK(f.uds.profile_create("Alice", "en", &pid).ok());
-    CHECK(f.uds.profile_set_active(pid).ok());
-
-    f.boot_to_main();
-
-    // Navigate to PROFILES: DOWN (cursor→1=Profiles) then RETURN.
-    f.advance(MAIN_RENDER_CMDS);
-    CHECK(f.tick_to_cmd() == MENU_CMD_READ_INPUT);
-    f.ack_input(0xFFu, 0xFFu ^ KEY_DOWN); // DOWN
-
-    f.advance(MAIN_RENDER_CMDS);
-    CHECK(f.tick_to_cmd() == MENU_CMD_READ_INPUT);
-    f.ack_input(0xFFu ^ KEY_RETURN, 0xFFu); // RETURN → PROFILES
-
-    // PROFILES render (1 profile):
-    //   CLEAR, header, profile[0], "New Profile...", "Back", footer, READ_INPUT = 7 cmds
-    static const uint16_t expected[] = {
-        MENU_CMD_CLEAR,      // step 0
-        MENU_CMD_PUT_TEXT,   // step 1  "  Profiles"
-        MENU_CMD_PUT_TEXT,   // step 2  "Alice *"
-        MENU_CMD_PUT_TEXT,   // base=3: "New Profile..."
-        MENU_CMD_PUT_TEXT,   // base+1: "Back"
-        MENU_CMD_PUT_TEXT,   // base+2: footer
-        MENU_CMD_READ_INPUT, // base+3
-    };
-    for (uint16_t exp : expected) {
-        uint16_t got = f.tick_to_cmd();
-        CHECK(got == exp);
-        f.ack();
-    }
-}
-
-// ---------------------------------------------------------------------------
-// test_menu_profiles_create — selecting "New Profile..." creates a profile
-// ---------------------------------------------------------------------------
-
-static void test_menu_profiles_create() {
-    MenuFixture f;
-    f.boot_to_main();
-
-    // Navigate to PROFILES (cursor=0=Collections → DOWN → cursor=1=Profiles).
-    f.advance(MAIN_RENDER_CMDS);
-    CHECK(f.tick_to_cmd() == MENU_CMD_READ_INPUT);
-    f.ack_input(0xFFu, 0xFFu ^ KEY_DOWN); // DOWN → cursor=1 (Profiles)
-
-    f.advance(MAIN_RENDER_CMDS);
-    CHECK(f.tick_to_cmd() == MENU_CMD_READ_INPUT);
-    f.ack_input(0xFFu ^ KEY_RETURN, 0xFFu); // RETURN → switch to PROFILES
-
-    // PROFILES render with 0 profiles:
-    //   CLEAR, header, "New Profile...", "Back", footer = 5 rendering commands.
-    // (base = 2+0 = 2; steps: 0:CLEAR, 1:header, 2:New, 3:Back, 4:footer)
-    static constexpr int PROFILES_0_RENDER_CMDS = 5;
-    f.advance(PROFILES_0_RENDER_CMDS);
-    CHECK(f.tick_to_cmd() == MENU_CMD_READ_INPUT);
-
-    // cursor=0 = "New Profile..." → RETURN creates a new profile.
-    f.ack_input(0xFFu ^ KEY_RETURN, 0xFFu);
-
-    // tick_to_cmd processes input (creates profile) then starts re-render.
-    uint16_t cmd = f.tick_to_cmd();
-    CHECK(cmd == MENU_CMD_CLEAR); // re-render PROFILES
-
-    // Profile should now exist.
-    CHECK(f.uds.profile_count() == 1u);
-    CHECK(f.uds.profile_active() != PROF_ID_NONE);
 }
 
 // ---------------------------------------------------------------------------
@@ -352,9 +247,6 @@ int main() {
     test_menu_boot_info_to_main();
     test_menu_main_renders();
     test_menu_main_navigation();
-    test_menu_main_select_profiles();
-    test_menu_profiles_renders();
-    test_menu_profiles_create();
     test_menu_collections_back();
 
     return test_summary();

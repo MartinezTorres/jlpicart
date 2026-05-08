@@ -10,7 +10,7 @@
 #include "msx/menu/menu_host_abi.h"
 #include "store/user_data_store.h"
 #include "spine/security_posture.h"
-#include "spine/policy_store.h"
+#include "spine/policy.h"
 #include "spine/capability_registry.h"
 #include "platform/platform.h"
 #include "spine/driver_descriptor.h"

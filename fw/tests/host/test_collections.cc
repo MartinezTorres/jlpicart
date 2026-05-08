@@ -7,7 +7,7 @@
 #include "content/installer.h"
 #include "content/content_store.h"
 #include "filesystem/fat_util.h"
-#include "spine/policy_store.h"
+#include "spine/policy.h"
 #include "spine/security_posture.h"
 #include "crypto/sha256.h"
 #include "fat_test_env.h"

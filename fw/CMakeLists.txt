@@ -52,18 +52,16 @@ add_executable(jlpicart
     src/crypto/smk.cc
 
     # Policy
-    src/spine/policy_verify.cc
-    src/spine/policy_store.cc
+    src/spine/policy.cc
 
     # Capability descriptors and registry
     src/platform/board_descriptor_jlpicart.cc
     src/spine/driver_descriptor_table.cc
     src/spine/capability_registry.cc
 
-    # API window (Stage 4) + Identity service (Stage 15)
+    # API window (Stage 4)
     src/msx/api/api_window.cc
     src/msx/api/services/core_service.cc
-    src/msx/api/services/identity_service.cc
 
     # Menu Host ABI (Stage 5)
     src/msx/menu/menu_host_abi.cc
@@ -71,12 +69,11 @@ add_executable(jlpicart
     # Menu Application (Stage 16)
     src/msx/menu/menu_app.cc
 
-    # User data store — profiles, settings, saves, stats (Stages 15/17/19/21)
+    # User data store — settings and save blobs (Stage 17/19)
     src/store/user_data_store.cc
 
-    # Storage service and UserStats service (Stages 19/21)
+    # Storage service (Stage 19)
     src/msx/api/services/storage_service.cc
-    src/msx/api/services/userstats_service.cc
 
     # ESP32 AT transport and Network service (Stage 32)
     src/net/transport_esp_at.cc

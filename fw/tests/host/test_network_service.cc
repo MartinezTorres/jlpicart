@@ -14,7 +14,7 @@
 #include "net/transport_esp_at.h"
 #include "net/transport_esp_at.h"
 #include "spine/security_posture.h"
-#include "spine/policy_store.h"
+#include "spine/policy.h"
 #include "spine/capability_registry.h"
 #include "platform/platform.h"
 #include "spine/driver_descriptor.h"

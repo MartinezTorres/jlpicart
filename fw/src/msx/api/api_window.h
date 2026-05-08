@@ -8,7 +8,7 @@
 
 #include "msx/api/api_types.h"
 #include "spine/security_posture.h"
-#include "spine/policy_store.h"
+#include "spine/policy.h"
 #include "spine/capability_registry.h"
 #include <cstddef>
 
@@ -32,8 +32,7 @@ public:
 
     bool initialized() const { return initialized_; }
 
-    // Bind a UserDataStore and enable API_FEATURE_IDENTITY, API_FEATURE_STORAGE,
-    // and API_FEATURE_USERSTATS in the window header.
+    // Bind a UserDataStore and enable API_FEATURE_STORAGE in the window header.
     // Must be called after init().  Safe to call more than once (rebinds).
     void bind_user_data(UserDataStore& uds);
 
@@ -47,11 +46,7 @@ public:
     // Bind the Device Identity Key (Stage 22).
     void bind_device_identity(DeviceIdentity& dik);
 
-    // Active profile ID for storage and stats services.
-    // Returns the value from UserDataStore if bound, or 0 otherwise.
-    uint16_t active_profile_id() const;
-
-    // Active payload ID for UserStats service keying (Stage 20+).
+    // Active payload ID — set by MenuApp during LAUNCH, cleared on cancel.
     void set_active_payload(const char* payload_id);
     const char* active_payload_id() const { return active_payload_id_; }
 

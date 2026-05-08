@@ -25,7 +25,6 @@ static void test_settings_defaults()
     CHECK(strcmp(cfg.language, "en") == 0);
     CHECK(cfg.video_mode      == SYS_VIDEO_AUTO);
     CHECK(cfg.network_enabled == 1u);
-    CHECK(cfg.guest_allowed   == 1u);
     CHECK(cfg.source_priority[0] == SYS_SRC_FLASH);
     CHECK(cfg.source_priority[1] == SYS_SRC_USB);
     CHECK(cfg.source_priority[2] == SYS_SRC_OPTICAL);
@@ -46,7 +45,6 @@ static void test_settings_roundtrip()
     strncpy(s.language,  "fr",        sizeof(s.language)  - 1u);
     s.video_mode      = SYS_VIDEO_CRT;
     s.network_enabled = 0u;
-    s.guest_allowed   = 0u;
 
     {
         UserDataStore uds;
@@ -64,7 +62,6 @@ static void test_settings_roundtrip()
         CHECK(strcmp(cfg.language,  "fr")         == 0);
         CHECK(cfg.video_mode      == SYS_VIDEO_CRT);
         CHECK(cfg.network_enabled == 0u);
-        CHECK(cfg.guest_allowed   == 0u);
     }
 }
 
@@ -114,7 +111,7 @@ static void test_settings_corrupt()
 }
 
 // ---------------------------------------------------------------------------
-// test_wipe_user_data — profiles are wiped; system settings intact
+// test_wipe_user_data — saves are wiped; system settings intact
 // ---------------------------------------------------------------------------
 
 static void test_wipe_user_data()
@@ -128,15 +125,20 @@ static void test_wipe_user_data()
     strncpy(cfg.language, "de", sizeof(cfg.language) - 1u);
     uds.settings_set(cfg);
 
-    uint16_t pid = 0u;
-    CHECK(uds.profile_create("Alice", "en", &pid).ok());
-    CHECK(uds.profile_count() == 1u);
+    // Write a save blob.
+    uint8_t data[4] = {1, 2, 3, 4};
+    uint8_t h = 0xFF;
+    uds.save_write_begin(1u, sizeof(data), 0u, &h);
+    uds.save_write_chunk(h, 0, data, sizeof(data));
+    CHECK(uds.save_write_commit(h).ok());
+
+    BlobInfo infos[4];
+    CHECK(uds.save_list(0u, infos, 4u) == 1u);
 
     DiagStatus ws = uds.wipe_user_data();
     CHECK(ws.ok());
 
-    CHECK(uds.profile_count() == 0u);
-    CHECK(uds.profile_active() == PROF_ID_NONE);
+    CHECK(uds.save_list(0u, infos, 4u) == 0u);
 
     // System settings should still be present.
     uds.settings_load();

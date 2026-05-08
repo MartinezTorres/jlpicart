@@ -53,24 +53,20 @@ void MenuApp::tick()
 {
     if (!initialized_) return;
 
-    // Stage 18: handle RESET_TO_MENU requests from the API service layer.
     if (reset_requested_) {
         switch_screen(Screen::MAIN);
         reset_requested_ = false;
     }
 
-    // If a command is pending, check whether the Z80 stub has responded.
     if (mbx_->pending()) {
-        if (!mbx_->tick()) return; // still waiting
+        if (!mbx_->tick()) return;
     }
 
-    // No pending command: advance the current screen's state machine.
     switch (screen_) {
         case Screen::BOOT:        tick_boot();        break;
         case Screen::BOOT_INFO:   tick_boot_info();   break;
         case Screen::MAIN:        tick_main();        break;
         case Screen::COLLECTIONS: tick_collections(); break;
-        case Screen::PROFILES:    tick_profiles();    break;
         case Screen::SETTINGS:    tick_settings();    break;
         case Screen::LAUNCH:      tick_launch();      break;
         case Screen::RUNNING:     tick_running();     break;
@@ -115,32 +111,20 @@ void MenuApp::load_collection_data()
     }
 }
 
-void MenuApp::load_profile_data()
-{
-    profile_count_     = uds_->profile_list(profiles_, PROF_MAX_PROFILES);
-    active_profile_id_ = uds_->profile_active();
-}
-
 // ---------------------------------------------------------------------------
-// BOOT screen — poll until Z80 stub has completed its own init
+// BOOT screen
 // ---------------------------------------------------------------------------
 
 void MenuApp::tick_boot()
 {
-    // No commands sent.  stub_host_caps() returns non-zero once the Z80
-    // stub has written its capabilities to the header (spec §8 ordering rule).
     if (mbx_->stub_host_caps() != 0u) {
         switch_screen(Screen::BOOT_INFO);
     }
 }
 
 // ---------------------------------------------------------------------------
-// BOOT_INFO screen — query host hardware capabilities
+// BOOT_INFO screen
 // ---------------------------------------------------------------------------
-//
-// Steps:
-//   0: send GET_HOST_INFO
-//   1: parse response → load data → switch to MAIN
 
 void MenuApp::tick_boot_info()
 {
@@ -154,8 +138,6 @@ void MenuApp::tick_boot_info()
             memcpy(&host_info_, mbx_->data_buf(), sizeof(HostInfo));
         }
         load_collection_data();
-        load_profile_data();
-        // Stage 20: if the active collection requests direct boot, skip MAIN.
         if (has_collection_ && col_record_.boot_mode == 1u) {
             strncpy(launch_title_,      col_record_.title,             sizeof(launch_title_) - 1u);
             strncpy(launch_payload_id_, col_record_.default_payload_id, sizeof(launch_payload_id_) - 1u);
@@ -179,13 +161,13 @@ void MenuApp::tick_boot_info()
 //   2: PUT_TEXT row 0  — banner
 //   3: PUT_TEXT row 1  — active collection title or "(no collection)"
 //   4: PUT_TEXT row 3  — item 0: Collections
-//   5: PUT_TEXT row 4  — item 1: Profiles
-//   6: PUT_TEXT row 5  — item 2: Settings
-//   7: PUT_TEXT row 22 — footer hint
-//   8: READ_INPUT
-//   9: process input
+//   5: PUT_TEXT row 4  — item 1: Settings
+//   6: PUT_TEXT row 22 — footer hint
+//   7: READ_INPUT
+//   8: process input
 
-static constexpr int MAIN_PROCESS_STEP = 9;
+static constexpr int MAIN_PROCESS_STEP = 8;
+static constexpr int MAIN_ITEMS        = 2;
 
 void MenuApp::tick_main()
 {
@@ -213,20 +195,19 @@ void MenuApp::tick_main()
         step_ = 4;
         break;
     case 4:
-    case 5:
-    case 6: {
-        static const char* const ITEMS[] = {"Collections", "Profiles", "Settings"};
+    case 5: {
+        static const char* const ITEMS[] = {"Collections", "Settings"};
         int i = step_ - 4;
         snprintf(fmt_, sizeof(fmt_), " %c %-20s", cursor_ == i ? '>' : ' ', ITEMS[i]);
         put_text(0u, static_cast<uint8_t>(3 + i), fmt_);
         step_++;
         break;
     }
-    case 7:
+    case 6:
         put_text(0u, 22u, "  UP/DN:Move  RETURN:Select");
-        step_ = 8;
+        step_ = 7;
         break;
-    case 8:
+    case 7:
         mbx_->send_command(MENU_CMD_READ_INPUT);
         step_ = MAIN_PROCESS_STEP;
         break;
@@ -239,21 +220,6 @@ void MenuApp::tick_main()
 // ---------------------------------------------------------------------------
 // COLLECTIONS screen
 // ---------------------------------------------------------------------------
-//
-// Steps:
-//   0: CLEAR
-//   1: PUT_TEXT row 0 — header
-//   2: PUT_TEXT row 2 — title or "no collection"
-//   3: PUT_TEXT row 3 — version + publisher, or install hint
-//   4: PUT_TEXT row 5 — payload count or blank
-//   5: PUT_TEXT row 7 — "Launch" (only when has_collection_)
-//   6: PUT_TEXT row 8 — "Back"
-//   7: PUT_TEXT row 22 — footer
-//   8: READ_INPUT
-//   9: process input
-//
-// Cursor items when has_collection_:  0=Launch, 1=Back
-// Cursor items when !has_collection_: 0=Back
 
 void MenuApp::tick_collections()
 {
@@ -329,145 +295,17 @@ void MenuApp::tick_collections()
 }
 
 // ---------------------------------------------------------------------------
-// PROFILES screen
-// ---------------------------------------------------------------------------
-//
-// Variable step count because the number of profiles is runtime data.
-//
-// Steps:
-//   0:         CLEAR (also refreshes profile data)
-//   1:         PUT_TEXT header
-//   2+i:       PUT_TEXT profile[i] for i in 0..profile_count_-1
-//   base+0:    PUT_TEXT "New Profile..."    (base = 2 + profile_count_)
-//   base+1:    PUT_TEXT "Back"
-//   base+2:    PUT_TEXT footer
-//   base+3:    READ_INPUT
-//   base+4:    process input
-
-int MenuApp::profiles_item_count() const
-{
-    return static_cast<int>(profile_count_) + 2; // profiles + "New Profile..." + "Back"
-}
-
-void MenuApp::tick_profiles()
-{
-    const int base         = 2 + static_cast<int>(profile_count_);
-    const int process_step = base + 4;
-
-    if (step_ == process_step) {
-        handle_profiles_input();
-        return;
-    }
-    if (step_ == base + 3) {
-        mbx_->send_command(MENU_CMD_READ_INPUT);
-        step_++;
-        return;
-    }
-    if (step_ == base + 2) {
-        put_text(0u, 22u, "  UP/DN:Move  RETURN:Select  ESC:Back");
-        step_++;
-        return;
-    }
-    if (step_ == base + 1) {
-        // "Back" item
-        int back_item = profiles_item_count() - 1;
-        snprintf(fmt_, sizeof(fmt_), " %c Back",
-                 cursor_ == back_item ? '>' : ' ');
-        put_text(0u, static_cast<uint8_t>(3 + back_item), fmt_);
-        step_++;
-        return;
-    }
-    if (step_ == base) {
-        // "New Profile..." item
-        int new_item = static_cast<int>(profile_count_);
-        snprintf(fmt_, sizeof(fmt_), " %c New Profile...",
-                 cursor_ == new_item ? '>' : ' ');
-        put_text(0u, static_cast<uint8_t>(3 + new_item), fmt_);
-        step_++;
-        return;
-    }
-    if (step_ >= 2 && step_ < base) {
-        // Profile item
-        int i = step_ - 2;
-        bool is_active = (profiles_[i].profile_id == active_profile_id_);
-        snprintf(fmt_, sizeof(fmt_), " %c %-20s%s",
-                 cursor_ == i ? '>' : ' ',
-                 profiles_[i].name,
-                 is_active ? "*" : " ");
-        put_text(0u, static_cast<uint8_t>(3 + i), fmt_);
-        step_++;
-        return;
-    }
-
-    switch (step_) {
-    case 0:
-        load_profile_data(); // refresh on every full render
-        mbx_->send_command(MENU_CMD_CLEAR, MENU_CLEAR_ALL);
-        step_ = 1;
-        break;
-    case 1:
-        put_text(0u, 0u, "  Profiles");
-        step_ = 2;
-        break;
-    }
-}
-
-// ---------------------------------------------------------------------------
 // SETTINGS screen
 // ---------------------------------------------------------------------------
 //
-// When SystemSettingsStore is bound (Stage 17+):
-//   Steps: 0:CLEAR 1:header 2:WiFi 3:Lang 4:Video 5:Net
-//          6:Wipe item 7:Back item 8:footer 9:READ_INPUT 10:process
-//
-// When SystemSettingsStore is not bound (tests / pre-Stage 17):
-//   Steps: 0:CLEAR 1:header 2:placeholder 3:Back 4:footer 5:READ_INPUT 6:process
-//
-// Items (cursor-based, live path only):
-//   0 = "Wipe user data"  (RETURN requires confirmation)
-//   1 = "Back"
+// Steps: 0:CLEAR 1:header 2:WiFi 3:Lang 4:Video 5:Net
+//        6:Wipe item 7:Back item 8:footer 9:READ_INPUT 10:process
 
-static constexpr int SETTINGS_PROCESS_STEP      = 10;
-static constexpr int SETTINGS_PROCESS_STEP_MIN  = 6;  // fallback path
-static constexpr int SETTINGS_ITEMS             = 2;
+static constexpr int SETTINGS_PROCESS_STEP = 10;
+static constexpr int SETTINGS_ITEMS        = 2;
 
 void MenuApp::tick_settings()
 {
-    if (!uds_) {
-        // Fallback: placeholder screen (no user data store bound).
-        switch (step_) {
-        case 0:
-            mbx_->send_command(MENU_CMD_CLEAR, MENU_CLEAR_ALL);
-            step_ = 1;
-            break;
-        case 1:
-            put_text(0u, 0u, "  Settings");
-            step_ = 2;
-            break;
-        case 2:
-            put_text(0u, 2u, "  (no settings configured)");
-            step_ = 3;
-            break;
-        case 3:
-            put_text(0u, 4u, " > Back");
-            step_ = 4;
-            break;
-        case 4:
-            put_text(0u, 22u, "  RETURN:Back");
-            step_ = 5;
-            break;
-        case 5:
-            mbx_->send_command(MENU_CMD_READ_INPUT);
-            step_ = SETTINGS_PROCESS_STEP_MIN;
-            break;
-        case SETTINGS_PROCESS_STEP_MIN:
-            handle_settings_input();
-            break;
-        }
-        return;
-    }
-
-    // Live settings screen.
     switch (step_) {
     case 0:
         mbx_->send_command(MENU_CMD_CLEAR, MENU_CLEAR_ALL);
@@ -478,9 +316,14 @@ void MenuApp::tick_settings()
         step_ = 2;
         break;
     case 2: {
-        const SystemSettings& cfg = uds_->settings();
-        if (cfg.wifi_ssid[0]) {
-            snprintf(fmt_, sizeof(fmt_), "  WiFi: %.50s", cfg.wifi_ssid);
+        if (uds_) {
+            const SystemSettings& cfg = uds_->settings();
+            if (cfg.wifi_ssid[0]) {
+                snprintf(fmt_, sizeof(fmt_), "  WiFi: %.50s", cfg.wifi_ssid);
+            } else {
+                strncpy(fmt_, "  WiFi: (none)", sizeof(fmt_) - 1u);
+                fmt_[sizeof(fmt_) - 1u] = '\0';
+            }
         } else {
             strncpy(fmt_, "  WiFi: (none)", sizeof(fmt_) - 1u);
             fmt_[sizeof(fmt_) - 1u] = '\0';
@@ -490,25 +333,31 @@ void MenuApp::tick_settings()
         break;
     }
     case 3: {
-        const SystemSettings& cfg = uds_->settings();
-        snprintf(fmt_, sizeof(fmt_), "  Lang: %.7s", cfg.language);
+        if (uds_) {
+            snprintf(fmt_, sizeof(fmt_), "  Lang: %.7s", uds_->settings().language);
+        } else {
+            strncpy(fmt_, "  Lang: en", sizeof(fmt_) - 1u);
+            fmt_[sizeof(fmt_) - 1u] = '\0';
+        }
         put_text(0u, 3u, fmt_);
         step_ = 4;
         break;
     }
     case 4: {
         static const char* const VMODES[] = {"auto", "crt", "vga"};
-        const SystemSettings& cfg = uds_->settings();
-        uint8_t vm = (cfg.video_mode < 3u) ? cfg.video_mode : 0u;
+        uint8_t vm = 0u;
+        if (uds_) {
+            vm = uds_->settings().video_mode;
+            if (vm >= 3u) vm = 0u;
+        }
         snprintf(fmt_, sizeof(fmt_), "  Video: %s", VMODES[vm]);
         put_text(0u, 4u, fmt_);
         step_ = 5;
         break;
     }
     case 5: {
-        const SystemSettings& cfg = uds_->settings();
-        snprintf(fmt_, sizeof(fmt_), "  Net: %s",
-                 cfg.network_enabled ? "on" : "off");
+        bool net = uds_ && uds_->settings().network_enabled;
+        snprintf(fmt_, sizeof(fmt_), "  Net: %s", net ? "on" : "off");
         put_text(0u, 5u, fmt_);
         step_ = 6;
         break;
@@ -555,18 +404,16 @@ void MenuApp::handle_main_input()
     }
 
     if (key_down(inp) || joy1_down(inp)) {
-        cursor_ = (cursor_ + 1) % 3;
+        cursor_ = (cursor_ + 1) % MAIN_ITEMS;
     } else if (key_up(inp) || joy1_up(inp)) {
-        cursor_ = (cursor_ + 2) % 3; // (cursor_ - 1 + 3) % 3
+        cursor_ = (cursor_ + MAIN_ITEMS - 1) % MAIN_ITEMS;
     } else if (key_return(inp) || joy1_trig(inp)) {
         switch (cursor_) {
             case 0: switch_screen(Screen::COLLECTIONS); return;
-            case 1: switch_screen(Screen::PROFILES);   return;
-            case 2: switch_screen(Screen::SETTINGS);   return;
+            case 1: switch_screen(Screen::SETTINGS);    return;
             default: break;
         }
     }
-    // No transition: re-render from the top.
     step_ = 0;
 }
 
@@ -577,12 +424,12 @@ void MenuApp::handle_collections_input()
         memcpy(&inp, mbx_->data_buf(), sizeof(InputSnapshot));
     }
 
-    const int item_count = has_collection_ ? 2 : 1;  // [Launch, Back] or [Back]
+    const int item_count = has_collection_ ? 2 : 1;
     const int back_item  = item_count - 1;
 
     if (key_down(inp) || joy1_down(inp)) {
         cursor_ = (cursor_ + 1) % item_count;
-        step_ = 5;  // re-render cursor
+        step_ = 5;
         return;
     }
     if (key_up(inp) || joy1_up(inp)) {
@@ -596,7 +443,6 @@ void MenuApp::handle_collections_input()
     }
     if (key_return(inp) || joy1_trig(inp)) {
         if (has_collection_ && cursor_ == 0) {
-            // "Launch" selected: transition to LAUNCH screen.
             strncpy(launch_title_,      col_record_.title,             sizeof(launch_title_) - 1u);
             strncpy(launch_payload_id_, col_record_.default_payload_id, sizeof(launch_payload_id_) - 1u);
             launch_title_[sizeof(launch_title_) - 1u]           = '\0';
@@ -608,72 +454,20 @@ void MenuApp::handle_collections_input()
         return;
     }
 
-    // No recognised input: re-render to keep polling.
     step_ = 8;
-}
-
-void MenuApp::handle_profiles_input()
-{
-    InputSnapshot inp = {};
-    if (mbx_->last_out_len() >= sizeof(InputSnapshot)) {
-        memcpy(&inp, mbx_->data_buf(), sizeof(InputSnapshot));
-    }
-
-    const int item_count = profiles_item_count();
-
-    if (key_down(inp) || joy1_down(inp)) {
-        cursor_ = (cursor_ + 1) % item_count;
-    } else if (key_up(inp) || joy1_up(inp)) {
-        cursor_ = (cursor_ - 1 + item_count) % item_count;
-    } else if (key_return(inp) || joy1_trig(inp)) {
-        if (cursor_ < static_cast<int>(profile_count_)) {
-            // Set selected profile as active.
-            uds_->profile_set_active(profiles_[cursor_].profile_id);
-            active_profile_id_ = profiles_[cursor_].profile_id;
-        } else if (cursor_ == static_cast<int>(profile_count_)) {
-            // Create a new profile with an auto-generated name.
-            if (profile_count_ < PROF_MAX_PROFILES) {
-                char name[PROF_NAME_MAX];
-                snprintf(name, sizeof(name), "Profile %d",
-                         static_cast<int>(profile_count_) + 1);
-                uint16_t new_id = 0u;
-                if (uds_->profile_create(name, "en", &new_id).ok()) {
-                    uds_->profile_set_active(new_id);
-                }
-                load_profile_data();
-                cursor_ = 0;
-            }
-        } else {
-            // "Back"
-            switch_screen(Screen::MAIN);
-            return;
-        }
-    } else if (key_esc(inp)) {
-        switch_screen(Screen::MAIN);
-        return;
-    }
-    // Re-render with updated cursor / data.
-    step_ = 0;
 }
 
 void MenuApp::handle_settings_input()
 {
-    if (!uds_) {
-        // Fallback path: any key returns to MAIN.
-        switch_screen(Screen::MAIN);
-        return;
-    }
-
     InputSnapshot inp = {};
     if (mbx_->last_out_len() >= sizeof(InputSnapshot)) {
         memcpy(&inp, mbx_->data_buf(), sizeof(InputSnapshot));
     }
 
     if (wipe_confirm_) {
-        if (key_return(inp) || joy1_trig(inp)) {
+        if ((key_return(inp) || joy1_trig(inp)) && uds_) {
             uds_->wipe_user_data();
         }
-        // Any other key (or after wipe): cancel/clear confirmation and re-render.
         wipe_confirm_ = false;
         step_ = 0;
         return;
@@ -685,10 +479,8 @@ void MenuApp::handle_settings_input()
         cursor_ = (cursor_ + SETTINGS_ITEMS - 1) % SETTINGS_ITEMS;
     } else if (key_return(inp) || joy1_trig(inp)) {
         if (cursor_ == 0) {
-            // First press: arm confirmation.
             wipe_confirm_ = true;
         } else {
-            // "Back"
             switch_screen(Screen::MAIN);
             return;
         }
@@ -701,26 +493,15 @@ void MenuApp::handle_settings_input()
 }
 
 // ---------------------------------------------------------------------------
-// LAUNCH screen (Stage 20)
+// LAUNCH screen
 // ---------------------------------------------------------------------------
-//
-// Steps:
-//   0: CLEAR; register active payload with ApiWindow
-//   1: PUT_TEXT 0,0 "  Launching <title>..."
-//   2: PUT_TEXT 0,2 "  (press any key to cancel)"
-//   3: READ_INPUT
-//   4: process input — any key cancels → MAIN; no key → call launch_fn_ → step 5
-//   5: send MENU_CMD_LAUNCH (ROM already remapped by launch_fn_)
-//   6: wait for stub ACK → RUNNING
 
 void MenuApp::tick_launch()
 {
     switch (step_) {
     case 0:
         if (!mbx_->send_command(MENU_CMD_CLEAR)) return;
-        if (api_win_) {
-            api_win_->set_active_payload(launch_payload_id_);
-        }
+        if (api_win_) api_win_->set_active_payload(launch_payload_id_);
         step_ = 1;
         break;
     case 1:
@@ -757,28 +538,21 @@ void MenuApp::handle_launch_input()
         memcpy(&inp, mbx_->data_buf(), sizeof(InputSnapshot));
     }
 
-    // Any key press cancels and returns to MAIN.
     if (key_any(inp)) {
-        if (api_win_) {
-            api_win_->set_active_payload("");
-        }
+        if (api_win_) api_win_->set_active_payload("");
         switch_screen(Screen::MAIN);
         return;
     }
 
-    // No key: remap ROM then proceed to send MENU_CMD_LAUNCH.
-    if (launch_fn_) {
-        launch_fn_(launch_fn_ctx_, launch_payload_id_);
-    }
+    if (launch_fn_) launch_fn_(launch_fn_ctx_, launch_payload_id_);
     step_ = 5;
 }
 
 // ---------------------------------------------------------------------------
-// tick_running — game ROM is live; stub has jumped to 0x0000.
-// The menu is no longer in control; we simply idle.
+// RUNNING
 // ---------------------------------------------------------------------------
 
 void MenuApp::tick_running()
 {
-    // Nothing to do — the Z80 is running the game.
+    // Z80 is running the game — nothing to do.
 }

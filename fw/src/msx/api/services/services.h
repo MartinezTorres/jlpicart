@@ -3,7 +3,7 @@
 
 #include "msx/api/api_types.h"
 #include "spine/security_posture.h"
-#include "spine/policy_store.h"
+#include "spine/policy.h"
 #include "spine/capability_registry.h"
 #include "store/user_data_store.h"
 #include <cstdint>
@@ -41,19 +41,3 @@ void network_service_handle(const MsgHeader& req,
                              ApiWindow&       win,
                              TransportEspAt&  transport);
 
-// Identity service (0x03): LIST_PROFILES, SET/GET_ACTIVE_PROFILE,
-//                           GUEST_BEGIN, GUEST_END.
-void identity_service_handle(const MsgHeader&  req,
-                              const uint8_t*    payload,
-                              uint16_t          payload_len,
-                              ApiWindow&        win,
-                              UserDataStore&    uds);
-
-// UserStats service (0x04): achievements, stats, leaderboards.
-void userstats_service_handle(const MsgHeader& req,
-                               const uint8_t*   payload,
-                               uint16_t         payload_len,
-                               ApiWindow&       win,
-                               UserDataStore&   uds,
-                               const char*      active_payload_id,
-                               DeviceIdentity*  dik = nullptr);

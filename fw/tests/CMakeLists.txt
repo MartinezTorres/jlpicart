@@ -25,8 +25,7 @@ set(SRC_DIAG        "${FW_SRC}/diag/diag.cc")
 set(SRC_LOG         "${FW_SRC}/diag/log.cc")
 set(SRC_SHA256      "${FW_SRC}/crypto/sha256.cc")
 set(SRC_POSTURE     "${FW_SRC}/spine/security_posture.cc")
-set(SRC_POL_VERIFY  "${FW_SRC}/spine/policy_verify.cc")
-set(SRC_POL_STORE   "${FW_SRC}/spine/policy_store.cc")
+set(SRC_POLICY  "${FW_SRC}/spine/policy.cc")
 set(SRC_CAP_REG     "${FW_SRC}/spine/capability_registry.cc")
 set(SRC_BOARD_DESC  "${FW_SRC}/platform/board_descriptor_jlpicart.cc")
 set(SRC_DRV_TABLE   "${FW_SRC}/spine/driver_descriptor_table.cc")
@@ -58,13 +57,6 @@ set(SRC_FAT_DEPS
 )
 
 # ---------------------------------------------------------------------------
-# Store primitives (uuid + store; store_key.h and store_record.h are header-only)
-# ---------------------------------------------------------------------------
-
-set(SRC_STORE  "${FW_SRC}/store/uuid.cc"
-               "${FW_SRC}/store/store.cc")
-
-# ---------------------------------------------------------------------------
 # Store sources (all FAT-backed now; no KvStore dependency)
 # ---------------------------------------------------------------------------
 
@@ -80,10 +72,8 @@ set(SRC_FLASH_DEVICE  "${FW_SRC}/filesystem/flash_device.cc")
 
 set(SRC_API_WINDOW    "${FW_SRC}/msx/api/api_window.cc")
 set(SRC_CORE_SERVICE  "${FW_SRC}/msx/api/services/core_service.cc")
-set(SRC_IDENTITY_SVC  "${FW_SRC}/msx/api/services/identity_service.cc")
 set(SRC_MENU_HOST_ABI "${FW_SRC}/msx/menu/menu_host_abi.cc")
 set(SRC_STORAGE_SVC   "${FW_SRC}/msx/api/services/storage_service.cc")
-set(SRC_USERSTATS_SVC  "${FW_SRC}/msx/api/services/userstats_service.cc")
 set(SRC_NET_TRANSPORT  "${FW_SRC}/net/transport_esp_at.cc")
 set(SRC_NET_SERVICE    "${FW_SRC}/net/network_service.cc")
 # Any test that links api_window.cc must also include these.
@@ -147,8 +137,7 @@ add_host_test(test_policy
     host/test_policy.cc
     ${SRC_DIAG}
     ${SRC_SHA256}
-    ${SRC_POL_VERIFY}
-    ${SRC_POL_STORE}
+    ${SRC_POLICY}
     ${SRC_POSTURE}
 )
 
@@ -167,20 +156,16 @@ add_host_test(test_api_window
     host/test_api_window.cc
     ${SRC_API_WINDOW}
     ${SRC_CORE_SERVICE}
-    ${SRC_IDENTITY_SVC}
     ${SRC_STORAGE_SVC}
-    ${SRC_USERSTATS_SVC}
     ${SRC_NET_DEPS}
     ${SRC_DEVICE_IDENTITY}
-    ${SRC_STORE}
     ${SRC_USER_DATA_STORE}
     ${SRC_CAP_REG}
     ${SRC_BOARD_DESC}
     ${SRC_DRV_TABLE}
     ${SRC_DIAG}
     ${SRC_SHA256}
-    ${SRC_POL_VERIFY}
-    ${SRC_POL_STORE}
+    ${SRC_POLICY}
     ${SRC_POSTURE}
     ${SRC_FAT_DEPS}
 )
@@ -193,20 +178,16 @@ add_host_test(test_network_service
     host/test_network_service.cc
     ${SRC_API_WINDOW}
     ${SRC_CORE_SERVICE}
-    ${SRC_IDENTITY_SVC}
     ${SRC_STORAGE_SVC}
-    ${SRC_USERSTATS_SVC}
     ${SRC_NET_DEPS}
     ${SRC_DEVICE_IDENTITY}
-    ${SRC_STORE}
     ${SRC_USER_DATA_STORE}
     ${SRC_CAP_REG}
     ${SRC_BOARD_DESC}
     ${SRC_DRV_TABLE}
     ${SRC_DIAG}
     ${SRC_SHA256}
-    ${SRC_POL_VERIFY}
-    ${SRC_POL_STORE}
+    ${SRC_POLICY}
     ${SRC_POSTURE}
     ${SRC_FAT_DEPS}
 )
@@ -238,14 +219,6 @@ add_host_test(test_storage
     host/test_storage.cc
     ${SRC_FLASH_DEVICE}
     ${SRC_DIAG}
-    ${SRC_FAT_DEPS}
-)
-
-add_host_test(test_store
-    host/test_store.cc
-    ${SRC_STORE}
-    ${SRC_DIAG}
-    ${SRC_LOG}
     ${SRC_FAT_DEPS}
 )
 
@@ -327,36 +300,9 @@ add_host_test(test_collections
     ${SRC_CONTENT_STORE}
     ${SRC_DIAG}
     ${SRC_SHA256}
-    ${SRC_POL_VERIFY}
-    ${SRC_POL_STORE}
+    ${SRC_POLICY}
     ${SRC_POSTURE}
     ${SRC_LOG}
-    ${SRC_FAT_DEPS}
-)
-
-# ---------------------------------------------------------------------------
-# Stage 15 tests
-# ---------------------------------------------------------------------------
-
-add_host_test(test_profiles
-    host/test_profiles.cc
-    ${SRC_STORE}
-    ${SRC_USER_DATA_STORE}
-    ${SRC_IDENTITY_SVC}
-    ${SRC_STORAGE_SVC}
-    ${SRC_USERSTATS_SVC}
-    ${SRC_NET_DEPS}
-    ${SRC_DEVICE_IDENTITY}
-    ${SRC_API_WINDOW}
-    ${SRC_CORE_SERVICE}
-    ${SRC_CAP_REG}
-    ${SRC_BOARD_DESC}
-    ${SRC_DRV_TABLE}
-    ${SRC_DIAG}
-    ${SRC_SHA256}
-    ${SRC_POL_VERIFY}
-    ${SRC_POL_STORE}
-    ${SRC_POSTURE}
     ${SRC_FAT_DEPS}
 )
 
@@ -379,8 +325,7 @@ add_host_test(test_usb_scanner
     ${SRC_CONTENT_STORE}
     ${SRC_DIAG}
     ${SRC_SHA256}
-    ${SRC_POL_VERIFY}
-    ${SRC_POL_STORE}
+    ${SRC_POLICY}
     ${SRC_POSTURE}
     ${SRC_LOG}
     ${SRC_FAT_DEPS}
@@ -398,21 +343,17 @@ add_host_test(test_menu_app
     ${SRC_MENU_HOST_ABI}
     ${SRC_API_WINDOW}
     ${SRC_CORE_SERVICE}
-    ${SRC_IDENTITY_SVC}
     ${SRC_STORAGE_SVC}
-    ${SRC_USERSTATS_SVC}
     ${SRC_NET_DEPS}
     ${SRC_DEVICE_IDENTITY}
     ${SRC_CONTENT_STORE}
-    ${SRC_STORE}
     ${SRC_USER_DATA_STORE}
     ${SRC_CAP_REG}
     ${SRC_BOARD_DESC}
     ${SRC_DRV_TABLE}
     ${SRC_DIAG}
     ${SRC_SHA256}
-    ${SRC_POL_VERIFY}
-    ${SRC_POL_STORE}
+    ${SRC_POLICY}
     ${SRC_POSTURE}
     ${SRC_FAT_DEPS}
 )
@@ -423,7 +364,6 @@ add_host_test(test_menu_app
 
 add_host_test(test_system_settings
     host/test_system_settings.cc
-    ${SRC_STORE}
     ${SRC_USER_DATA_STORE}
     ${SRC_DEVICE_IDENTITY}
     ${SRC_SHA256}
@@ -442,10 +382,8 @@ set(SRC_CORE_SVC_FULL
     ${SRC_DRV_TABLE}
     ${SRC_DIAG}
     ${SRC_SHA256}
-    ${SRC_POL_VERIFY}
-    ${SRC_POL_STORE}
+    ${SRC_POLICY}
     ${SRC_POSTURE}
-    ${SRC_STORE}
     ${SRC_USER_DATA_STORE}
     ${SRC_MENU_HOST_ABI}
     ${SRC_MENU_APP}
@@ -456,9 +394,7 @@ set(SRC_CORE_SVC_FULL
 add_host_test(test_core_service
     host/test_core_service.cc
     ${SRC_API_WINDOW}
-    ${SRC_IDENTITY_SVC}
     ${SRC_STORAGE_SVC}
-    ${SRC_USERSTATS_SVC}
     ${SRC_DEVICE_IDENTITY}
     ${SRC_CORE_SVC_FULL}
     ${SRC_FAT_DEPS}
@@ -471,21 +407,17 @@ add_host_test(test_core_service
 add_host_test(test_save_store
     host/test_save_store.cc
     ${SRC_STORAGE_SVC}
-    ${SRC_USERSTATS_SVC}
     ${SRC_NET_DEPS}
     ${SRC_DEVICE_IDENTITY}
     ${SRC_API_WINDOW}
-    ${SRC_IDENTITY_SVC}
     ${SRC_CORE_SERVICE}
     ${SRC_CAP_REG}
     ${SRC_BOARD_DESC}
     ${SRC_DRV_TABLE}
-    ${SRC_STORE}
     ${SRC_USER_DATA_STORE}
     ${SRC_DIAG}
     ${SRC_SHA256}
-    ${SRC_POL_VERIFY}
-    ${SRC_POL_STORE}
+    ${SRC_POLICY}
     ${SRC_POSTURE}
     ${SRC_FAT_DEPS}
 )
@@ -500,47 +432,17 @@ add_host_test(test_boot_mode
     ${SRC_MENU_HOST_ABI}
     ${SRC_API_WINDOW}
     ${SRC_CORE_SERVICE}
-    ${SRC_IDENTITY_SVC}
     ${SRC_STORAGE_SVC}
-    ${SRC_USERSTATS_SVC}
     ${SRC_NET_DEPS}
     ${SRC_DEVICE_IDENTITY}
     ${SRC_CONTENT_STORE}
-    ${SRC_STORE}
     ${SRC_USER_DATA_STORE}
     ${SRC_CAP_REG}
     ${SRC_BOARD_DESC}
     ${SRC_DRV_TABLE}
     ${SRC_DIAG}
     ${SRC_SHA256}
-    ${SRC_POL_VERIFY}
-    ${SRC_POL_STORE}
-    ${SRC_POSTURE}
-    ${SRC_FAT_DEPS}
-)
-
-# ---------------------------------------------------------------------------
-# Stage 21 tests
-# ---------------------------------------------------------------------------
-
-add_host_test(test_stats_store
-    host/test_stats_store.cc
-    ${SRC_USERSTATS_SVC}
-    ${SRC_NET_DEPS}
-    ${SRC_DEVICE_IDENTITY}
-    ${SRC_API_WINDOW}
-    ${SRC_CORE_SERVICE}
-    ${SRC_IDENTITY_SVC}
-    ${SRC_STORAGE_SVC}
-    ${SRC_CAP_REG}
-    ${SRC_BOARD_DESC}
-    ${SRC_DRV_TABLE}
-    ${SRC_STORE}
-    ${SRC_USER_DATA_STORE}
-    ${SRC_DIAG}
-    ${SRC_SHA256}
-    ${SRC_POL_VERIFY}
-    ${SRC_POL_STORE}
+    ${SRC_POLICY}
     ${SRC_POSTURE}
     ${SRC_FAT_DEPS}
 )
@@ -554,19 +456,15 @@ add_host_test(test_device_identity
     ${SRC_DEVICE_IDENTITY}
     ${SRC_API_WINDOW}
     ${SRC_CORE_SERVICE}
-    ${SRC_IDENTITY_SVC}
     ${SRC_STORAGE_SVC}
-    ${SRC_USERSTATS_SVC}
     ${SRC_NET_DEPS}
     ${SRC_CAP_REG}
     ${SRC_BOARD_DESC}
     ${SRC_DRV_TABLE}
-    ${SRC_STORE}
     ${SRC_USER_DATA_STORE}
     ${SRC_DIAG}
     ${SRC_SHA256}
-    ${SRC_POL_VERIFY}
-    ${SRC_POL_STORE}
+    ${SRC_POLICY}
     ${SRC_POSTURE}
     ${SRC_FAT_DEPS}
 )
@@ -591,9 +489,7 @@ add_host_test(test_policy_enforcement
     host/test_policy_enforcement.cc
     ${SRC_API_WINDOW}
     ${SRC_CORE_SERVICE}
-    ${SRC_IDENTITY_SVC}
     ${SRC_STORAGE_SVC}
-    ${SRC_USERSTATS_SVC}
     ${SRC_NET_DEPS}
     ${SRC_DEVICE_IDENTITY}
     ${SRC_USB_HOST}
@@ -608,11 +504,9 @@ add_host_test(test_policy_enforcement
     ${SRC_DRV_TABLE}
     ${SRC_DIAG}
     ${SRC_SHA256}
-    ${SRC_POL_VERIFY}
-    ${SRC_POL_STORE}
+    ${SRC_POLICY}
     ${SRC_POSTURE}
     ${SRC_CONTENT_STORE}
-    ${SRC_STORE}
     ${SRC_USER_DATA_STORE}
     ${SRC_LOG}
     ${SRC_FAT_DEPS}
@@ -666,8 +560,7 @@ add_host_test(test_rom_loading
     ${SRC_MANIFEST_PARSER}
     ${SRC_DIAG}
     ${SRC_SHA256}
-    ${SRC_POL_VERIFY}
-    ${SRC_POL_STORE}
+    ${SRC_POLICY}
     ${SRC_POSTURE}
     ${SRC_LOG}
     ${SRC_FAT_DEPS}
@@ -688,8 +581,7 @@ add_host_test(test_content_store
     ${SRC_MONOCYPHER}
     ${SRC_DIAG}
     ${SRC_SHA256}
-    ${SRC_POL_VERIFY}
-    ${SRC_POL_STORE}
+    ${SRC_POLICY}
     ${SRC_POSTURE}
     ${SRC_LOG}
     ${SRC_FAT_DEPS}
