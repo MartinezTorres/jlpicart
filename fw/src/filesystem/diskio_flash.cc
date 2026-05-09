@@ -11,7 +11,7 @@
 
 #ifndef JLPICART_HOST_TEST
 
-#include "filesystem/diskio.h"
+#include "filesystem/diskio_backend.h"
 #include "filesystem/flash_device.h"
 #include "filesystem/flash_device.h"
 #include <hardware/regs/addressmap.h>  // XIP_BASE

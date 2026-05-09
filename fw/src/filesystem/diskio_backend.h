@@ -1,6 +1,7 @@
 #pragma once
-// diskio.h — FatFs disk backend declarations for internal flash and USB host.
+// diskio_backend.h — FatFs disk backend declarations for internal flash and USB host.
 
+#include "ff.h"
 #include "diskio.h"
 
 // Internal flash backend (drive 1: 14 MB FAT volume in QSPI flash).

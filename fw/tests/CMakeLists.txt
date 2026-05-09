@@ -14,10 +14,11 @@ add_compile_options(-Wall -Wextra -Wpedantic -Werror)
 # All Stage 3 tests share this include path and compile-time flag.
 set(FW_SRC "${CMAKE_CURRENT_LIST_DIR}/../src")
 set(FW_EXT "${CMAKE_CURRENT_LIST_DIR}/../ext")
+set(TINYUSB_PATH "${FW_EXT}/tools/pico-sdk/sdk/2.2.0/lib/tinyusb")
 set(COMMON_DEFS JLPICART_HOST_TEST)
 set(COMMON_INC
     "${FW_SRC}"
-    "${FW_EXT}/tinyusb/lib/fatfs/source"
+    "${TINYUSB_PATH}/lib/fatfs/source"
 )
 
 # Shared portable sources (no SDK, no flash, no OTP hardware).
@@ -36,9 +37,9 @@ set(SRC_DRV_TABLE   "${FW_SRC}/spine/driver_descriptor_table.cc")
 
 # FatFs sources from the bundled tinyusb library.
 set(SRC_FATFS
-    "${FW_EXT}/tinyusb/lib/fatfs/source/ff.c"
-    "${FW_EXT}/tinyusb/lib/fatfs/source/ffsystem.c"
-    "${FW_EXT}/tinyusb/lib/fatfs/source/ffunicode.c"
+    "${TINYUSB_PATH}/lib/fatfs/source/ff.c"
+    "${TINYUSB_PATH}/lib/fatfs/source/ffsystem.c"
+    "${TINYUSB_PATH}/lib/fatfs/source/ffunicode.c"
 )
 
 # RAM disk (pdrv=1) for host tests — replaces diskio_flash.cc.

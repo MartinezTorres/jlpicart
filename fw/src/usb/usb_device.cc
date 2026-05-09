@@ -5,7 +5,7 @@
 #ifndef JLPICART_HOST_TEST
 
 #include "usb/usb_device.h"
-#include "filesystem/diskio.h"
+#include "filesystem/diskio_backend.h"
 #include "filesystem/flash_device.h"
 #include "diag/log.h"
 #include "tusb.h"

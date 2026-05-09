@@ -15,11 +15,28 @@ set(PICO_BOARD jlpicart_board CACHE STRING "Board type")
 set(PICO_PLATFORM rp2350-arm-s CACHE STRING "Platform type")
 set(PICO_BOARD_HEADER_DIRS ${CMAKE_CURRENT_LIST_DIR}/src/platform)
 
+# Use the TinyUSB that comes as a pico-sdk submodule (lib/tinyusb).
+set(PICO_TINYUSB_PATH "${PICO_SDK_PATH}/lib/tinyusb"
+    CACHE PATH "Path to TinyUSB for SDK integration" FORCE)
+
 get_filename_component(PICO_SDK_PATH "${PICO_SDK_PATH}" REALPATH BASE_DIR "${CMAKE_BINARY_DIR}")
 if (NOT EXISTS "${PICO_SDK_PATH}/pico_sdk_init.cmake")
     message(FATAL_ERROR "Pico SDK not found at '${PICO_SDK_PATH}' — run fw/util/get_deps.sh first")
 endif()
 set(PICO_SDK_PATH "${PICO_SDK_PATH}" CACHE PATH "Path to the Raspberry Pi Pico SDK" FORCE)
+
+# Self-contained toolchain and picotool — no system installs required.
+set(PICO_TOOLCHAIN_PATH "${CMAKE_CURRENT_LIST_DIR}/ext/tools/pico-sdk/toolchain/${toolchainVersion}"
+    CACHE PATH "Path to the ARM GCC toolchain")
+
+# Pre-register picotool so the SDK skips its own (network-requiring) fetch.
+# The SDK's Findpicotool.cmake checks `if (NOT TARGET picotool)` and bails out.
+set(picotool_bin "${CMAKE_CURRENT_LIST_DIR}/ext/tools/pico-sdk/picotool/${picotoolVersion}/picotool")
+if(EXISTS "${picotool_bin}")
+    add_executable(picotool IMPORTED GLOBAL)
+    set_property(TARGET picotool PROPERTY IMPORTED_LOCATION "${picotool_bin}")
+endif()
+
 include("${PICO_SDK_PATH}/pico_sdk_init.cmake")
 
 project(jlpicart C CXX ASM)
@@ -151,10 +168,10 @@ add_executable(jlpicart
     src/filesystem/diskio.cc
     src/filesystem/fat_volume.cc
 
-    # FatFs (Stage 14) — from bundled tinyusb lib
-    ext/tinyusb/lib/fatfs/source/ff.c
-    ext/tinyusb/lib/fatfs/source/ffsystem.c
-    ext/tinyusb/lib/fatfs/source/ffunicode.c
+    # FatFs (Stage 14) — from TinyUSB (SDK submodule) lib
+    ${PICO_TINYUSB_PATH}/lib/fatfs/source/ff.c
+    ${PICO_TINYUSB_PATH}/lib/fatfs/source/ffsystem.c
+    ${PICO_TINYUSB_PATH}/lib/fatfs/source/ffunicode.c
 )
 
 pico_set_program_name(jlpicart "jlpicart")
@@ -165,8 +182,8 @@ pico_enable_stdio_usb(jlpicart 0)
 
 target_include_directories(jlpicart PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/src
-    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src
-    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/lib/fatfs/source
+    ${PICO_TINYUSB_PATH}/src
+    ${PICO_TINYUSB_PATH}/lib/fatfs/source
 )
 
 # tinyusb config target: exposes tusb_config.h via fw/src/usb/
@@ -175,29 +192,20 @@ target_include_directories(tinyusb_config INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/src/usb
 )
 
-# tinyusb host + device + MSC + rp2040 HCD/DCD sources (firmware only, not host tests).
+# TinyUSB host + device stacks via SDK integration.
 # Both stacks are compiled in; the application selects one at runtime via
 # Platform::msx_clock_present() — calling tuh_init() or tud_init() as appropriate.
-target_sources(jlpicart PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/tusb.c
-    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/common/tusb_fifo.c
-    # Host stack
-    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/host/usbh.c
-    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/host/hub.c
-    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/class/msc/msc_host.c
-    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/portable/raspberrypi/rp2040/hcd_rp2040.c
-    # Device stack
-    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/device/usbd.c
-    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/device/usbd_control.c
-    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/class/msc/msc_device.c
-    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/portable/raspberrypi/rp2040/dcd_rp2040.c
-    # Shared RP2040 USB core (used by both HCD and DCD)
-    ${CMAKE_CURRENT_LIST_DIR}/ext/tinyusb/src/portable/raspberrypi/rp2040/rp2040_usb.c
+target_link_libraries(jlpicart
+    tinyusb_config
+    tinyusb_device
+    tinyusb_host
 )
-target_link_libraries(jlpicart tinyusb_config)
 
+# Override SDK default CFG_TUSB_OS=OPT_OS_PICO to cooperative (no RTOS).
 target_compile_definitions(jlpicart PRIVATE
     FW_BUILD_ID="${GIT_DESCRIBE}"
+    CFG_TUSB_OS=OPT_OS_NONE
+    CFG_TUSB_DEBUG=0
 )
 
 target_link_libraries(jlpicart

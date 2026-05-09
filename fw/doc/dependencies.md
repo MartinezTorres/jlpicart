@@ -13,14 +13,14 @@ fw/util/
 
 fw/ext/            (gitignored, nuke freely)
 ├── src/           — downloaded source trees
-│   ├── tinyusb/
 │   ├── esp-at/
 │   └── openmsx/
 ├── bin/           — downloaded/built binaries
 │   ├── sdcc/
 │   └── openmsx/   (built from src/openmsx/)
 └── tools/         — toolchains, SDKs, and tools
-    ├── pico-sdk/  (fetched by get_deps.sh)
+    ├── pico-sdk/  (git clone + submodule init by get_deps.sh)
+    │   └── sdk/2.2.0/lib/tinyusb/  (SDK submodule, patched by get_deps.sh)
     └── esp-serial-flasher/
 ```
 
@@ -35,19 +35,15 @@ bash fw/util/get_deps.sh          # download and build everything
 ## tinyusb
 
 - **Source:** https://github.com/hathach/tinyusb
-- **Pinned commit:** `4232642899362fa5e9cf0dc59bad6f1f6d32c563`
+- **Provided by:** pico-sdk submodule at `ext/tools/pico-sdk/sdk/2.2.0/lib/tinyusb/`
 - **Local patches:** `patches/tinyusb/local_changes.patch`
-- **Origin:** Modified from the copy bundled with pico-sdk
 
 ### Updating tinyusb upstream
 
-1. Update the pinned commit in `lock.yml` (url + sha256).
-2. Regenerate the patch:
-   ```bash
-   bash fw/util/get_deps.sh tinyusb --force
-   git -C fw/ext/src/tinyusb diff HEAD > fw/util/patches/tinyusb/local_changes.patch
-   ```
-3. Commit `lock.yml` and the updated patch.
+TinyUSB is managed by the pico-sdk submodule. To update:
+1. Update the pico-sdk version/tag in `lock.yml`.
+2. Re-run `bash fw/util/get_deps.sh pico_sdk --force` (will re-clone + init submodules).
+3. Update `patches/tinyusb/local_changes.patch` if needed and re-run `bash fw/util/get_deps.sh tinyusb`.
 
 ---
 

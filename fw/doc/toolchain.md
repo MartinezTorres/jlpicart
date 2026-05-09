@@ -77,7 +77,7 @@ Then restore with `bash fw/util/get_deps.sh` and rebuild.
 | ARM toolchain      | 14_2_Rel1|
 | picotool           | 2.2.0    |
 | SDCC               | 4.5.0    |
-| tinyusb            | 0.16.0-942|
+| tinyusb            | (via pico-sdk submodule) |
 | esp-at             | v3.3.0.0 |
 | openMSX            | RELEASE_21_0|
 | esp-serial-flasher | v1.8.0   |

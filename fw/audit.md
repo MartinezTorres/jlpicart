@@ -94,7 +94,7 @@
 - `glossary.md:21` describes "Persistent Storage" including "cached network payloads". No code for network payload caching in filesystem.
 
 **Contradictions:**
-- `diskio.cc:16` has duplicate `#include "filesystem/diskio.h"`. (Code quality issue, not doc contradiction.)
+- `diskio.cc:16` has duplicate `#include "filesystem/diskio_backend.h"`. (Code quality issue, not doc contradiction.)
 - `diskio_flash.cc:16` also has duplicate `#include "filesystem/flash_device.h"`.
 - `fat_volume.h:8-12` comment says directory layout includes `1:/system/` for "device key, policy, event log", but `glossary.md:21` says persistent storage contains "System Settings, User Profiles, save data, high scores, cached network payloads" — the event log is mentioned in code comments but not in glossary.
 

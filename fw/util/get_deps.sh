@@ -10,11 +10,11 @@
 #   bash fw/util/get_deps.sh pico_sdk # download a single dependency
 #
 # After first run:
-#   fw/ext/src/tinyusb/              — tinyusb source (with local patches)
 #   fw/ext/src/esp-at/               — esp-at source (not built)
 #   fw/ext/src/openmsx/              — openMSX source (built by default)
 #   fw/ext/bin/openmsx/              — openMSX binary
-#   fw/ext/tools/pico-sdk/sdk/2.2.0/ — Pico SDK
+#   fw/ext/tools/pico-sdk/sdk/2.2.0/ — Pico SDK (git clone + submodules)
+#   fw/ext/tools/pico-sdk/sdk/2.2.0/lib/tinyusb/ — TinyUSB (SDK submodule, patched)
 #   fw/ext/tools/pico-sdk/toolchain/ — ARM GNU toolchain
 #   fw/ext/tools/pico-sdk/picotool/  — picotool binary
 #   fw/ext/tools/esp-serial-flasher/ — esp-serial-flasher source
@@ -91,26 +91,20 @@ dep_done() {
 # ---------------------------------------------------------------------------
 
 install_pico_sdk() {
-    local version url sha dest
+    local version dest
     version=$(lock_get pico_sdk version)
-    url=$(lock_get pico_sdk url)
-    sha=$(lock_get pico_sdk sha256)
     dest="${REPO_ROOT}/fw/ext/tools/pico-sdk/sdk/${version}"
 
     if dep_done "${dest}/pico_sdk_init.cmake"; then
         return
     fi
 
-    local tmpfile
-    tmpfile=$(mktemp /tmp/pico-sdk-XXXXXX.tar.gz)
-    trap 'rm -f "$tmpfile"' EXIT
-    download_and_verify "Pico SDK ${version}" "$url" "$sha" "$tmpfile"
-    echo "==> Extracting Pico SDK to ${dest}..."
-    extract_to "$tmpfile" z "$dest"
+    echo "==> Cloning Pico SDK ${version}..."
+    rm -rf "$dest"
+    git clone --branch "$version" --depth=1 \
+        https://github.com/raspberrypi/pico-sdk.git "$dest"
     echo "==> Initializing Pico SDK submodules..."
-    git -C "$dest" submodule update --init --depth=1 2>&1 | tail -5
-    trap - EXIT
-    rm -f "$tmpfile"
+    git -C "$dest" submodule update --init --recursive
     echo "OK: Pico SDK at ${dest}"
 }
 
@@ -193,28 +187,26 @@ install_sdcc() {
 }
 
 install_tinyusb() {
-    local version url sha dest patches
-    version=$(lock_get tinyusb version)
-    url=$(lock_get tinyusb url)
-    sha=$(lock_get tinyusb sha256)
-    dest="${REPO_ROOT}/fw/ext/src/tinyusb"
+    local patches sdk_version dest
     patches="$(lock_get tinyusb patches)"
+    sdk_version=$(lock_get pico_sdk version)
+    dest="${REPO_ROOT}/fw/ext/tools/pico-sdk/sdk/${sdk_version}/lib/tinyusb"
 
-    if dep_done "${dest}/src/tusb.c"; then
-        echo "  (patches may need re-applying if tinyusb was updated)"
-        return
+    if [ ! -f "${dest}/src/tusb.c" ]; then
+        echo "ERROR: TinyUSB not found at ${dest}" >&2
+        echo "  Make sure pico_sdk (with submodules) is installed first." >&2
+        return 1
     fi
 
-    local tmpfile
-    tmpfile=$(mktemp /tmp/tinyusb-XXXXXX.tar.gz)
-    trap 'rm -f "$tmpfile"' EXIT
-    download_and_verify "tinyusb ${version}" "$url" "$sha" "$tmpfile"
-    echo "==> Extracting tinyusb to ${dest}..."
-    rm -rf "$dest"
-    extract_to "$tmpfile" z "$dest"
+    # Check for a marker file to know if patches were already applied.
+    local patch_marker="${dest}/.jlpicart_patched"
+    if [ -f "$patch_marker" ]; then
+        echo "  TinyUSB already patched: ${patch_marker}"
+        return 0
+    fi
 
     if [ -n "$patches" ] && [ -d "${REPO_ROOT}/${patches}" ]; then
-        echo "==> Applying local patches..."
+        echo "==> Applying local patches to SDK TinyUSB..."
         for patch in "${REPO_ROOT}/${patches}"/*.patch; do
             [ -f "$patch" ] || continue
             echo "  ${patch}"
@@ -222,9 +214,8 @@ install_tinyusb() {
         done
     fi
 
-    trap - EXIT
-    rm -f "$tmpfile"
-    echo "OK: tinyusb at ${dest}"
+    touch "$patch_marker"
+    echo "OK: TinyUSB (SDK submodule) patched at ${dest}"
 }
 
 install_esp_at() {

@@ -11,6 +11,7 @@ bool UsbHost::is_msc_mounted() const { return g_msc_mounted_; }
 #ifndef JLPICART_HOST_TEST
 
 #include "tusb.h"
+#include <pico/time.h>
 
 void UsbHost::init() {
     tuh_init(BOARD_TUH_RHPORT);
@@ -43,6 +44,10 @@ void tuh_msc_mount_cb(uint8_t dev_addr) {
 
 void tuh_msc_umount_cb(uint8_t dev_addr) {
     UsbHost::on_umount(dev_addr);
+}
+
+uint32_t tusb_time_millis_api(void) {
+    return time_us_64() / 1000;
 }
 
 } // extern "C"

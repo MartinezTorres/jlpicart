@@ -29,12 +29,7 @@ sdcc:
   dest: "fw/ext/bin/sdcc"
 
 tinyusb:
-  version: "0.16.0-942"
-  commit: "4232642899362fa5e9cf0dc59bad6f1f6d32c563"
-  url: "https://github.com/hathach/tinyusb/archive/4232642899362fa5e9cf0dc59bad6f1f6d32c563.tar.gz"
-  sha256: "d64728aef58b80d5ce3747cad133f520da46e2b7ea3aadfda0e981aba6b658b3"
-  extract_subdir: "tinyusb-4232642899362fa5e9cf0dc59bad6f1f6d32c563"
-  dest: "fw/ext/src/tinyusb"
+  # Provided by pico_sdk submodule (lib/tinyusb). Patches applied by get_deps.sh.
   patches: "fw/util/patches/tinyusb"
 
 esp_at:
