@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # get_deps.sh — download and install all pinned dependencies into fw/ext/.
 #
-# Reads version, URL, and SHA256 from fw/ext/lock.yml.
+# Reads version, URL, and SHA256 from fw/util/lock.yml.
 # On subsequent runs: skips already-installed deps (use --force to re-download).
 #
 # Usage:
-#   bash fw/ext/get_deps.sh          # download everything missing
-#   bash fw/ext/get_deps.sh --force  # re-download everything
-#   bash fw/ext/get_deps.sh pico_sdk # download a single dependency
+#   bash fw/util/get_deps.sh          # download everything missing
+#   bash fw/util/get_deps.sh --force  # re-download everything
+#   bash fw/util/get_deps.sh pico_sdk # download a single dependency
 #
 # After first run:
 #   fw/ext/src/tinyusb/              — tinyusb source (with local patches)

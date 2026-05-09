@@ -3,11 +3,13 @@
 ## Prerequisites
 
 The firmware is self-contained and airgapped — no network access is required to
-build. All dependencies live under `fw/ext/`. Populate them with:
+build. All dependency bootstrap files live under `fw/util/`. Populate them with:
 
 ```sh
-bash fw/ext/get_deps.sh
+bash fw/util/get_deps.sh
 ```
+
+This downloads everything into `fw/ext/` (gitignored, can be wiped at any time).
 
 If `fw/ext/tools/pico-sdk/` is missing, the CMake configuration will fail with:
 `Pico SDK not found at '...' — populate ext/tools/pico-sdk/ first`.
@@ -59,23 +61,25 @@ make -C src/msx/api/client BUILD_DIR=build/z80/api_client
 
 ## Clean
 
-All build artifacts live under `fw/build/`. To clean:
+All build artifacts and downloaded dependencies can be wiped:
 
 ```sh
-rm -rf fw/build
+rm -rf fw/build fw/ext
 ```
+
+Then restore with `bash fw/util/get_deps.sh` and rebuild.
 
 ## Pinned versions
 
-| Component     | Version     |
-|---------------|-------------|
-| Pico SDK      | 2.2.0       |
-| ARM toolchain | 14_2_Rel1   |
-| picotool      | 2.2.0       |
-| SDCC          | 4.5.0       |
-| tinyusb       | 0.16.0-942  |
-| esp-at        | v3.3.0.0    |
-| openMSX       | RELEASE_21_0 |
-| esp-serial-flasher | v1.8.0  |
+| Component          | Version  |
+|--------------------|----------|
+| Pico SDK           | 2.2.0    |
+| ARM toolchain      | 14_2_Rel1|
+| picotool           | 2.2.0    |
+| SDCC               | 4.5.0    |
+| tinyusb            | 0.16.0-942|
+| esp-at             | v3.3.0.0 |
+| openMSX            | RELEASE_21_0|
+| esp-serial-flasher | v1.8.0   |
 
-All version hashes are in `ext/lock.yml`.
+All version hashes are in `fw/util/lock.yml`.

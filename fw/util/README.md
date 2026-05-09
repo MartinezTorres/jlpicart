@@ -3,27 +3,32 @@
 ## Layout
 
 ```
-fw/ext/
-├── src/              — downloaded source trees
+fw/util/
+├── get_deps.sh   — download and install all dependencies
+├── lock.yml      — pinned versions, URLs, SHA256 digests
+├── patches/      — local patches applied to downloaded sources
+│   └── tinyusb/
+├── tools/        — utility scripts
+│   └── at.py     — ESP-AT firmware modifier
+└── README.md
+
+fw/ext/            (gitignored, nuke freely)
+├── src/           — downloaded source trees
 │   ├── tinyusb/
 │   ├── esp-at/
 │   └── openmsx/
-├── bin/              — downloaded/built binaries (gitignored)
+├── bin/           — downloaded/built binaries
 │   ├── sdcc/
-│   └── openmsx/      (built from src/openmsx/)
-├── tools/            — toolchains, SDKs, and tools
-│   ├── pico-sdk/     (gitignored, fetched by get_deps.sh)
-│   └── esp-serial-flasher/
-├── patches/          — local patches applied to downloaded sources
-│   └── tinyusb/
-├── lock.yml      — pinned versions, URLs, SHA256 digests
-└── get_deps.sh   — download and install all dependencies
+│   └── openmsx/   (built from src/openmsx/)
+└── tools/         — toolchains, SDKs, and tools
+    ├── pico-sdk/  (fetched by get_deps.sh)
+    └── esp-serial-flasher/
 ```
 
 ## Setup after clone
 
 ```bash
-bash fw/ext/get_deps.sh          # download and build everything
+bash fw/util/get_deps.sh          # download and build everything
 ```
 
 ---
@@ -40,8 +45,8 @@ bash fw/ext/get_deps.sh          # download and build everything
 1. Update the pinned commit in `lock.yml` (url + sha256).
 2. Regenerate the patch:
    ```bash
-   bash fw/ext/get_deps.sh tinyusb --force
-   git -C fw/ext/src/tinyusb diff HEAD > fw/ext/patches/tinyusb/local_changes.patch
+   bash fw/util/get_deps.sh tinyusb --force
+   git -C fw/ext/src/tinyusb diff HEAD > fw/util/patches/tinyusb/local_changes.patch
    ```
 3. Commit `lock.yml` and the updated patch.
 
@@ -56,11 +61,11 @@ bash fw/ext/get_deps.sh          # download and build everything
 ### AT.PY tool
 
 - Docs: https://docs.espressif.com/projects/esp-at/en/release-v3.3.0.0/esp32c3/Compile_and_Develop/tools_at_py.html
-- Script: `fw/ext/tools/at.py`
+- Script: `fw/util/tools/at.py`
 
 Modify firmware binary for custom UART pins:
 ```bash
-python3 fw/ext/tools/at.py modify_bin --baud 115200 --tx-pin 21 --rx-pin 20 --cts-pin -1 --rts-pin -1 --input factory_MINI-1.bin
+python3 fw/util/tools/at.py modify_bin --baud 115200 --tx-pin 21 --rx-pin 20 --cts-pin -1 --rts-pin -1 --input factory_MINI-1.bin
 ```
 
 ---
@@ -80,12 +85,12 @@ python3 fw/ext/tools/at.py modify_bin --baud 115200 --tx-pin 21 --rx-pin 20 --ct
 ## sdcc
 
 - **Version:** 4.5.0 (pinned in `lock.yml`)
-- **Dest:** `bin/sdcc/` — not tracked in git
+- **Dest:** `ext/bin/sdcc/` — not tracked in git
 
 ---
 
 ## openmsx
 
 - **Version:** RELEASE_21_0 (pinned in `lock.yml`)
-- **Source:** downloaded to `src/openmsx/`
+- **Source:** downloaded to `ext/src/openmsx/`
 - **Build:** done by `get_deps.sh` if system deps are present (SDL2, etc.)
