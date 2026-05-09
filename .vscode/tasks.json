@@ -5,7 +5,7 @@
             "label": "Compile Project",
             "type": "shell",
             //"isBuildCommand": true,
-            "command": "${workspaceFolder}/ext/tools/pico-sdk/toolchain/14_2_Rel1/bin/arm-none-eabi-size -A -x ${workspaceFolder}/build/jlpicart.elf",
+            "command": "${workspaceFolder}/fw/ext/tools/pico-sdk/toolchain/14_2_Rel1/bin/arm-none-eabi-size -A -x ${workspaceFolder}/fw/build/jlpicart.elf",
             "group": "build",
             "presentation": {
                 "echo": true,
@@ -19,8 +19,8 @@
         {
             "label": "Ninja",
             "type": "process",
-            "command": "${workspaceFolder}/ext/tools/pico-sdk/ninja/v1.12.1/ninja",
-            "args": ["-C", "${workspaceFolder}/build"],
+            "command": "${workspaceFolder}/fw/ext/tools/pico-sdk/ninja/v1.12.1/ninja",
+            "args": ["-C", "${workspaceFolder}/fw/build"],
             //"group": "build",
             "presentation": {
                 "echo": true,
@@ -33,8 +33,8 @@
         {
             "label": "Flash (picotool)",
             "type": "process",
-            "command": "${workspaceFolder}/ext/tools/pico-sdk/picotool/2.2.0/picotool",
-            "args": ["load", "${workspaceFolder}/build/jlpicart.uf2", "--force"],
+            "command": "${workspaceFolder}/fw/ext/tools/pico-sdk/picotool/2.2.0/picotool",
+            "args": ["load", "${workspaceFolder}/fw/build/jlpicart.uf2", "--force"],
             "presentation": {
                 "reveal": "always",
                 "panel": "dedicated"
