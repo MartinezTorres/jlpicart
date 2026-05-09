@@ -11,13 +11,12 @@ fw/ext/
 ├── bin/              — downloaded/built binaries (gitignored)
 │   ├── openmsx/
 │   └── sdcc/
-├── tools/            — toolchains and SDKs (gitignored)
-│   └── pico-sdk/
+├── tools/            — toolchains, SDKs, and tools
+│   ├── pico-sdk/         (gitignored, fetched by fetch_pico_sdk.sh)
+│   ├── esp-serial-flasher/  (git submodule)
+│   └── at.py             (ESP32 AT firmware modifier)
 ├── patches/          — local patches applied to submodules
 │   └── tinyusb/
-├── esp32/            — vendored ESP32 tooling
-│   ├── esp-serial-flasher/
-│   └── at.py
 ├── lock.yml          — pinned versions, URLs, SHA256 digests
 ├── fetch_pico_sdk.sh — Pico SDK + ARM toolchain + picotool → tools/pico-sdk/
 ├── get_sdcc.sh       — SDCC Z80 compiler → bin/sdcc/
@@ -70,20 +69,21 @@ bash fw/ext/build_openmsx.sh   # optional, for integration tests
 ### AT.PY tool
 
 - Docs: https://docs.espressif.com/projects/esp-at/en/release-v3.3.0.0/esp32c3/Compile_and_Develop/tools_at_py.html
-- Script: `fw/ext/esp32/at.py`
+- Script: `fw/ext/tools/at.py`
 
 Modify firmware binary for custom UART pins:
 ```bash
-python3 fw/ext/esp32/at.py modify_bin --baud 115200 --tx_pin 21 --rx_pin 20 --cts_pin -1 --rts_pin -1 --input factory_MINI-1.bin
+python3 fw/ext/tools/at.py modify_bin --baud 115200 --tx_pin 21 --rx_pin 20 --cts_pin -1 --rts_pin -1 --input factory_MINI-1.bin
 ```
 
 ---
 
 ## esp-serial-flasher
 
-- **Source:** https://github.com/espressif/esp-serial-flasher (v1.8.0)
-- **Tracking:** Vendored directly in the main repo (no submodule)
-- **Local patches:** none — modify files directly and commit to main repo
+- **Source:** https://github.com/espressif/esp-serial-flasher
+- **Version:** v1.8.0 (git submodule)
+- **Tracking:** Submodule at `tools/esp-serial-flasher/`
+- **Local patches:** none
 
 ---
 

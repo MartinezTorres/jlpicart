@@ -36,6 +36,10 @@ if(NOT GIT_DESCRIBE)
 endif()
 message(STATUS "Build ID: ${GIT_DESCRIBE}")
 
+# Generated files directory — keep headers out of the source tree.
+set(GEN_DIR "${CMAKE_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY "${GEN_DIR}/msx/menu")
+
 add_executable(jlpicart
     src/main.cc
 
@@ -231,28 +235,33 @@ endforeach()
 # ---------------------------------------------------------------------------
 # Stage 11: Z80 menu stub build target
 #
-# Compiles fw/src/msx/menu/stub/ with SDCC and regenerates menu_stub_bin.h.
+# Compiles fw/src/msx/menu/stub/ with SDCC and generates menu_stub_bin.h
+# in the build directory (not the source tree).
 # Requires SDCC: run  bash fw/ext/get_sdcc.sh  first.
 #
 # Usage:  cmake --build <build_dir> --target build_menu_stub
 # ---------------------------------------------------------------------------
 
-set(STUB_DIR    "${CMAKE_CURRENT_LIST_DIR}/src/msx/menu/stub")
-set(STUB_BIN    "${STUB_DIR}/stub.bin")
-set(STUB_BIN_H  "${CMAKE_CURRENT_LIST_DIR}/src/msx/menu/menu_stub_bin.h")
+set(STUB_SRC    "${CMAKE_CURRENT_LIST_DIR}/src/msx/menu/stub")
+set(STUB_BUILD  "${CMAKE_BINARY_DIR}/z80/stub")
+set(STUB_BIN    "${STUB_BUILD}/stub.bin")
+# Generated header mirrors the source include path so #include "msx/menu/menu_stub_bin.h" works.
+set(STUB_BIN_H  "${GEN_DIR}/msx/menu/menu_stub_bin.h")
 set(SDCC_BIN    "${CMAKE_CURRENT_LIST_DIR}/ext/bin/sdcc/bin/sdcc")
 
 if(EXISTS "${SDCC_BIN}")
     add_custom_command(
         OUTPUT  "${STUB_BIN}"
-        COMMAND make -C "${STUB_DIR}" SDCC="${SDCC_BIN}" stub.bin
-        DEPENDS "${STUB_DIR}/stub.c"
-                "${STUB_DIR}/crt0.s"
-                "${STUB_DIR}/stub_bios.h"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${STUB_BUILD}"
+        COMMAND make -C "${STUB_SRC}" SDCC="${SDCC_BIN}" BUILD_DIR="${STUB_BUILD}" stub.bin
+        DEPENDS "${STUB_SRC}/stub.c"
+                "${STUB_SRC}/crt0.s"
+                "${STUB_SRC}/stub_bios.h"
         COMMENT "Building Z80 menu stub with SDCC"
     )
     add_custom_command(
         OUTPUT  "${STUB_BIN_H}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${GEN_DIR}/msx/menu"
         COMMAND bash -c
             "{ printf '#pragma once\\n#include <cstdint>\\n// clang-format off\\n' ; \
                xxd -i '${STUB_BIN}' | sed \
@@ -284,3 +293,52 @@ else()
     )
     message(STATUS "SDCC not found at ${SDCC_BIN} — stub is placeholder. Run: bash fw/ext/get_sdcc.sh")
 endif()
+
+# ---------------------------------------------------------------------------
+# Host tests — native executables, not cross-compiled.
+# Tests have their own project() call and find OpenSSL (host-only),
+# so they are configured as a separate CMake project under build/tests.
+#
+#   cmake --build build --target tests_configure
+#   cmake --build build --target tests_build
+#   ctest --test-dir build/tests
+# ---------------------------------------------------------------------------
+
+set(TESTS_BUILD_DIR "${CMAKE_BINARY_DIR}/tests")
+
+add_custom_target(tests_configure
+    COMMAND ${CMAKE_COMMAND}
+        -S "${CMAKE_CURRENT_SOURCE_DIR}/tests"
+        -B "${TESTS_BUILD_DIR}"
+    COMMENT "Configuring host tests"
+    USES_TERMINAL
+)
+
+add_custom_target(tests_build
+    COMMAND ${CMAKE_COMMAND} --build "${TESTS_BUILD_DIR}" --parallel
+    DEPENDS tests_configure
+    COMMENT "Building host tests"
+    USES_TERMINAL
+)
+
+add_custom_target(tests_run
+    COMMAND ${CMAKE_CTEST_COMMAND}
+        --test-dir "${TESTS_BUILD_DIR}"
+        --output-on-failure
+    DEPENDS tests_build
+    COMMENT "Running host tests"
+    USES_TERMINAL
+)
+
+# ---------------------------------------------------------------------------
+# ESP32 serial flasher — submodule at ext/tools/esp-serial-flasher/
+#
+# Not yet integrated. When needed, add:
+#
+#   add_subdirectory(ext/tools/esp-serial-flasher
+#       ${CMAKE_BINARY_DIR}/esp32_flasher)
+#   target_link_libraries(jlpicart PRIVATE flasher)
+#
+# The flasher also requires a port layer (USER_DEFINED, PI_PICO, etc.).
+# See ext/tools/esp-serial-flasher/CMakeLists.txt PORT variable.
+# ---------------------------------------------------------------------------

@@ -1,19 +1,25 @@
 # Makefile — build the Z80 menu stub with SDCC.
 #
-# Invoke from fw/ root:  make -C src/msx/menu/stub
+# Invoke from fw/ root:  make -C src/msx/menu/stub [SDCC=...] [BUILD_DIR=...]
 # Or via CMake custom target build_menu_stub.
 #
 # Outputs:
-#   stub.bin   — raw binary (max 2048 bytes), placed at ROM offset MENU_STUB_OFS
+#   stub.bin     — raw binary (max 2048 bytes), placed at ROM offset MENU_STUB_OFS
 #   menupage.rom — 16 KB page image for openMSX fixtures (Stage 12)
+#
+# When BUILD_DIR is set, all artifacts go there instead of the source directory.
 
-SDCC     := $(or $(shell which sdcc 2>/dev/null),fw/ext/sdcc/bin/sdcc)
+SDCC     := $(or $(SDCC),$(shell which sdcc 2>/dev/null),fw/ext/bin/sdcc/bin/sdcc)
 # sdasz80 lives next to sdcc; derive path so both pinned and system installs work.
 SDASZ80  := $(dir $(SDCC))sdasz80
 OBJCOPY  := objcopy
 PYTHON3  := python3
 
-# --code-loc 0x7800: places _CODE at Z80 0x7800 (= MENU_STUB_OFS + PAGE_BASE).
+# Source and output directories.
+SRCDIR   := $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
+OUT      := $(if $(BUILD_DIR),$(BUILD_DIR)/,)
+
+# --code-loc 0x7800: places _CODE at Z80 0x7800 (= MENU_STUB_OFS + PAGE BASE).
 # --data-loc 0x7700: places the DATA segment (static vars) at 0x7700, within
 #                    the menu page and below the stack (SP=0x77FE). Without
 #                    this, SDCC defaults to 0x0000, outside our mapped page.
@@ -25,18 +31,21 @@ SDCC_FLAGS := -mz80 --no-std-crt0 --code-loc 0x7800 --data-loc 0x7700 \
 
 .PHONY: all clean
 
-all: stub.bin menupage.rom
+all: $(OUT)stub.bin $(OUT)menupage.rom
 
 # SDCC 4.2+ does not accept .s files via the sdcc driver; assemble separately.
-crt0.rel: crt0.s
-	$(SDASZ80) -o crt0.rel crt0.s
+$(OUT)crt0.rel: $(SRCDIR)/crt0.s
+	@mkdir -p $(OUT)
+	$(SDASZ80) -o $@ $<
 
-stub.ihx: crt0.rel stub.c stub_bios.h
-	$(SDCC) $(SDCC_FLAGS) crt0.rel stub.c -o stub.ihx
+$(OUT)stub.ihx: $(OUT)crt0.rel $(SRCDIR)/stub.c $(SRCDIR)/stub_bios.h
+	@mkdir -p $(OUT)
+	$(SDCC) $(SDCC_FLAGS) $< -o $@
 
-stub.bin: stub.ihx
-	$(OBJCOPY) -I ihex -O binary stub.ihx stub.bin
-	@SIZE=$$(wc -c < stub.bin); \
+$(OUT)stub.bin: $(OUT)stub.ihx
+	@mkdir -p $(OUT)
+	$(OBJCOPY) -I ihex -O binary $< $@
+	@SIZE=$$(wc -c < $@); \
 	echo "stub.bin: $$SIZE bytes (max 2048)"; \
 	if [ "$$SIZE" -gt 2048 ]; then \
 	    echo "ERROR: stub exceeds 2 KB limit"; exit 1; \
@@ -55,11 +64,12 @@ stub.bin: stub.ihx
 # left as 0x00 by the zeroed page initialisation, which is the correct default.
 # __start from crt0.s is not necessarily at 0x7800; read its address from the
 # map file so the ROM INIT vector and bootstrap JP use the correct entry point.
-menupage.rom: stub.bin stub.map
+$(OUT)menupage.rom: $(OUT)stub.bin $(OUT)stub.map
+	@mkdir -p $(OUT)
 	$(PYTHON3) -c "\
 import re; \
-stub = open('stub.bin','rb').read(); \
-map_txt = open('stub.map').read(); \
+stub = open('$(OUT)stub.bin','rb').read(); \
+map_txt = open('$(OUT)stub.map').read(); \
 m = re.search(r'([0-9A-Fa-f]{8})\s+__start', map_txt); \
 assert m, '__start not found in stub.map'; \
 entry = int(m.group(1), 16); \
@@ -69,10 +79,14 @@ page = bytearray(0x4000); \
 page[0x3701:0x3701+len(stub)] = stub; \
 page[0] = 0x41; page[1] = 0x42; \
 page[2] = entry & 0xFF; page[3] = (entry >> 8) & 0xFF; \
-open('menupage.rom','wb').write(bytes(page)); \
+open('$(OUT)menupage.rom','wb').write(bytes(page)); \
 print('  __start=0x%04X  stub=%dB' % (entry, len(stub)))"
 	@echo "menupage.rom: 16384 bytes"
 
 clean:
-	rm -f stub.ihx stub.bin stub.lst stub.map stub.noi menupage.rom \
-	      stub.asm crt0.rel crt0.lst crt0.asm crt0.sym
+	@if [ -n "$(OUT)" ]; then \
+		rm -rf "$(OUT)"; \
+	else \
+		rm -f stub.ihx stub.bin stub.lst stub.map stub.noi menupage.rom \
+		      stub.asm crt0.rel crt0.lst crt0.asm crt0.sym; \
+	fi

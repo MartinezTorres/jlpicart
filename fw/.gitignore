@@ -35,13 +35,8 @@ src/msx/api/client/*.map
 src/msx/api/client/*.noi
 src/msx/api/client/*.rom
 
-# Host test build artifacts (generated; not tracked)
-tests/host/CMakeCache.txt
-tests/host/CMakeFiles/
-tests/host/cmake_install.cmake
-tests/host/CTestTestfile.cmake
-tests/host/Makefile
-tests/host/Testing/
+# Generated menu stub header (when built outside the build directory)
+generated/
 
 # Downloaded/built binaries (not tracked)
 ext/bin/
