@@ -3,9 +3,11 @@
 ## Prerequisites
 
 The firmware is self-contained and airgapped — no network access is required to
-build. All dependencies live under `fw/ext/`. Ensure these
-directories are populated before building (they are typically checked in or
-populated by the release process).
+build. All dependencies live under `fw/ext/`. Populate them with:
+
+```sh
+bash fw/ext/get_deps.sh
+```
 
 If `fw/ext/tools/pico-sdk/` is missing, the CMake configuration will fail with:
 `Pico SDK not found at '...' — populate ext/tools/pico-sdk/ first`.
@@ -71,6 +73,9 @@ rm -rf fw/build
 | ARM toolchain | 14_2_Rel1   |
 | picotool      | 2.2.0       |
 | SDCC          | 4.5.0       |
+| tinyusb       | 0.16.0-942  |
+| esp-at        | v3.3.0.0    |
 | openMSX       | RELEASE_21_0 |
+| esp-serial-flasher | v1.8.0  |
 
 All version hashes are in `ext/lock.yml`.

@@ -4,34 +4,28 @@
 
 ```
 fw/ext/
-├── src/              — source trees (git submodules)
-│   ├── openmsx/
+├── src/              — downloaded source trees
 │   ├── tinyusb/
-│   └── esp-at/
+│   ├── esp-at/
+│   └── openmsx/
 ├── bin/              — downloaded/built binaries (gitignored)
-│   ├── openmsx/
-│   └── sdcc/
+│   ├── sdcc/
+│   └── openmsx/      (built from src/openmsx/)
 ├── tools/            — toolchains, SDKs, and tools
-│   ├── pico-sdk/         (gitignored, fetched by fetch_pico_sdk.sh)
-│   ├── esp-serial-flasher/  (git submodule)
-│   └── at.py             (ESP32 AT firmware modifier)
-├── patches/          — local patches applied to submodules
+│   ├── pico-sdk/     (gitignored, fetched by get_deps.sh)
+│   └── esp-serial-flasher/
+├── patches/          — local patches applied to downloaded sources
 │   └── tinyusb/
 ├── lock.yml          — pinned versions, URLs, SHA256 digests
-├── fetch_pico_sdk.sh — Pico SDK + ARM toolchain + picotool → tools/pico-sdk/
-├── get_sdcc.sh       — SDCC Z80 compiler → bin/sdcc/
-├── build_openmsx.sh  — openMSX emulator → bin/openmsx/
-└── apply_patches.sh  — apply local patches to submodules
+├── get_deps.sh       — download all dependencies → fw/ext/
+└── build_openmsx.sh  — build openMSX from src/openmsx/ → bin/openmsx/
 ```
 
 ## Setup after clone
 
 ```bash
-git submodule update --init
-bash fw/ext/apply_patches.sh
-bash fw/ext/fetch_pico_sdk.sh
-bash fw/ext/get_sdcc.sh
-bash fw/ext/build_openmsx.sh   # optional, for integration tests
+bash fw/ext/get_deps.sh          # download everything
+bash fw/ext/build_openmsx.sh     # optional, for integration tests
 ```
 
 ---
@@ -45,17 +39,13 @@ bash fw/ext/build_openmsx.sh   # optional, for integration tests
 
 ### Updating tinyusb upstream
 
-1. Update the submodule to the new commit:
+1. Update the pinned commit in `lock.yml` (url + sha256).
+2. Regenerate the patch:
    ```bash
-   git -C fw/ext/src/tinyusb fetch
-   git -C fw/ext/src/tinyusb checkout <new-sha>
-   ```
-2. Regenerate the patch file (rebase local changes on top of new upstream):
-   ```bash
-   git -C fw/ext/src/tinyusb apply fw/ext/patches/tinyusb/local_changes.patch
+   bash fw/ext/get_deps.sh tinyusb --force
    git -C fw/ext/src/tinyusb diff HEAD > fw/ext/patches/tinyusb/local_changes.patch
    ```
-3. Update the pinned SHA in `.gitmodules` and commit everything.
+3. Commit `lock.yml` and the updated patch.
 
 ---
 
@@ -63,7 +53,6 @@ bash fw/ext/build_openmsx.sh   # optional, for integration tests
 
 - **Source:** https://github.com/espressif/esp-at
 - **Pinned commit:** `498f10caf9f4e61ba30bd9cc637c0401125ef681` (release/v3.3.0.0)
-- **Local patches:** none
 - **Firmware binary:** ESP32C3-AT v3.3.0.0 — https://github.com/espressif/esp-at/releases/tag/v3.3.0.0#ESP32C3-AT
 
 ### AT.PY tool
@@ -73,7 +62,7 @@ bash fw/ext/build_openmsx.sh   # optional, for integration tests
 
 Modify firmware binary for custom UART pins:
 ```bash
-python3 fw/ext/tools/at.py modify_bin --baud 115200 --tx_pin 21 --rx_pin 20 --cts_pin -1 --rts_pin -1 --input factory_MINI-1.bin
+python3 fw/ext/tools/at.py modify_bin --baud 115200 --tx-pin 21 --rx-pin 20 --cts-pin -1 --rts-pin -1 --input factory_MINI-1.bin
 ```
 
 ---
@@ -81,23 +70,24 @@ python3 fw/ext/tools/at.py modify_bin --baud 115200 --tx_pin 21 --rx_pin 20 --ct
 ## esp-serial-flasher
 
 - **Source:** https://github.com/espressif/esp-serial-flasher
-- **Version:** v1.8.0 (git submodule)
-- **Tracking:** Submodule at `tools/esp-serial-flasher/`
-- **Local patches:** none
+- **Version:** v1.8.0
+- **Not yet integrated.** When needed, add:
+  ```cmake
+  add_subdirectory(ext/tools/esp-serial-flasher
+      ${CMAKE_BINARY_DIR}/esp32_flasher)
+  ```
 
 ---
 
 ## sdcc
 
 - **Version:** 4.5.0 (pinned in `lock.yml`)
-- **Tracking:** Downloaded to `bin/sdcc/` — not tracked in git
-- **Install:** `bash fw/ext/get_sdcc.sh`
+- **Dest:** `bin/sdcc/` — not tracked in git
 
 ---
 
 ## openmsx
 
 - **Version:** RELEASE_21_0 (pinned in `lock.yml`)
-- **Source:** `src/openmsx` submodule (built locally)
-- **Tracking:** Built to `bin/openmsx/` — not tracked in git
-- **Install:** `bash fw/ext/build_openmsx.sh`
+- **Source:** downloaded to `src/openmsx/`
+- **Build:** `bash fw/ext/build_openmsx.sh` → `bin/openmsx/`

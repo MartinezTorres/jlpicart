@@ -1,4 +1,8 @@
 ext/tools/pico-sdk/
+ext/tools/esp-serial-flasher/
+ext/src/tinyusb/
+ext/src/esp-at/
+ext/src/openmsx/
 discard
 build
 Testing

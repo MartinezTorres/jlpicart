@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# fw/ext/build_openmsx.sh — build openMSX from the pinned submodule.
+# fw/ext/build_openmsx.sh — build openMSX from the downloaded source.
 #
 # Invoke from the repo root:
 #   bash fw/ext/build_openmsx.sh
@@ -42,10 +42,10 @@ if [[ -x "$OPENMSX_BIN" ]] && [[ "$FORCE" -eq 0 ]]; then
     exit 0
 fi
 
-# --- Guard: submodule initialised ---
+# --- Guard: source present ---
 if [[ ! -f "$OPENMSX_SRC/GNUmakefile" ]]; then
-    echo "build_openmsx.sh: openMSX submodule not populated." >&2
-    echo "  Run: git submodule update --init fw/ext/src/openmsx" >&2
+    echo "build_openmsx.sh: openMSX source not found." >&2
+    echo "  Run: bash fw/ext/get_deps.sh openmsx" >&2
     exit 1
 fi
 
@@ -114,7 +114,7 @@ if ! find /usr/include /usr/local/include -name "glew.h" 2>/dev/null | grep -q .
     fi
 fi
 
-# Build in the submodule (parallel, using all cores).
+# Build (parallel, using all cores).
 NCPU=$(nproc 2>/dev/null || echo 4)
 # If we bootstrapped GLEW, pass its lib dir via LDFLAGS (command-line override
 # has highest priority; main.mk's LDFLAGS:= assignment is overridden by this).

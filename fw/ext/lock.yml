@@ -1,5 +1,5 @@
 # fw/ext/lock.yml — single source of truth for all pinned tool versions
-# All scripts and CI workflows read from this file.
+# All scripts read from this file.
 
 pico_sdk:
   version: "2.2.0"
@@ -27,3 +27,50 @@ sdcc:
   url: "https://sourceforge.net/projects/sdcc/files/sdcc-linux-amd64/4.5.0/sdcc-4.5.0-amd64-unknown-linux2.5.tar.bz2/download"
   sha256: "3395722e3f8a31ce6a14c75fc419f586a3573b939f85efee5c88cdd35820a240"
   dest: "fw/ext/bin/sdcc"
+
+tinyusb:
+  version: "0.16.0-942"
+  commit: "4232642899362fa5e9cf0dc59bad6f1f6d32c563"
+  url: "https://github.com/hathach/tinyusb/archive/4232642899362fa5e9cf0dc59bad6f1f6d32c563.tar.gz"
+  sha256: "d64728aef58b80d5ce3747cad133f520da46e2b7ea3aadfda0e981aba6b658b3"
+  extract_subdir: "tinyusb-4232642899362fa5e9cf0dc59bad6f1f6d32c563"
+  dest: "fw/ext/src/tinyusb"
+  patches: "fw/ext/patches/tinyusb"
+
+esp_at:
+  version: "v3.3.0.0"
+  commit: "498f10caf9f4e61ba30bd9cc637c0401125ef681"
+  url: "https://github.com/espressif/esp-at/archive/498f10caf9f4e61ba30bd9cc637c0401125ef681.tar.gz"
+  sha256: "4f72875cd3e72d36de7e9b11114b3729a3bb70adb10018c0977bc4604a32c988"
+  extract_subdir: "esp-at-498f10caf9f4e61ba30bd9cc637c0401125ef681"
+  dest: "fw/ext/src/esp-at"
+
+openmsx:
+  version: "RELEASE_21_0"
+  commit: "cb61db762aba16752ff649990bf85e40627777af"
+  url: "https://github.com/openMSX/openMSX/archive/refs/tags/RELEASE_21_0.tar.gz"
+  sha256: "678b520172ad0f1f75350dfecf827d742dba2edf57fba545f3d2bcac7d4818fc"
+  extract_subdir: "openMSX-RELEASE_21_0"
+  dest: "fw/ext/src/openmsx"
+
+tinyusb:
+  version: "4232642899"
+  url: "https://github.com/hathach/tinyusb/archive/4232642899362fa5e9cf0dc59bad6f1f6d32c563.tar.gz"
+  sha256: "d64728aef58b80d5ce3747cad133f520da46e2b7ea3aadfda0e981aba6b658b3"
+  extract_subdir: "tinyusb-4232642899362fa5e9cf0dc59bad6f1f6d32c563"
+  dest: "fw/ext/src/tinyusb"
+  patches: "fw/ext/patches/tinyusb"
+
+esp_at:
+  version: "498f10caf"
+  url: "https://github.com/espressif/esp-at/archive/498f10caf9f4e61ba30bd9cc637c0401125ef681.tar.gz"
+  sha256: "4f72875cd3e72d36de7e9b11114b3729a3bb70adb10018c0977bc4604a32c988"
+  extract_subdir: "esp-at-498f10caf9f4e61ba30bd9cc637c0401125ef681"
+  dest: "fw/ext/src/esp-at"
+
+esp_serial_flasher:
+  version: "v1.8.0"
+  url: "https://github.com/espressif/esp-serial-flasher/archive/refs/tags/v1.8.0.tar.gz"
+  sha256: "56432cae2ca3c494b3f5bed6448f8fbd422a40ce99af5d153241e733eab123cb"
+  extract_subdir: "esp-serial-flasher-1.8.0"
+  dest: "fw/ext/tools/esp-serial-flasher"
