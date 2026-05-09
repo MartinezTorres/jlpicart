@@ -3,18 +3,18 @@
 ## Prerequisites
 
 The firmware is self-contained and airgapped — no network access is required to
-build. All dependencies live under `fw/.pico-sdk/` and `fw/ext/`. Ensure these
+build. All dependencies live under `fw/ext/`. Ensure these
 directories are populated before building (they are typically checked in or
 populated by the release process).
 
-If `fw/.pico-sdk/` is missing, the CMake configuration will fail with:
-`Pico SDK not found at '...' — populate .pico-sdk/ first`.
+If `fw/ext/tools/pico-sdk/` is missing, the CMake configuration will fail with:
+`Pico SDK not found at '...' — populate ext/tools/pico-sdk/ first`.
 
 ## Building the firmware
 
 ```sh
 mkdir fw/build && cd fw/build
-PICO_TOOLCHAIN_PATH=../../fw/.pico-sdk/toolchain/14_2_Rel1/bin \
+PICO_TOOLCHAIN_PATH=../ext/tools/pico-sdk/toolchain/14_2_Rel1/bin \
     cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
 ```
@@ -33,7 +33,7 @@ cp fw/build/jlpicart.uf2 /media/$USER/RP2350/
 Or use picotool:
 
 ```sh
-fw/.pico-sdk/picotool/2.2.0/picotool load fw/build/jlpicart.uf2 --force
+fw/ext/tools/pico-sdk/picotool/2.2.0/picotool load fw/build/jlpicart.uf2 --force
 ```
 
 ## Building host tests
@@ -52,7 +52,7 @@ ctest --output-on-failure
 | Pico SDK      | 2.2.0       |
 | ARM toolchain | 14_2_Rel1   |
 | picotool      | 2.2.0       |
-| SDCC          | 4.4.0       |
+| SDCC          | 4.5.0       |
 | openMSX       | RELEASE_21_0 |
 
 All version hashes are in `ext/lock.yml`.

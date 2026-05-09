@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # fetch_pico_sdk.sh — download and install the pinned Pico SDK, ARM toolchain,
-# and picotool into fw/.pico-sdk/, matching the VS Code Pico extension layout.
+# and picotool into fw/ext/tools/pico-sdk/.
 #
 # Layout produced:
-#   fw/.pico-sdk/sdk/2.2.0/          — Pico SDK source
-#   fw/.pico-sdk/toolchain/14_2_Rel1/ — ARM GNU toolchain (arm-none-eabi-gcc)
-#   fw/.pico-sdk/picotool/2.2.0/     — picotool binary
+#   fw/ext/tools/pico-sdk/sdk/2.2.0/          — Pico SDK source
+#   fw/ext/tools/pico-sdk/toolchain/14_2_Rel1/ — ARM GNU toolchain (arm-none-eabi-gcc)
+#   fw/ext/tools/pico-sdk/picotool/2.2.0/     — picotool binary
 #
 # Version and hash information is read from fw/ext/lock.yml.
 
@@ -14,7 +14,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOCK="${SCRIPT_DIR}/lock.yml"
-PICO_SDK_DIR="${REPO_ROOT}/fw/.pico-sdk"
+PICO_SDK_DIR="${REPO_ROOT}/fw/ext/tools/pico-sdk"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -135,5 +135,5 @@ echo "==> Installed versions:"
 "${TOOLCHAIN_DEST}/bin/arm-none-eabi-gcc" --version | head -1
 "${PICOTOOL_DEST}/picotool" version 2>/dev/null || true
 echo ""
-echo "OK: fw/.pico-sdk/ is ready. Build with:"
+echo "OK: fw/ext/tools/pico-sdk/ is ready. Build with:"
 echo "    PICO_TOOLCHAIN_PATH=${TOOLCHAIN_DEST}/bin cmake fw/ ..."

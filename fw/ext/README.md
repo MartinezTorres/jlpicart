@@ -11,13 +11,15 @@ fw/ext/
 ├── bin/              — downloaded/built binaries (gitignored)
 │   ├── openmsx/
 │   └── sdcc/
+├── tools/            — toolchains and SDKs (gitignored)
+│   └── pico-sdk/
 ├── patches/          — local patches applied to submodules
 │   └── tinyusb/
 ├── esp32/            — vendored ESP32 tooling
 │   ├── esp-serial-flasher/
 │   └── at.py
 ├── lock.yml          — pinned versions, URLs, SHA256 digests
-├── fetch_pico_sdk.sh — Pico SDK + ARM toolchain + picotool → fw/.pico-sdk/
+├── fetch_pico_sdk.sh — Pico SDK + ARM toolchain + picotool → tools/pico-sdk/
 ├── get_sdcc.sh       — SDCC Z80 compiler → bin/sdcc/
 ├── build_openmsx.sh  — openMSX emulator → bin/openmsx/
 └── apply_patches.sh  — apply local patches to submodules

@@ -34,7 +34,7 @@ jobs:
       - name: Configure firmware
         run: |
           mkdir -p fw/build
-          PICO_TOOLCHAIN_PATH="${GITHUB_WORKSPACE}/fw/.pico-sdk/toolchain/14_2_Rel1/bin" \
+          PICO_TOOLCHAIN_PATH="${GITHUB_WORKSPACE}/fw/ext/tools/pico-sdk/toolchain/14_2_Rel1/bin" \
             cmake -S fw -B fw/build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build firmware

@@ -6,21 +6,21 @@ pico_sdk:
   url: "https://github.com/raspberrypi/pico-sdk/archive/refs/tags/2.2.0.tar.gz"
   sha256: "dbd8db79015aced4ef35cbaa88051b0d451775010d20202e1c7d2bee69c25b35"
   extract_subdir: "pico-sdk-2.2.0"
-  dest: "fw/.pico-sdk/sdk/2.2.0"
+  dest: "fw/ext/tools/pico-sdk/sdk/2.2.0"
 
 arm_toolchain:
   version: "14_2_Rel1"
   url: "https://developer.arm.com/-/media/Files/downloads/gnu/14.2.rel1/binrel/arm-gnu-toolchain-14.2.rel1-x86_64-arm-none-eabi.tar.xz"
   sha256: "62a63b981fe391a9cbad7ef51b17e49aeaa3e7b0d029b36ca1e9c3b2a9b78823"
   extract_subdir: "arm-gnu-toolchain-14.2.rel1-x86_64-arm-none-eabi"
-  dest: "fw/.pico-sdk/toolchain/14_2_Rel1"
+  dest: "fw/ext/tools/pico-sdk/toolchain/14_2_Rel1"
 
 picotool:
   version: "2.2.0"
   url: "https://github.com/raspberrypi/picotool/archive/refs/tags/2.2.0.tar.gz"
   sha256: "aab3d82fb1e576d97156ddcb962ae7cf290518a5f20d9002ac27e628dc657620"
   extract_subdir: "picotool-2.2.0"
-  dest: "fw/.pico-sdk/picotool/2.2.0"
+  dest: "fw/ext/tools/pico-sdk/picotool/2.2.0"
 
 sdcc:
   version: "4.5.0"
