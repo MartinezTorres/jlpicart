@@ -14,10 +14,10 @@ SHA-256 of the raw 32-byte public key).
 
 **Who controls it:** The entity who programs the OTP. For official builds, the
 JLPiCart platform maintainer controls Slot 0. Board builders may enroll their
-own keys in Slots 1–3.
+own keys in Slots 1-3.
 
 **Where stored:**
-- Public key fingerprint: RP2350 OTP boot key slots (Slots 0–3). Each slot is
+- Public key fingerprint: RP2350 OTP boot key slots (Slots 0-3). Each slot is
   independently valid. Having multiple slots allows key rotation without bricking.
 - Private key: offline, never on device. Kept by the keyholder (maintainer,
   board builder, or publisher) on an air-gapped machine or HSM.
@@ -33,12 +33,11 @@ Without a valid signature from an enrolled BRK, the RP2350 halts at boot.
 
 **Slot convention:**
 - Slot 0: JLPiCart Platform Boot Key (official firmware builds).
-- Slots 1–3: Board builder, publisher, or owner keys.
+- Slots 1-3: Board builder, publisher, or owner keys.
 
 **Implementation status:** The RP2350 boot ROM handles BRK verification natively.
 JLPiCart firmware reads and exposes the `boot_key_valid_mask` from OTP via
-`SecurityPosture` and the `GET_SECURITY_INFO` API. Boot key enrollment tooling
-is planned (Stage 26).
+`SecurityPosture`.
 
 ---
 
@@ -107,8 +106,7 @@ readable by anyone with the flash chip. This is acceptable for development units
 and should not be used in production.
 
 **Implementation status:** Reading the OTP device secret is implemented in
-`SecurityPosture` (Stage 3). SMK derivation and its use for key wrapping is
-implemented in Stage 25.
+`SecurityPosture` (Stage 3). SMK derivation implemented in `src/crypto/smk.cc`.
 
 ---
 
@@ -116,22 +114,18 @@ implemented in Stage 25.
 
 **Role:** Derive per-namespace encryption keys for all persistent storage.
 
-**Algorithm:** Derived via HKDF-SHA256 with the OTP device secret as IKM and a
-fixed platform label as info. Output: 32 bytes.
+**Algorithm:** Derived via HKDF-SHA256 with the OTP device secret as IKM and
+info `"jlpicart.smk"`. Output: 32 bytes.
 
 **Per-namespace key derivation:**
 ```
-smk_derive_key(namespace_label):
+smk_derive_ns_key(smk, namespace_label):
   HKDF-SHA256(ikm=SMK, salt=none, info="jlpicart.ns." || namespace_label)
-  → 32-byte AES-256 key
+  → 32-byte key
 ```
 
 | Namespace | Label | Contents |
 |---|---|---|
-| SYSTEM | `sys` | Platform config, network credentials, policy |
-| PROFILES | `prof` | User profile data, preferences |
-| SAVES | `saves` | Per-game save data |
-| GUEST | `guest` | Ephemeral guest session data |
 | DIK | `dik.priv` | Device Identity Key private key wrapping |
 
 **Who controls it:** Nobody — it is derived, not chosen.
@@ -149,18 +143,14 @@ Derived fresh from OTP at every boot.
 the OTP device secret, even if flash memory is extracted.
 
 **Implementation status:** SMK derivation (HKDF-SHA256 via `src/crypto/smk.cc`) and
-per-namespace key derivation implemented in Stage 25. DIK private key is wrapped
-with XChacha20-Poly1305 (Monocypher) using the dik.priv namespace key before KV
-storage. Unprovisioned units use a zero-IKM-derived key (effectively unencrypted,
-as documented above). Wiring to actual OTP device secret bytes is deferred to the
-`jlpicart-provision` tooling (Stage 26).
+per-namespace key derivation implemented. DIK private key is wrapped with
+XChaCha20-Poly1305 (Monocypher) using the `dik.priv` namespace key before storage.
 
 ---
 
 ## Device Identity Key (DIK)
 
-**Role:** Uniquely identify a cartridge and authenticate its messages (leaderboard
-submissions, device-to-device sessions).
+**Role:** Uniquely identify a cartridge.
 
 **Algorithm:** ed25519. Public key: 32 bytes. Private key: 64 bytes (seed || public).
 Signatures: 64 bytes.
@@ -168,131 +158,106 @@ Signatures: 64 bytes.
 **Who controls it:** The cartridge firmware. The private key never leaves the device.
 
 **Where stored:**
-- Public key: flash, SYSTEM_KV partition, key `dik.pub`. Stored in plain text.
-  The public key is not secret.
-- Private key: flash, SYSTEM_KV partition, key `dik.priv`. Stored encrypted under
-  AES-256-GCM with a key derived from SMK (`smk_derive_key("dik.priv")`).
-  On unprovisioned units, stored without hardware-rooted encryption (the wrapping
-  key degenerates to a zero-derived value).
-- Provisioned flag: flash, SYSTEM_KV, key `dik.flags`. One byte: 1 = provisioned
-  (OTP-backed encryption), 0 = unprovisioned.
+- Full keypair: `1:/system/dik.bin` (137 bytes). Format:
+  `pub[32] | nonce[24] | mac[16] | priv_ct[64] | flags[1]`.
+- Private key is encrypted with XChaCha20-Poly1305 (Monocypher) using a wrap key
+  derived from SMK (`smk_derive_ns_key(smk, "dik.priv")`).
+  On unprovisioned units, stored with a zero-derived wrap key (effectively unencrypted).
+- Provisioned flag: last byte of the file. 1 = provisioned (OTP-backed encryption),
+  0 = unprovisioned.
 
 **Lifecycle:**
-- Generated on first boot using the RP2350 hardware TRNG.
+- Generated on first boot using the RP2350 hardware TRNG (via `pico_rand`).
+  Host tests use OpenSSL EVP for ed25519 keypair generation.
 - Stored immediately. `init_or_load()` is idempotent — subsequent boots load from
   storage.
-- Can be rotated by generating a new keypair and enrolling it with online services.
-  The old identity is then retired. The firmware keeps only one active DIK.
+- Can be rotated by generating a new keypair. The firmware keeps only one active DIK.
 - Cannot be exported. There is no "backup" — if the device is destroyed, the identity
-  is gone. Online services should support device re-enrollment with proof of ownership.
+  is gone.
 
 **Scoped IDs (GET_DEVICE_ID):**
 The DIK public key is not directly exposed via the API to avoid giving titles a
 globally stable tracking ID. Instead, GET_DEVICE_ID(scope) returns 16 bytes derived
-via HKDF-SHA256:
+via SHA-256:
 
 ```
-device_id(scope):
+device_identity_scoped_id(pub_key_32, scope):
   label = ["dev", "col", "pub"][scope]  -- scope 0, 1, 2
-  HKDF-SHA256(ikm=pub_key_32, info=label) → 16 bytes
+  SHA-256(pub_key[32] || label[N] || 0x00[1]) → first 16 bytes
 ```
+
+The input buffer is 36 bytes: 32-byte public key + up to 3 bytes of label + 1 zero byte.
 
 | Scope | Label | ID is stable across... | Suitable for... |
 |---|---|---|---|
-| 0 | `dev` | All collections on this device | Persistent device association; requires policy permission `expose_stable_device_id` |
-| 1 | `col` | This collection on this device | Per-collection tracking; default for most game titles |
+| 0 | `dev` | All collections on this device | Persistent device association; requires policy permission `POLICY_EXPOSE_STABLE_DEVICE_ID` |
+| 1 | `col` | This collection on this device | Per-collection tracking |
 | 2 | `pub` | All collections by one publisher | Publisher-wide profiles across their catalog |
 
-Scope 0 (`expose_stable_device_id`) requires explicit policy permission. If the
+Scope 0 requires the policy flag `POLICY_EXPOSE_STABLE_DEVICE_ID`. If the
 policy flag is not set, GET_DEVICE_ID(scope=0) returns `API_E_POLICY`.
 
-**What it protects:** Ties leaderboard submissions, device-to-device sessions, and
-online service interactions to a specific device. Prevents identity spoofing.
+**What it protects:** Ties API interactions to a specific device. Prevents identity spoofing.
 
-**Implementation status:** Key generation (host OpenSSL path) implemented in Stage 22.
-Hardware ed25519 via Monocypher (vendored at `src/crypto/monocypher/`) implemented in
-Stage 24; entropy from RP2350 hardware TRNG via `pico_rand`. Note: the Pico SDK ships
-mbedTLS 3.6.2 which does not implement ed25519 PSA keygen; Monocypher is used instead.
-Private key wrapping under SMK implemented in Stage 25.
-Policy enforcement for scope=0 implemented in Stage 26.
+**Implementation status:** Fully implemented. Key generation (hardware: pico_rand + Monocypher,
+host: OpenSSL EVP). Private key wrapping under SMK via XChaCha20-Poly1305.
+Scoped ID derivation via SHA-256. Policy enforcement for scope=0 implemented.
 
 ---
 
-## Publisher Root Key (PRK)
-
-**Role:** Certify Publisher Identity Certificates (PICs).
-
-**Algorithm:** ed25519 (or RSA-2048 for compatibility with existing CA tooling;
-ed25519 preferred for new deployments).
-
-**Who controls it:** The JLPiCart platform authority. On open platforms, this role
-may be decentralized — each board builder can act as their own PKI root by enrolling
-their own PRK in their policy document.
-
-**Where stored:** The public key is embedded in the firmware image and/or in the
-authenticated policy document. The private key is offline, held by the authority.
-
-**Lifecycle:**
-- Generated once per trust hierarchy.
-- Private key kept offline. Used only to sign PICs.
-- Rotation requires distributing a new PRK via a firmware update or policy update,
-  and re-signing any PICs that should remain valid.
-
-**What it protects:** Ensures that only publishers authorized by the platform (or
-board builder) can sign collections that pass signature verification.
-
-**Implementation status:** PRK verification planned for Stage 26+.
-
----
-
-## Publisher Identity Certificate (PIC)
-
-**Role:** Bind a stable Publisher ID to a Content Signing Key, authorized by PRK.
-
-**Format:** A signed record containing:
-- `publisher_id`: stable string identifier for the publisher
-- `publisher_name`: human-readable name
-- `csk_pub`: the publisher's Content Signing Key public key (ed25519, 32 bytes)
-- `allowed_usages`: bitmask of what this key may sign (content only; never firmware)
-- `not_after`: expiry timestamp
-- `signature`: ed25519 signature by PRK over the canonical encoding of the above
-
-**Where stored:** Carried inside collection bundles. Optionally cached locally
-after first verified install.
-
-**Lifecycle:**
-- Issued by the PRK holder to a publisher upon registration.
-- Valid until `not_after`. Renewal requires re-issuance by the PRK holder.
-- Revocable via an online revocation list or a local revocation update.
-
-**Implementation status:** PIC verification planned for Stage 26+.
-
----
-
-## Content Signing Key (CSK)
+## Publisher Signing Key
 
 **Role:** Sign collection bundles for distribution.
 
-**Algorithm:** ed25519.
+**Algorithm:** ed25519. Signatures: 64 bytes.
 
 **Who controls it:** The publisher. Kept offline.
 
 **Where stored:**
-- Public key: inside the PIC (see above). Distributed with the bundle.
+- Public key: `1:/system/pub_anchor.bin` on-device (raw 32-byte ed25519 public key).
+  Loaded by `policy_get_publisher_anchor()` at install time.
 - Private key: offline, held by the publisher. Never on device.
 
 **Lifecycle:**
-- Generated by the publisher for each signing identity.
-- The public key is submitted to the PRK holder who issues a PIC.
-- Used to sign every collection bundle before distribution.
-- Must never be used to sign firmware (firmware signing is FSK/BRK territory).
-- Can be rotated by obtaining a new PIC with the new public key.
+- Generated by the publisher for collection signing.
+- Used to sign `manifest.json` before distribution. The signature is stored in
+  `bundle.sig` alongside the algorithm identifier (`"ed25519"`), key ID, and file hashes.
+- The public key is placed on-device via provisioning or included in the initial
+  collection bundle.
 
 **What it protects:** Ensures that a collection bundle was produced by a specific,
 verified publisher and has not been tampered with since signing.
 
-**Implementation status:** CSK signature verification in collection install planned
-for Stage 26+.
+**Verification:** At install time, the firmware:
+1. Reads `pub_anchor.bin` (32-byte ed25519 public key)
+2. Computes SHA-256 of the `manifest.json` bytes
+3. Verifies the ed25519 signature from `bundle.sig` using Monocypher `crypto_eddsa_check()`
+4. If `POLICY_REQUIRE_PUBLISHER_SIGNATURE` is set and verification fails, the install is rejected
+
+**Implementation status:** Fully implemented. Signature verification uses Monocypher
+(vendored at `src/crypto/monocypher/`). Only accepts `"ed25519"` algorithm with
+exactly 64-byte signatures.
+
+---
+
+## Policy HMAC Key
+
+**Role:** Authenticate the binary policy document stored in flash.
+
+**Algorithm:** HMAC-SHA256 over 16 canonical bytes (version[4] LE + flags[8] LE + reserved[4]).
+
+**Who controls it:** Embedded in firmware. The development key is the ASCII string
+`"JLPCart-dev-policy-hmac-key-v001"` (32 bytes). In sealed production, this should
+be replaced with an OTP-backed key.
+
+**Where stored:** Compiled into firmware binary. Not stored on device.
+
+**What it protects:** Ensures the policy document in flash has not been tampered with.
+In DEV mode (secure boot disabled), HMAC verification is skipped entirely.
+
+**Implementation status:** Implemented in `src/spine/policy.cc`. Verification is
+performed when `PolicyStore::load()` reads the document from flash at
+offset `0x1FF000` (last 4 KB of 2 MB firmware partition).
 
 ---
 
@@ -302,11 +267,11 @@ for Stage 26+.
 |---|---|---|---|---|
 | BRK / FSK | ed25519 | 32 bytes (seed) | 32 bytes | 64 bytes |
 | DIK | ed25519 | 64 bytes (seed\|\|pub) | 32 bytes | 64 bytes |
-| PRK | ed25519 | 32 bytes | 32 bytes | 64 bytes |
-| CSK | ed25519 | 32 bytes | 32 bytes | 64 bytes |
+| Publisher signing | ed25519 | 32 bytes | 32 bytes | 64 bytes |
 | OTP device secret | raw bytes | 32 bytes | — | — |
-| SMK | AES-256 derived | 32 bytes | — | — |
-| Per-namespace key | AES-256 derived | 32 bytes | — | — |
+| SMK | HKDF-SHA256 derived | 32 bytes | — | — |
+| Per-namespace key | HKDF-SHA256 derived | 32 bytes | — | — |
+| Policy HMAC | raw bytes | 32 bytes | — | 32 bytes (HMAC-SHA256) |
 
 ---
 
@@ -316,7 +281,6 @@ for Stage 26+.
 |---|---|---|
 | FSK private key | Offline, encrypted, multiple copies | Cannot sign new firmware for enrolled units |
 | OTP device secret | Offline, encrypted, multiple copies | User data on affected units is unrecoverable |
-| PRK private key | Offline, HSM preferred | Cannot issue new PICs; existing PICs still valid |
-| CSK private key | Offline, publisher-controlled | Cannot sign new collection bundles with that identity |
-| DIK | Not backed up — per-device identity | Device identity lost if flash is destroyed; re-enroll with server |
+| Publisher signing private key | Offline, publisher-controlled | Cannot sign new collection bundles with that identity |
+| DIK | Not backed up — per-device identity | Device identity lost if flash is destroyed |
 | SMK | Never backed up — derived at runtime | Not applicable; re-derived from OTP secret on every boot |

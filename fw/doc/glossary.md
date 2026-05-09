@@ -1,35 +1,61 @@
 # Glossary
 
-**Collection** — A named bundle containing a Manifest, zero or more Payloads, and optional Assets. Only one Collection is active at a time.
+**Collection** — A named bundle containing a `manifest.json`, one or more Payloads, and
+an optional `bundle.sig`. Installed to `1:/collections/`. Only one Collection is active
+at a time, tracked via `1:/collections/active.txt`.
 
-**Payload** — A single emulatable media item within a Collection, consisting of its Content, a Manifest, and optional Assets. A Collection may have multiple Payloads active simultaneously (e.g., a ROM plus a floppy bundle plus a mass storage image).
+**Payload** — A single emulatable media item within a Collection. Consists of ROM data
+stored in flash and a `PayloadRecord` (372 bytes) that describes mapper type, subslot,
+device requirements, and flash offset. A Collection can have multiple Payloads; the
+active one is set via the API before launch.
 
-**Content** — The primary data of a Payload: a ROM image, a mass storage image, or a floppy bundle (one or more floppy disk images).
+**Content** — The primary data of a Payload: a ROM image written to the FAT partition
+of external flash and mapped into MSX memory space via the bus emulator.
 
-**Manifest** — Structured textual metadata describing a Collection or Payload. Includes identity (name, author, version), hardware requirements (mapper, RAM, audio devices, VDP, network access), licensing terms, and boot defaults. Hard requirements cannot be overridden by the user; soft defaults can.
+**Manifest** — `manifest.json`: structured metadata describing a Collection and its
+Payloads. Includes identity (collection_id, title, version, publisher_id), per-payload
+details (mapper type, subslot, device entries, required/optional capabilities), and
+boot defaults (boot_mode, default_payload_id). Parsed by `ManifestParser` at install time.
 
-**Assets** — Optional non-textual media associated with a Collection or Payload, used by the Menu: images, animations, music.
+**Bundle Signature** — `bundle.sig`: an optional JSON file alongside `manifest.json`
+containing an ed25519 signature over the manifest's SHA-256 digest, algorithm identifier
+(`"ed25519"`), key ID, file hashes, and raw 64-byte signature.
 
-**Source** — Where a Collection is loaded from. Sources are: internal flash, USB stick, optical drive (CD/DVD), or network. External sources take priority over internal flash.
+**Source** — Where a Collection is loaded from. The implemented source is USB mass
+storage (via tinyusb host MSC). The `SystemSettings.source_priority` array lists
+preferred sources: flash, USB, optical, network — but only USB install is currently
+implemented via `UsbInstallScanner`.
 
-**System Settings** — Cartridge-wide configuration that persists across Collections: WiFi credentials, video output mode, language, firmware settings.
+**System Settings** — Cartridge-wide configuration stored at `1:/system/settings.bin`.
+192-byte flat blob: WiFi SSID/password, language, video output mode, network enabled,
+source priority array.
 
-**User Profile** — A named identity stored on the cartridge, optionally synced to the cloud. Contains language preference, save data, and high scores across all Collections. Multiple profiles may exist on one cartridge.
+**Persistent Storage** — Flash storage that survives Collection changes: System Settings,
+user save data, Device Identity Key, publisher trust anchor. Backed by a 14 MB FAT
+partition on external W25Q080 flash.
 
-**Guest Session** — A temporary profile tied to a licensed user's Collection. Allows a user without a copy of a Collection to play it, subject to publisher-defined limits (time, sessions, features).
+**Save Data** — Per-game save blobs stored at `1:/saves/{id:04x}.sav`. Indexed by
+`1:/saves/index.bin` (registry of blob_id, flags, size). Maximum 512 bytes per blob,
+up to 85 entries. Managed by `UserDataStore`.
 
-**Persistent Storage** — Flash storage that survives Collection changes: System Settings, User Profiles, save data, high scores, cached network payloads.
+**JLPiCart API** — The stable, versioned interface exposed by the cartridge to MSX
+software via the API Window (ring-based IPC). Services: SYSTEM (0x00) for build info,
+capabilities, device ID; STORAGE (0x01) for settings and save operations; NETWORK
+(0x02) for ESP32 HTTP client.
 
-**JLPiCart API** — The stable, versioned interface exposed by the cartridge to MSX software. Provides games and applications access to: user identity, save/load operations, high score submission, network sockets, peripheral queries, and multiplayer session management.
+**Menu** — The cartridge's own software, not part of any Collection. Runs as a
+non-blocking state machine on the RP2350 and communicates with a Z80 menu stub via a
+16 KB SRAM mailbox protocol. Handles Collection selection, settings display, and launch.
 
-**Menu** — The cartridge's own software, not part of any Collection. Handles Collection selection, System Settings, User Profile management, and publisher tools.
+**Install Intent** — A single install directory on a USB mass storage device
+(`/JLPICART/INSTALL/<install_id>/`) containing `manifest.json`, optional `bundle.sig`,
+and payload data files. Scanned by `FatFsInstallDirSource` and installed by `Installer`.
 
-**Provisioning Bundle** — A signed installation bundle used to initialize a blank device and optionally install a default Collection and lock policy.
+**Publisher Trust Anchor** — A raw 32-byte ed25519 public key stored at
+`1:/system/pub_anchor.bin`. Used to verify collection bundle signatures at install time.
+Loaded by `policy_get_publisher_anchor()`.
 
-**Install Intent** — A single install directory on provisioning media (`/JLPICART/INSTALL/<install_id>/`) containing metadata, publisher identity, bundle bytes, and signatures.
-
-**Install Receipt** — An append-only local record describing an installation decision (installed/rejected), including bundle digests and stable reason codes.
-
-**Publisher Identity Certificate (PIC)** — A certificate binding a stable Publisher ID to public keys and allowed usages, validated against a Publisher Root Key (PRK).
-
-**Lock Policy** — The device's trust posture defining which signers are accepted for firmware and content and what recovery/rotation is permitted.
+**Lock Policy** — The device's trust posture, encoded as a 64-bit bitmask in a binary
+`PolicyDocument` (48 bytes) stored in flash at offset `0x1FF000`. Authenticated with
+HMAC-SHA256. Controls USB/network install permissions, unsigned collection acceptance,
+publisher signature requirement, and device ID exposure.

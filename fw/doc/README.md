@@ -10,7 +10,8 @@ Start with [security/overview.md](security/overview.md), then
 **I want to publish a game or application**
 Read [security/overview.md](security/overview.md) for the trust model, then
 [security/key-reference.md](security/key-reference.md) for cryptographic
-specifications. Publisher signing tooling is not yet documented.
+specifications. Collection signing uses ed25519 with the public key stored
+at `1:/system/pub_anchor.bin`.
 
 **I am writing MSX software that uses the JLPiCart API**
 Read [api/capabilities.md](api/capabilities.md) for the capability catalog
@@ -26,9 +27,9 @@ Read [security/key-reference.md](security/key-reference.md).
 
 | Document | Status | Covers |
 |---|---|---|
-| [security/overview.md](security/overview.md) | Draft | Trust model, personas, key roles |
-| [security/pcb-builder.md](security/pcb-builder.md) | Draft | OTP provisioning, development vs. production |
+| [security/overview.md](security/overview.md) | Draft | Trust model, personas, key hierarchy, install flow |
+| [security/pcb-builder.md](security/pcb-builder.md) | Draft | OTP provisioning, policy document, development vs. production |
 | [security/key-reference.md](security/key-reference.md) | Draft | All key types, storage, lifecycle |
-| [api/capabilities.md](api/capabilities.md) | Draft | Capability ID catalog |
+| [api/capabilities.md](api/capabilities.md) | Draft | Capability catalog, probes, resource model |
 | [glossary.md](glossary.md) | Draft | Platform vocabulary |
 | [toolchain.md](toolchain.md) | Current | SDK setup, build, flash, host tests |

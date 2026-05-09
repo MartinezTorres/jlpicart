@@ -2,13 +2,13 @@
 
 ## Prerequisites
 
-Run once per fresh clone to populate the SDK and toolchain:
+The firmware is self-contained and airgapped — no network access is required to
+build. All dependencies live under `fw/.pico-sdk/` and `fw/ext/`. Ensure these
+directories are populated before building (they are typically checked in or
+populated by the release process).
 
-```sh
-bash tools/fetch_pico_sdk.sh
-```
-
-This creates `fw/.pico-sdk/` with the pinned SDK, ARM toolchain, and picotool.
+If `fw/.pico-sdk/` is missing, the CMake configuration will fail with:
+`Pico SDK not found at '...' — populate .pico-sdk/ first`.
 
 ## Building the firmware
 
@@ -52,7 +52,7 @@ ctest --output-on-failure
 | Pico SDK      | 2.2.0       |
 | ARM toolchain | 14_2_Rel1   |
 | picotool      | 2.2.0       |
-| SDCC          | 4.5.0       |
+| SDCC          | 4.4.0       |
 | openMSX       | RELEASE_21_0 |
 
 All version hashes are in `ext/lock.yml`.

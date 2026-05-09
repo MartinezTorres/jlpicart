@@ -20,8 +20,8 @@ install. The menu shows. The only differences from a sealed unit are:
 - The Device Identity Key (DIK) is generated on first boot and stored in flash, but
   without hardware-rooted encryption. The menu and `GET_SECURITY_INFO` API call will
   show `otp_device_secret_present = false`.
-- If the platform ever connects to JLPiCart online services, the server knows this
-  is an unprovisioned unit. Leaderboard scores from unprovisioned units are flagged.
+- Policy defaults to `POLICY_DEV_DEFAULTS`: USB installs allowed, unsigned collections
+  allowed, user replace allowed, boot key enrollment allowed, stable device ID exposed.
 - There is no protection against someone reflashing the device with different firmware.
 
 This is the correct mode for development. You should not do OTP writes until you are
@@ -32,18 +32,27 @@ irreversible.
 
 ## Understanding what OTP does
 
-The RP2350 has 8KB of one-time-programmable (OTP) memory. "One-time" means each bit
-can only be written once — there is no erase. You can add information but you cannot
-remove it.
+The RP2350 has 8 KB of one-time-programmable (OTP) memory organized as 4096 rows of
+3 bytes each (12288 bytes total). "One-time" means each bit can only be written once —
+there is no erase. You can add information but you cannot remove it.
 
 JLPiCart uses OTP for four purposes:
 
 | OTP content | What it does | Reversible? |
 |---|---|---|
-| Boot key fingerprints (slots 0–3) | RP2350 verifies firmware against these at every boot | Slots can be invalidated (revoked), but not reused |
+| Boot key fingerprints (slots 0-3) | RP2350 verifies firmware against these at every boot | Slots can be invalidated (revoked), but not reused |
 | Device secret seed | Source of all storage encryption keys | No |
 | Security lock flags | Disable SWD/debug, disable USB boot, enable anti-rollback | No |
 | Anti-rollback counter | Monotonic counter prevents installing older firmware | No (counter only increases) |
+
+Key OTP regions used by firmware:
+
+| Region | Byte offset | Purpose |
+|---|---|---|
+| CRIT1 | 0x040 | Boot key fingerprints |
+| BOOT_FLAGS0 | 0x048 | Secure boot, debug disable, USB/UART boot disable |
+| BOOT_FLAGS1 | 0x04B | Additional boot flags |
+| DEVICE_SECRET | 0x300 (row 0x100 × 3) | 32-byte device secret seed |
 
 The key insight: **OTP writes are the point of no return.** Do them in the right order,
 and only when you are sure you want them.
@@ -85,21 +94,8 @@ For development and prototype units: do nothing yet. Sealed units come later.
 ### Step 2 — Program the device secret seed
 
 The device secret is a 32-byte random value written to OTP. The firmware reads it at
-boot, derives the Storage Master Key (SMK), and uses the SMK to encrypt all user data
-in flash.
-
-**To program the device secret:**
-```
-# Using the JLPiCart provisioning tool (provisioning-tool is planned):
-jlpicart-provision write-device-secret --random
-
-# The tool:
-# 1. Generates 32 bytes from a secure random source
-# 2. Asks you to confirm ("This is irreversible. Proceed? [yes/no]")
-# 3. Writes to the OTP device secret region
-# 4. Verifies the write succeeded by reading back and comparing
-# 5. Saves a backup of the secret (encrypted) for recovery purposes — keep this safe
-```
+boot, derives the Storage Master Key (SMK) via HKDF-SHA256 (info `"jlpicart.smk"`),
+and uses the SMK to derive per-namespace encryption keys.
 
 **What happens if you skip this step:**
 The board operates in "unprovisioned" mode. All data is stored without hardware-rooted
@@ -107,15 +103,9 @@ encryption. The menu and API show `otp_device_secret_present = false`. This is f
 development. For a shipping cartridge, you should program the device secret.
 
 **What happens if you lose the device secret:**
-You cannot decrypt user data on that unit. Saves, profiles, and credentials are
+You cannot decrypt user data on that unit. Saves and credentials are
 unrecoverable. There is no way to extract the OTP value without invasive silicon
 techniques. Keep the backup.
-
-**What happens to existing data when you program the device secret:**
-Any data already in flash (saves, profiles) was stored unencrypted (or with a
-zero-derived key). After programming the OTP secret, the firmware detects that the
-storage was created without a hardware secret and re-encrypts it on first boot. This
-migration happens automatically.
 
 ### Step 3 — Enroll your boot key fingerprint (if using Option B or C)
 
@@ -177,9 +167,9 @@ jlpicart-provision disable-debug
 
 **Disable USB boot:**
 Prevents using the BOOTSEL button to enter the ROM bootloader and reflash via USB.
-After this, firmware can only be updated via the signed firmware update workflow
-(the Update service, Stage 25+). Do not do this before you have a working signed
-firmware update path, or you will have no way to update the firmware.
+After this, firmware can only be updated via the signed firmware update workflow. Do not
+do this before you have a working signed firmware update path, or you will have no way
+to update the firmware.
 ```
 jlpicart-provision disable-usb-boot
 ```
@@ -198,37 +188,57 @@ jlpicart-provision enable-anti-rollback
 Policy flags control what the firmware permits at runtime: which collection sources
 are allowed, whether publisher signatures are required, whether the stable device ID
 can be exposed, etc. The policy document is stored in flash and is authenticated
-(HMAC-verified by the firmware at every boot).
+(HMAC-SHA256 verified by the firmware at every boot).
 
-The default policy (applied when no policy document is present) is conservative:
-- USB installs: allowed
-- Network installs: allowed
-- Unsigned collections: allowed
-- Publisher signature required: no
-- Expose stable device ID: yes
+The policy document is a binary structure (48 bytes):
 
-For a production unit where you want to restrict to signed-only content:
-```
-# Edit the policy file:
-cat > my_policy.json << 'EOF'
-{
-  "allow_usb_collection_install": true,
-  "allow_network_collection_install": true,
-  "allow_unsigned_collections": false,
-  "allow_user_replace_collections": true,
-  "require_publisher_signature": true,
-  "allow_boot_key_enrollment": false,
-  "allow_boot_key_revocation": false,
-  "expose_stable_device_id": false
-}
-EOF
-
-# Sign and install:
-jlpicart-provision write-policy --policy my_policy.json --key my_boot_key.pem
+```c
+struct PolicyDocument {
+    uint32_t    version;       // Must be 1 (POLICY_VERSION_V1)
+    uint64_t    flags;         // Bitmask of POLICY_* flags
+    uint8_t     reserved[4];   // Zero
+    uint8_t     hmac_tag[32];  // HMAC-SHA256 over canonical bytes
+};
 ```
 
-Policy updates can be applied in the field via the signed firmware update workflow.
-They do not require OTP writes.
+Canonical bytes (16 bytes): `version[4] LE || flags[8] LE || reserved[4]`.
+
+**Defined policy flags:**
+
+| Bit | Flag | Effect |
+|---|---|---|
+| 0 | `POLICY_ALLOW_USB_COLLECTION_INSTALL` | Allow installing collections from USB MSC |
+| 1 | `POLICY_ALLOW_NETWORK_COLLECTION_INSTALL` | Allow installing collections from network |
+| 2 | `POLICY_ALLOW_UNSIGNED_COLLECTIONS` | Accept collections without publisher signature |
+| 3 | `POLICY_ALLOW_USER_REPLACE_COLLECTIONS` | Allow users to replace the active collection |
+| 4 | `POLICY_REQUIRE_PUBLISHER_SIGNATURE` | Reject unsigned collections |
+| 5 | `POLICY_ALLOW_BOOT_KEY_ENROLLMENT` | Permit boot key enrollment operations |
+| 6 | `POLICY_ALLOW_BOOT_KEY_REVOCATION` | Permit boot key revocation operations |
+| 7 | `POLICY_EXPOSE_STABLE_DEVICE_ID` | Allow GET_DEVICE_ID scope=0 |
+
+**Presets:**
+
+| Preset | Flags | Description |
+|---|---|---|
+| `POLICY_SAFE_DEFAULTS` | `0` | Nothing allowed. Maximum security. |
+| `POLICY_DEV_DEFAULTS` | USB install, unsigned collections, user replace, boot key enrollment, stable device ID | Development mode. Applied when no policy document is found and secure boot is disabled. |
+
+**Default behavior when no policy document is present:**
+- DEV mode (secure boot disabled): `POLICY_DEV_DEFAULTS` are applied automatically.
+- Sealed mode (secure boot enabled): `POLICY_SAFE_DEFAULTS` are applied; install operations are blocked.
+
+The policy document is stored at flash offset `0x1FF000` (last 4 KB of the 2 MB firmware
+partition). In DEV mode, HMAC verification is skipped. In sealed mode, the HMAC-SHA256
+tag is verified using an embedded development key.
+
+### Step 7 — Install the publisher trust anchor
+
+To accept signed collections, place the publisher's ed25519 public key (raw 32 bytes)
+at `1:/system/pub_anchor.bin` on the device's FAT partition. The firmware reads this
+file at install time and verifies bundle signatures against it.
+
+This can be done via the USB device mode (the cartridge exposes its flash as an MSC
+drive, VID 0x1209 / PID 0x4A4C) or via provisioning tooling.
 
 ---
 
@@ -238,9 +248,9 @@ What breaks and what can be fixed:
 
 | Situation | Recovery |
 |---|---|
-| Bad firmware (soft brick) | If USB boot is still enabled: hold BOOTSEL, reflash. If USB boot is disabled: use Update service via signed firmware update bundle. |
+| Bad firmware (soft brick) | If USB boot is still enabled: hold BOOTSEL, reflash. If USB boot is disabled: use signed firmware update workflow. |
 | Lost private signing key | Cannot sign new firmware. Use a different enrolled key slot if available. Otherwise units are permanently stuck on the current firmware version. |
-| Lost OTP device secret backup | Cannot decrypt user data on affected units. Saves and profiles are unrecoverable. Can still boot and run; new data will be encrypted under the new (unchanged) OTP. |
+| Lost OTP device secret backup | Cannot decrypt user data on affected units. Saves and credentials are unrecoverable. Device can still boot and run; new data will be encrypted. |
 | Enrolled key slot compromised | Revoke the slot (OTP write marking it invalid). Units will refuse firmware signed by the revoked key on next boot. Roll out new firmware signed by a remaining valid key before revoking. |
 | All OTP key slots revoked accidentally | Device cannot boot any firmware. Unrecoverable without invasive hardware attack. |
 
@@ -255,8 +265,9 @@ Work through this before shipping any unit:
 - [ ] Secure boot enabled (`secure_boot_enabled = true`)
 - [ ] Firmware builds signed and verified on a test unit before flashing production batch
 - [ ] Policy document written and authenticated
-- [ ] `allow_unsigned_collections` set according to your distribution model
-- [ ] `require_publisher_signature` set according to your distribution model
+- [ ] `POLICY_ALLOW_UNSIGNED_COLLECTIONS` set according to your distribution model
+- [ ] `POLICY_REQUIRE_PUBLISHER_SIGNATURE` set according to your distribution model
+- [ ] Publisher trust anchor placed at `1:/system/pub_anchor.bin` (if requiring signatures)
 - [ ] SWD/debug disabled (if shipping sealed units)
 - [ ] USB boot disabled only if signed firmware update workflow is tested and working
 - [ ] Boot key private key backed up securely (offline, multiple copies)
@@ -278,24 +289,23 @@ You can use your own key. Enroll it in Slot 1. You do not need to enroll Slot 0
 (the platform key) at all. This gives you complete independence.
 
 **What if I want to allow users to install their own collections on a production unit?**
-Set `allow_unsigned_collections: true` and `allow_user_replace_collections: true` in
-policy. Users can then install any collection they have on USB. If you also want them
-limited to your signed content only, set `require_publisher_signature: true` and
-distribute your PIC so users' cartridges trust it.
+Set `POLICY_ALLOW_UNSIGNED_COLLECTIONS` and `POLICY_ALLOW_USER_REPLACE_COLLECTIONS` in
+the policy document. Users can then install any collection they have on USB. If you also
+want them limited to your signed content only, set `POLICY_REQUIRE_PUBLISHER_SIGNATURE`
+and place your public key at `1:/system/pub_anchor.bin`.
 
-**What is the difference between the Firmware Signing Key and the Content Signing Key?**
+**What is the difference between the Firmware Signing Key and the Publisher Signing Key?**
 The FSK signs firmware images and is verified by the RP2350 boot ROM against OTP
-fingerprints. The CSK signs collection bundles and is verified by the firmware against
-a Publisher Identity Certificate. They must be different keys — a CSK must not be able
-to sign firmware.
+fingerprints. The publisher signing key signs collection bundles and is verified by
+the firmware against the public key in `pub_anchor.bin`. They must be different keys —
+a publisher signing key must not be able to sign firmware.
 
 **What happens if I ship a unit without programming the OTP device secret?**
-It works fine, but user data (saves, profiles, credentials) is stored without
-hardware-rooted encryption. If someone removes the flash chip, they can read the data.
+It works fine, but user data (saves, credentials) is stored without hardware-rooted
+encryption. If someone removes the flash chip, they can read the data.
 For cartridges that store sensitive user data, program the device secret.
 
 **Can I build a board without the ESP32 (no WiFi)?**
 Yes. The board descriptor declares `net.wifi` as a hardware capability that requires
 safe probing. If no ESP32 is present, the probe fails and the capability is not
-activated. Online features (leaderboards, profile sync) will not be available, but
-all local features work.
+activated. All local features work.
