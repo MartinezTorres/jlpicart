@@ -7,12 +7,13 @@
 #   fw/.pico-sdk/toolchain/14_2_Rel1/ — ARM GNU toolchain (arm-none-eabi-gcc)
 #   fw/.pico-sdk/picotool/2.2.0/     — picotool binary
 #
-# Version and hash information is read from tools/lock.yml.
+# Version and hash information is read from fw/ext/lock.yml.
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOCK="${REPO_ROOT}/tools/lock.yml"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+LOCK="${SCRIPT_DIR}/lock.yml"
 PICO_SDK_DIR="${REPO_ROOT}/fw/.pico-sdk"
 
 # ---------------------------------------------------------------------------
@@ -21,7 +22,7 @@ PICO_SDK_DIR="${REPO_ROOT}/fw/.pico-sdk"
 
 lock_get() {
     # lock_get <section> <key>
-    # Extracts a value from a named section in tools/lock.yml.
+    # Extracts a value from a named section in fw/ext/lock.yml.
     local section="$1" key="$2"
     awk "/^${section}:/{f=1} f && /^  ${key}:/{print \$2; exit}" "$LOCK" | tr -d '"'
 }

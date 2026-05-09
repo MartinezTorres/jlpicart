@@ -1,6 +1,2 @@
 discard
 case/*
-
-# Populated tool directories (fetched by tools/ scripts)
-tools/sdcc/
-tools/openmsx/

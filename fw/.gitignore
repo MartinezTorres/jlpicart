@@ -43,8 +43,5 @@ tests/host/CTestTestfile.cmake
 tests/host/Makefile
 tests/host/Testing/
 
-# SDCC toolchain (downloaded by tools/get_sdcc.sh; not tracked)
-ext/sdcc/
-
-# openMSX binary (built by tools/build_openmsx.sh; not tracked)
-ext/openmsx/
+# Downloaded/built binaries (not tracked)
+ext/bin/

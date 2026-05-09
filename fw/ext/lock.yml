@@ -1,18 +1,35 @@
-# fw/ext/lock.yml — pinned external tool versions
-# Run the corresponding ext/get_*.sh / ext/build_*.sh scripts to set up tools locally.
-# SHA256 fields are filled on first download by get_sdcc.sh.
+# fw/ext/lock.yml — single source of truth for all pinned tool versions
+# All scripts and CI workflows read from this file.
+
+pico_sdk:
+  version: "2.2.0"
+  url: "https://github.com/raspberrypi/pico-sdk/archive/refs/tags/2.2.0.tar.gz"
+  sha256: "dbd8db79015aced4ef35cbaa88051b0d451775010d20202e1c7d2bee69c25b35"
+  extract_subdir: "pico-sdk-2.2.0"
+  dest: "fw/.pico-sdk/sdk/2.2.0"
+
+arm_toolchain:
+  version: "14_2_Rel1"
+  url: "https://developer.arm.com/-/media/Files/downloads/gnu/14.2.rel1/binrel/arm-gnu-toolchain-14.2.rel1-x86_64-arm-none-eabi.tar.xz"
+  sha256: "62a63b981fe391a9cbad7ef51b17e49aeaa3e7b0d029b36ca1e9c3b2a9b78823"
+  extract_subdir: "arm-gnu-toolchain-14.2.rel1-x86_64-arm-none-eabi"
+  dest: "fw/.pico-sdk/toolchain/14_2_Rel1"
+
+picotool:
+  version: "2.2.0"
+  url: "https://github.com/raspberrypi/picotool/archive/refs/tags/2.2.0.tar.gz"
+  sha256: "aab3d82fb1e576d97156ddcb962ae7cf290518a5f20d9002ac27e628dc657620"
+  extract_subdir: "picotool-2.2.0"
+  dest: "fw/.pico-sdk/picotool/2.2.0"
 
 sdcc:
-  version: "4.4.0"
-  platform: linux-amd64
-  url: "https://sourceforge.net/projects/sdcc/files/sdcc-linux-amd64/4.4.0/sdcc-4.4.0-amd64-unknown-linux2.5.tar.bz2/download"
-  # Fill after first download: run get_sdcc.sh and paste the printed sha256 here.
-  sha256: ""
+  version: "4.5.0"
+  url: "https://sourceforge.net/projects/sdcc/files/sdcc-linux-amd64/4.5.0/sdcc-4.5.0-amd64-unknown-linux2.5.tar.bz2/download"
+  sha256: "3395722e3f8a31ce6a14c75fc419f586a3573b939f85efee5c88cdd35820a240"
+  dest: "fw/ext/bin/sdcc"
 
 openmsx:
-  # Pinned to RELEASE_21_0 (commit cb61db762aba16752ff649990bf85e40627777af).
-  # Submodule at: third_party/openMSX
-  # Build with: bash fw/ext/build_openmsx.sh
-  # Binary installed at: fw/ext/openmsx/bin/openmsx
-  tag: "RELEASE_21_0"
+  version: "RELEASE_21_0"
   commit: "cb61db762aba16752ff649990bf85e40627777af"
+  submodule: "fw/ext/src/openmsx"
+  dest: "fw/ext/bin/openmsx"

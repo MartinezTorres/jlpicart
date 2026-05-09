@@ -4,6 +4,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PATCHES_DIR="${SCRIPT_DIR}/patches"
+SRC_DIR="${SCRIPT_DIR}/src"
 
 apply_patches_to() {
     local submodule_path="$1"
@@ -26,7 +27,7 @@ apply_patches_to() {
     done
 }
 
-apply_patches_to "${SCRIPT_DIR}/tinyusb"          "${PATCHES_DIR}/tinyusb"
-apply_patches_to "${SCRIPT_DIR}/esp32/esp-at"     "${PATCHES_DIR}/esp-at"
+apply_patches_to "${SRC_DIR}/tinyusb"  "${PATCHES_DIR}/tinyusb"
+apply_patches_to "${SRC_DIR}/esp-at"  "${PATCHES_DIR}/esp-at"
 
 echo "All patches applied."

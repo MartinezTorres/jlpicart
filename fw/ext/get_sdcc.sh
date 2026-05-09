@@ -1,23 +1,24 @@
 #!/usr/bin/env bash
-# get_sdcc.sh — download and unpack pinned SDCC Z80 compiler to fw/ext/sdcc/
+# get_sdcc.sh — download and unpack pinned SDCC Z80 compiler to fw/ext/bin/sdcc/
 # Usage: bash fw/ext/get_sdcc.sh [--force]
 #
-# On first run: downloads, unpacks, prints SHA256, updates lock.yml.
+# On first run: downloads, unpacks, verifies SHA256.
 # On subsequent runs: verifies SHA256, no-ops if already present.
 # With --force: re-downloads even if already present.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOCK_YML="${SCRIPT_DIR}/lock.yml"
-SDCC_DIR="${SCRIPT_DIR}/sdcc"
+SDCC_DIR="${REPO_ROOT}/fw/ext/bin/sdcc"
 SDCC_BIN="${SDCC_DIR}/bin/sdcc"
 TMP_DIR="${SCRIPT_DIR}/.sdcc_tmp"
 
 # Parse lock.yml (minimal: grep for the fields we need).
-SDCC_VERSION=$(grep 'version:' "$LOCK_YML" | head -1 | awk -F'"' '{print $2}')
-SDCC_URL=$(grep 'url:' "$LOCK_YML" | head -1 | awk -F'"' '{print $2}')
-SDCC_SHA256=$(grep 'sha256:' "$LOCK_YML" | head -1 | awk -F'"' '{print $2}')
+SDCC_VERSION=$(awk '/^sdcc:/{f=1} f && /^  version:/{print $2; exit}' "$LOCK_YML" | tr -d '"')
+SDCC_URL=$(awk '/^sdcc:/{f=1} f && /^  url:/{print $2; exit}' "$LOCK_YML" | tr -d '"')
+SDCC_SHA256=$(awk '/^sdcc:/{f=1} f && /^  sha256:/{print $2; exit}' "$LOCK_YML" | tr -d '"')
 
 FORCE=0
 [[ "${1:-}" == "--force" ]] && FORCE=1
@@ -44,17 +45,14 @@ if [[ -n "$SDCC_SHA256" ]]; then
     if [[ "$ACTUAL_SHA256" != "$SDCC_SHA256" ]]; then
         echo "ERROR: SHA256 mismatch!" >&2
         echo "  expected: ${SDCC_SHA256}" >&2
-        echo "  actual:   ${ACTUAL_SHA256}" >&2
+        echo "  actual: ${ACTUAL_SHA256}" >&2
         rm -f "$TARBALL"
         exit 1
     fi
     echo "SHA256 verified."
 else
-    echo "WARNING: no sha256 pinned in lock.yml. Pinning now..."
-    # Update the sha256 line in lock.yml in-place.
-    sed -i "s|  sha256: \"\"|  sha256: \"${ACTUAL_SHA256}\"|" "$LOCK_YML"
-    echo "Updated lock.yml with sha256: ${ACTUAL_SHA256}"
-    echo "Commit lock.yml to freeze the pin."
+    echo "ERROR: no sha256 pinned in lock.yml." >&2
+    exit 1
 fi
 
 echo "Unpacking to ${SDCC_DIR}..."

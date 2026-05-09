@@ -1,9 +1,9 @@
-[submodule "fw/ext/tinyusb"]
-	path = fw/ext/tinyusb
+[submodule "fw/ext/src/tinyusb"]
+	path = fw/ext/src/tinyusb
 	url = https://github.com/hathach/tinyusb.git
-[submodule "fw/ext/esp32/esp-at"]
-	path = fw/ext/esp32/esp-at
+[submodule "fw/ext/src/esp-at"]
+	path = fw/ext/src/esp-at
 	url = https://github.com/espressif/esp-at.git
-[submodule "third_party/openMSX"]
-	path = third_party/openMSX
+[submodule "fw/ext/src/openmsx"]
+	path = fw/ext/src/openmsx
 	url = https://github.com/openMSX/openMSX.git

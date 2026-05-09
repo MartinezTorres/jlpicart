@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# fw/ext/build_openmsx.sh — build openMSX from the pinned third_party submodule.
+# fw/ext/build_openmsx.sh — build openMSX from the pinned submodule.
 #
-# Invoke from the fw/ root or repo root:
+# Invoke from the repo root:
 #   bash fw/ext/build_openmsx.sh
 #
 # Installs the binary at:
-#   fw/ext/openmsx/bin/openmsx
+#   fw/ext/bin/openmsx/bin/openmsx
 #
 # System prerequisites (install with apt before running):
 #   libsdl2-dev libsdl2-ttf-dev libpng-dev libogg-dev libvorbis-dev
 #   libtcl-dev libao-dev zlib1g-dev libfreetype6-dev python3 g++ make
 #
-# libsdl2-ttf-dev is required for the emulation core (OSD text rendering).
 # libglew-dev headers are required to compile (RELEASE_21_0 includes GL/glew.h
 # unconditionally).  If libglew-dev is not installed, this script downloads and
 # extracts it without sudo (apt-get download + dpkg -x) and exposes the headers
@@ -22,10 +21,10 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-FW_ROOT="$REPO_ROOT/fw"
-OPENMSX_SRC="$REPO_ROOT/third_party/openMSX"
-OPENMSX_DEST="$FW_ROOT/ext/openmsx"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+OPENMSX_SRC="$REPO_ROOT/fw/ext/src/openmsx"
+OPENMSX_DEST="$REPO_ROOT/fw/ext/bin/openmsx"
 OPENMSX_BIN="$OPENMSX_DEST/bin/openmsx"
 
 FORCE=0
@@ -45,8 +44,8 @@ fi
 
 # --- Guard: submodule initialised ---
 if [[ ! -f "$OPENMSX_SRC/GNUmakefile" ]]; then
-    echo "build_openmsx.sh: third_party/openMSX not populated." >&2
-    echo "  Run: git submodule update --init third_party/openMSX" >&2
+    echo "build_openmsx.sh: openMSX submodule not populated." >&2
+    echo "  Run: git submodule update --init fw/ext/src/openmsx" >&2
     exit 1
 fi
 
@@ -82,6 +81,7 @@ echo ""
 # exists, make skips the probe step and proceeds to compilation, which uses
 # CPATH (set below) to find GL/glew.h.  The libGLEW runtime (libGLEW.so.2.2)
 # is typically already installed as a system transitive dependency.
+GLEW_TMPDIR=""
 if ! find /usr/include /usr/local/include -name "glew.h" 2>/dev/null | grep -q .; then
     GLEW_TMPDIR="$OPENMSX_DEST/glew-bootstrap"
     if [[ ! -f "$GLEW_TMPDIR/usr/include/GL/glew.h" ]]; then
@@ -120,7 +120,7 @@ NCPU=$(nproc 2>/dev/null || echo 4)
 # has highest priority; main.mk's LDFLAGS:= assignment is overridden by this).
 # LDFLAGS entries are prefixed with -Wl, by main.mk before passing to g++,
 # so -L works correctly for the linker.
-if [[ -n "${GLEW_TMPDIR:-}" ]]; then
+if [[ -n "$GLEW_TMPDIR" ]]; then
     make -C "$OPENMSX_SRC" -j"$NCPU" \
         LDFLAGS="-L$GLEW_TMPDIR/usr/lib/x86_64-linux-gnu"
 else

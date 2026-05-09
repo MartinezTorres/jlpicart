@@ -240,7 +240,7 @@ endforeach()
 set(STUB_DIR    "${CMAKE_CURRENT_LIST_DIR}/src/msx/menu/stub")
 set(STUB_BIN    "${STUB_DIR}/stub.bin")
 set(STUB_BIN_H  "${CMAKE_CURRENT_LIST_DIR}/src/msx/menu/menu_stub_bin.h")
-set(SDCC_BIN    "${CMAKE_CURRENT_LIST_DIR}/ext/sdcc/bin/sdcc")
+set(SDCC_BIN    "${CMAKE_CURRENT_LIST_DIR}/ext/bin/sdcc/bin/sdcc")
 
 if(EXISTS "${SDCC_BIN}")
     add_custom_command(

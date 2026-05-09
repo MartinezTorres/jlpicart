@@ -5,10 +5,10 @@ name: Firmware build
 on:
   push:
     branches: [ main ]
-    paths: [ 'fw/**', 'tools/**', '.github/workflows/fw-build.yml' ]
+    paths: [ 'fw/**', '.github/workflows/fw-build.yml' ]
   pull_request:
     branches: [ main ]
-    paths: [ 'fw/**', 'tools/**', '.github/workflows/fw-build.yml' ]
+    paths: [ 'fw/**', '.github/workflows/fw-build.yml' ]
   workflow_dispatch:
 
 jobs:
@@ -26,10 +26,10 @@ jobs:
           submodules: recursive
 
       - name: Fetch Pico SDK + toolchain
-        run: bash tools/fetch_pico_sdk.sh
+        run: bash fw/ext/fetch_pico_sdk.sh
 
       - name: Fetch SDCC (Z80 compiler)
-        run: bash tools/fetch_sdcc.sh
+        run: bash fw/ext/get_sdcc.sh
 
       - name: Configure firmware
         run: |
@@ -68,7 +68,6 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # openmsx — build the MSX emulator (slow, separate job)
-  # Not needed until Stage 5 (menu stub ROM testing).
   # ---------------------------------------------------------------------------
   openmsx:
     name: Build openMSX
@@ -81,7 +80,7 @@ jobs:
           submodules: false
 
       - name: Checkout openMSX submodule
-        run: git submodule update --init third_party/openMSX
+        run: git submodule update --init fw/ext/src/openmsx
 
       - name: Install openMSX build dependencies
         run: |
@@ -92,10 +91,10 @@ jobs:
             libtheora-dev zlib1g-dev
 
       - name: Build openMSX
-        run: bash tools/build_openmsx.sh
+        run: bash fw/ext/build_openmsx.sh
 
       - name: Verify openMSX binary
-        run: tools/openmsx/bin/openmsx --version
+        run: fw/ext/bin/openmsx/bin/openmsx --version
 
       - name: Upload openMSX artifact
         uses: actions/upload-artifact@v4
@@ -103,7 +102,7 @@ jobs:
           name: openmsx
           # Upload the full install tree (bin/ + share/) so the test job can
           # use it without needing to re-check out the openMSX submodule.
-          path: tools/openmsx/
+          path: fw/ext/bin/openmsx/
 
   # ---------------------------------------------------------------------------
   # openmsx-tests — run TCL integration tests under the pinned openMSX build
@@ -124,10 +123,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: openmsx
-          path: tools/openmsx
+          path: fw/ext/bin/openmsx
 
       - name: Restore openMSX binary permissions
-        run: chmod +x tools/openmsx/bin/openmsx
+        run: chmod +x fw/ext/bin/openmsx/bin/openmsx
 
       - name: Install C-BIOS and runtime libs
         run: |
@@ -138,29 +137,29 @@ jobs:
             tcl libogg0 libvorbis0a libtheora0
           # Copy C-BIOS ROMs into the openMSX share systemroms directory so
           # openMSX finds them via OPENMSX_SYSTEM_DATA.
-          mkdir -p tools/openmsx/share/systemroms
-          cp /usr/share/cbios/*.rom tools/openmsx/share/systemroms/
+          mkdir -p fw/ext/bin/openmsx/share/systemroms
+          cp /usr/share/cbios/*.rom fw/ext/bin/openmsx/share/systemroms/
 
       - name: Fetch SDCC (Z80 compiler)
-        run: bash tools/fetch_sdcc.sh
+        run: bash fw/ext/get_sdcc.sh
 
       - name: Build menupage.rom
         run: |
-          PATH="${GITHUB_WORKSPACE}/tools/sdcc/bin:$PATH" \
+          PATH="${GITHUB_WORKSPACE}/fw/ext/bin/sdcc/bin:$PATH" \
             make -C fw/src/msx/menu/stub menupage.rom
 
       - name: Verify openMSX binary
-        run: OPENMSX_SYSTEM_DATA=tools/openmsx/share tools/openmsx/bin/openmsx --version
+        run: OPENMSX_SYSTEM_DATA=fw/ext/bin/openmsx/share fw/ext/bin/openmsx/bin/openmsx --version
 
       - name: Run test_menu_stub_basic
         run: |
-          OPENMSX_BIN="${GITHUB_WORKSPACE}/tools/openmsx/bin/openmsx" \
-          OPENMSX_SYSTEM_DATA="${GITHUB_WORKSPACE}/tools/openmsx/share" \
+          OPENMSX_BIN="${GITHUB_WORKSPACE}/fw/ext/bin/openmsx/bin/openmsx" \
+          OPENMSX_SYSTEM_DATA="${GITHUB_WORKSPACE}/fw/ext/bin/openmsx/share" \
             bash fw/tests/openMSX/run_test.sh fw/tests/openMSX/test_menu_stub_basic.tcl
 
       - name: Run test_menu_bus
         run: |
-          OPENMSX_BIN="${GITHUB_WORKSPACE}/tools/openmsx/bin/openmsx" \
-          OPENMSX_SYSTEM_DATA="${GITHUB_WORKSPACE}/tools/openmsx/share" \
+          OPENMSX_BIN="${GITHUB_WORKSPACE}/fw/ext/bin/openmsx/bin/openmsx" \
+          OPENMSX_SYSTEM_DATA="${GITHUB_WORKSPACE}/fw/ext/bin/openmsx/share" \
           TEST_MACHINE=msx1_jlpicart_bus \
             bash fw/tests/openMSX/run_test.sh fw/tests/openMSX/test_menu_bus.tcl

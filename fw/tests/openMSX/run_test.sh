@@ -9,7 +9,7 @@
 #   bash fw/tests/openMSX/run_test.sh test_menu_stub_basic.tcl -machine Philips_VG_8020
 #
 # Environment (override defaults):
-#   OPENMSX_BIN     path to openmsx binary (default: fw/ext/openmsx/bin/openmsx)
+#   OPENMSX_BIN     path to openmsx binary (default: fw/ext/bin/openmsx/bin/openmsx)
 #   MENUPAGE_ROM    path to menupage.rom (default: fw/src/msx/menu/stub/menupage.rom)
 #   TEST_MACHINE    openMSX machine name (default: msx1_jlpicart)
 #   TEST_TIMEOUT    seconds before FAIL (default: 30)
@@ -43,7 +43,7 @@ fi
 TEST_SCRIPT="$(realpath "$TEST_SCRIPT")"
 
 # --- Configuration with overridable defaults ---
-OPENMSX_BIN="${OPENMSX_BIN:-$FW_ROOT/ext/openmsx/bin/openmsx}"
+OPENMSX_BIN="${OPENMSX_BIN:-$FW_ROOT/ext/bin/openmsx/bin/openmsx}"
 MENUPAGE_ROM="${MENUPAGE_ROM:-$FW_ROOT/src/msx/menu/stub/menupage.rom}"
 TEST_MACHINE="${TEST_MACHINE:-msx1_jlpicart}"
 TEST_TIMEOUT="${TEST_TIMEOUT:-30}"
@@ -76,7 +76,7 @@ export OPENMSX_USER_DATA="$SCRIPT_DIR/fixtures"
 # C-BIOS ROMs are looked up in systemroms/ under both OPENMSX_USER_DATA and
 # OPENMSX_SYSTEM_DATA; the system cbios package (/usr/share/openmsx/systemroms)
 # is the fallback if the pinned share has no systemroms.
-OPENMSX_SRC_SHARE="$REPO_ROOT/third_party/openMSX/share"
+OPENMSX_SRC_SHARE="$REPO_ROOT/fw/ext/src/openmsx/share"
 if [[ -d "$OPENMSX_SRC_SHARE" ]]; then
     export OPENMSX_SYSTEM_DATA="${OPENMSX_SYSTEM_DATA:-$OPENMSX_SRC_SHARE}"
 else
