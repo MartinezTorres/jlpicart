@@ -17,7 +17,7 @@ set(PICO_BOARD_HEADER_DIRS ${CMAKE_CURRENT_LIST_DIR}/src/platform)
 
 get_filename_component(PICO_SDK_PATH "${PICO_SDK_PATH}" REALPATH BASE_DIR "${CMAKE_BINARY_DIR}")
 if (NOT EXISTS "${PICO_SDK_PATH}/pico_sdk_init.cmake")
-    message(FATAL_ERROR "Pico SDK not found at '${PICO_SDK_PATH}' — populate ext/tools/pico-sdk/ first")
+    message(FATAL_ERROR "Pico SDK not found at '${PICO_SDK_PATH}' — run fw/util/get_deps.sh first")
 endif()
 set(PICO_SDK_PATH "${PICO_SDK_PATH}" CACHE PATH "Path to the Raspberry Pi Pico SDK" FORCE)
 include("${PICO_SDK_PATH}/pico_sdk_init.cmake")
@@ -112,7 +112,6 @@ add_executable(jlpicart
     # Collections (Stage 7 + Stage 31 signature verification)
     src/content/manifest_parser.cc
     src/content/installer.cc
-    src/content/receipts.cc
     src/content/content_store.cc
     src/content/bundle_sig_verify.cc
 

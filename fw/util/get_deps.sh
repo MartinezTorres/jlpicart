@@ -66,7 +66,8 @@ download_and_verify() {
 }
 
 extract_to() {
-    # extract_to <tarball> <format> <dest>
+    # extract_to <tarball> <format> <dest> — extract directly into dest
+    # so files inherit parent directory group and respect umask.
     # format: z (gzip), J (xz), j (bz2)
     local tarball="$1" fmt="$2" dest="$3"
     mkdir -p "$dest"
@@ -86,303 +87,296 @@ dep_done() {
 }
 
 # ---------------------------------------------------------------------------
-# Pico SDK (requires git submodules for tinyusb etc.)
+# Dependency functions
 # ---------------------------------------------------------------------------
-if [ -n "$SINGLE" ] && [ "$SINGLE" != "pico_sdk" ]; then exit 0; fi
 
-SDK_VERSION=$(lock_get pico_sdk version)
-SDK_URL=$(lock_get pico_sdk url)
-SDK_SHA=$(lock_get pico_sdk sha256)
-SDK_DEST="${REPO_ROOT}/fw/ext/tools/pico-sdk/sdk/${SDK_VERSION}"
+install_pico_sdk() {
+    local version url sha dest
+    version=$(lock_get pico_sdk version)
+    url=$(lock_get pico_sdk url)
+    sha=$(lock_get pico_sdk sha256)
+    dest="${REPO_ROOT}/fw/ext/tools/pico-sdk/sdk/${version}"
 
-if dep_done "${SDK_DEST}/pico_sdk_init.cmake"; then
-    :
-else
-    TMPFILE=$(mktemp /tmp/pico-sdk-XXXXXX.tar.gz)
-    trap 'rm -f "$TMPFILE"' EXIT
-    download_and_verify "Pico SDK ${SDK_VERSION}" "$SDK_URL" "$SDK_SHA" "$TMPFILE"
-    echo "==> Extracting Pico SDK to ${SDK_DEST}..."
-    extract_to "$TMPFILE" z "${SDK_DEST}"
+    if dep_done "${dest}/pico_sdk_init.cmake"; then
+        return
+    fi
+
+    local tmpfile
+    tmpfile=$(mktemp /tmp/pico-sdk-XXXXXX.tar.gz)
+    trap 'rm -f "$tmpfile"' EXIT
+    download_and_verify "Pico SDK ${version}" "$url" "$sha" "$tmpfile"
+    echo "==> Extracting Pico SDK to ${dest}..."
+    extract_to "$tmpfile" z "$dest"
     echo "==> Initializing Pico SDK submodules..."
-    git -C "${SDK_DEST}" submodule update --init --depth=1 2>&1 | tail -5
+    git -C "$dest" submodule update --init --depth=1 2>&1 | tail -5
     trap - EXIT
-    rm -f "$TMPFILE"
-    echo "OK: Pico SDK at ${SDK_DEST}"
-fi
+    rm -f "$tmpfile"
+    echo "OK: Pico SDK at ${dest}"
+}
 
-# ---------------------------------------------------------------------------
-# ARM toolchain
-# ---------------------------------------------------------------------------
-if [ -n "$SINGLE" ] && [ "$SINGLE" != "arm_toolchain" ]; then exit 0; fi
+install_arm_toolchain() {
+    local version url sha dest
+    version=$(lock_get arm_toolchain version)
+    url=$(lock_get arm_toolchain url)
+    sha=$(lock_get arm_toolchain sha256)
+    dest="${REPO_ROOT}/fw/ext/tools/pico-sdk/toolchain/${version}"
 
-TC_VERSION=$(lock_get arm_toolchain version)
-TC_URL=$(lock_get arm_toolchain url)
-TC_SHA=$(lock_get arm_toolchain sha256)
-TC_DEST="${REPO_ROOT}/fw/ext/tools/pico-sdk/toolchain/${TC_VERSION}"
+    if dep_done "${dest}/bin/arm-none-eabi-gcc"; then
+        return
+    fi
 
-if dep_done "${TC_DEST}/bin/arm-none-eabi-gcc"; then
-    :
-else
-    TMPFILE=$(mktemp /tmp/arm-toolchain-XXXXXX.tar.xz)
-    trap 'rm -f "$TMPFILE"' EXIT
-    download_and_verify "ARM toolchain ${TC_VERSION}" "$TC_URL" "$TC_SHA" "$TMPFILE"
-    echo "==> Extracting ARM toolchain to ${TC_DEST}..."
-    extract_to "$TMPFILE" J "${TC_DEST}"
+    local tmpfile
+    tmpfile=$(mktemp /tmp/arm-toolchain-XXXXXX.tar.xz)
+    trap 'rm -f "$tmpfile"' EXIT
+    download_and_verify "ARM toolchain ${version}" "$url" "$sha" "$tmpfile"
+    echo "==> Extracting ARM toolchain to ${dest}..."
+    extract_to "$tmpfile" J "$dest"
     trap - EXIT
-    rm -f "$TMPFILE"
-    echo "OK: ARM toolchain at ${TC_DEST}"
-fi
+    rm -f "$tmpfile"
+    echo "OK: ARM toolchain at ${dest}"
+}
 
-# ---------------------------------------------------------------------------
-# picotool (built from source)
-# ---------------------------------------------------------------------------
-if [ -n "$SINGLE" ] && [ "$SINGLE" != "picotool" ]; then exit 0; fi
+install_picotool() {
+    local version url sha dest
+    version=$(lock_get picotool version)
+    url=$(lock_get picotool url)
+    sha=$(lock_get picotool sha256)
+    dest="${REPO_ROOT}/fw/ext/tools/pico-sdk/picotool/${version}"
+    local sdk_dest="${REPO_ROOT}/fw/ext/tools/pico-sdk/sdk/$(lock_get pico_sdk version)"
 
-PT_VERSION=$(lock_get picotool version)
-PT_URL=$(lock_get picotool url)
-PT_SHA=$(lock_get picotool sha256)
-PT_DEST="${REPO_ROOT}/fw/ext/tools/pico-sdk/picotool/${PT_VERSION}"
+    if dep_done "${dest}/picotool"; then
+        return
+    fi
 
-if dep_done "${PT_DEST}/picotool"; then
-    :
-else
-    TMPFILE=$(mktemp /tmp/picotool-XXXXXX.tar.gz)
-    TMPDIR=$(mktemp -d /tmp/picotool-src-XXXXXX)
-    trap 'rm -f "$TMPFILE"; rm -rf "$TMPDIR"' EXIT
-    download_and_verify "picotool ${PT_VERSION}" "$PT_URL" "$PT_SHA" "$TMPFILE"
+    local tmpfile tmpdir
+    tmpfile=$(mktemp /tmp/picotool-XXXXXX.tar.gz)
+    tmpdir=$(mktemp -d /tmp/picotool-src-XXXXXX)
+    trap 'rm -f "$tmpfile"; rm -rf "$tmpdir"' EXIT
+    download_and_verify "picotool ${version}" "$url" "$sha" "$tmpfile"
     echo "==> Building picotool..."
-    extract_to "$TMPFILE" z "${TMPDIR}"
-    mkdir -p "${TMPDIR}/build"
-    cmake -S "$TMPDIR" -B "${TMPDIR}/build" \
+    extract_to "$tmpfile" z "$tmpdir"
+    mkdir -p "${tmpdir}/build"
+    cmake -S "$tmpdir" -B "${tmpdir}/build" \
         -DCMAKE_BUILD_TYPE=Release \
-        -DPICO_SDK_PATH="${SDK_DEST}" \
+        -DPICO_SDK_PATH="$sdk_dest" \
         -DFETCHCONTENT_FULLY_DISCONNECTED=OFF \
-        -Wno-dev -DCMAKE_INSTALL_PREFIX="${PT_DEST}" 2>&1 | tail -5
-    make -C "${TMPDIR}/build" -j"$(nproc)" 2>&1 | tail -5
-    mkdir -p "${PT_DEST}"
-    cp "${TMPDIR}/build/picotool" "${PT_DEST}/picotool"
+        -Wno-dev -DCMAKE_INSTALL_PREFIX="$dest" 2>&1 | tail -5
+    make -C "${tmpdir}/build" -j"$(nproc)" 2>&1 | tail -5
+    mkdir -p "$dest"
+    cp "${tmpdir}/build/picotool" "${dest}/picotool"
     trap - EXIT
-    rm -f "$TMPFILE"
-    rm -rf "$TMPDIR"
-    echo "OK: picotool at ${PT_DEST}/picotool"
-fi
+    rm -f "$tmpfile"
+    rm -rf "$tmpdir"
+    echo "OK: picotool at ${dest}/picotool"
+}
 
-# ---------------------------------------------------------------------------
-# SDCC
-# ---------------------------------------------------------------------------
-if [ -n "$SINGLE" ] && [ "$SINGLE" != "sdcc" ]; then exit 0; fi
+install_sdcc() {
+    local version url sha dest
+    version=$(lock_get sdcc version)
+    url=$(lock_get sdcc url)
+    sha=$(lock_get sdcc sha256)
+    dest="${REPO_ROOT}/fw/ext/bin/sdcc"
 
-SDCC_VERSION=$(lock_get sdcc version)
-SDCC_URL=$(lock_get sdcc url)
-SDCC_SHA=$(lock_get sdcc sha256)
-SDCC_DEST="${REPO_ROOT}/fw/ext/bin/sdcc"
+    if dep_done "${dest}/bin/sdcc"; then
+        return
+    fi
 
-if dep_done "${SDCC_DEST}/bin/sdcc"; then
-    :
-else
-    TMPFILE=$(mktemp /tmp/sdcc-XXXXXX.tar.bz2)
-    TMPDIR=$(mktemp -d /tmp/sdcc-src-XXXXXX)
-    trap 'rm -f "$TMPFILE"; rm -rf "$TMPDIR"' EXIT
-    download_and_verify "SDCC ${SDCC_VERSION}" "$SDCC_URL" "$SDCC_SHA" "$TMPFILE"
-    echo "==> Extracting SDCC to ${SDCC_DEST}..."
-    tar -xjf "$TMPFILE" -C "$TMPDIR"
-    EXTRACTED=$(ls -d "${TMPDIR}"/sdcc-*/ 2>/dev/null | head -1)
-    mkdir -p "${SDCC_DEST}"
-    cp -a "${EXTRACTED}/." "${SDCC_DEST}/"
+    local tmpfile
+    tmpfile=$(mktemp /tmp/sdcc-XXXXXX.tar.bz2)
+    trap 'rm -f "$tmpfile"' EXIT
+    download_and_verify "SDCC ${version}" "$url" "$sha" "$tmpfile"
+    echo "==> Extracting SDCC to ${dest}..."
+    extract_to "$tmpfile" j "$dest"
     trap - EXIT
-    rm -f "$TMPFILE"
-    rm -rf "$TMPDIR"
-    echo "OK: SDCC at ${SDCC_DEST}"
-fi
+    rm -f "$tmpfile"
+    echo "OK: SDCC at ${dest}"
+}
 
-# ---------------------------------------------------------------------------
-# tinyusb (with local patches)
-# ---------------------------------------------------------------------------
-if [ -n "$SINGLE" ] && [ "$SINGLE" != "tinyusb" ]; then exit 0; fi
+install_tinyusb() {
+    local version url sha dest patches
+    version=$(lock_get tinyusb version)
+    url=$(lock_get tinyusb url)
+    sha=$(lock_get tinyusb sha256)
+    dest="${REPO_ROOT}/fw/ext/src/tinyusb"
+    patches="$(lock_get tinyusb patches)"
 
-TU_VERSION=$(lock_get tinyusb version)
-TU_URL=$(lock_get tinyusb url)
-TU_SHA=$(lock_get tinyusb sha256)
-TU_DEST="${REPO_ROOT}/fw/ext/src/tinyusb"
-TU_PATCHES=$(lock_get tinyusb patches)
+    if dep_done "${dest}/src/tusb.c"; then
+        echo "  (patches may need re-applying if tinyusb was updated)"
+        return
+    fi
 
-if dep_done "${TU_DEST}/src/tusb.c"; then
-    echo "  (patches may need re-applying if tinyusb was updated)"
-else
-    TMPFILE=$(mktemp /tmp/tinyusb-XXXXXX.tar.gz)
-    TMPDIR=$(mktemp -d /tmp/tinyusb-src-XXXXXX)
-    trap 'rm -f "$TMPFILE"; rm -rf "$TMPDIR"' EXIT
-    download_and_verify "tinyusb ${TU_VERSION}" "$TU_URL" "$TU_SHA" "$TMPFILE"
-    echo "==> Extracting tinyusb to ${TU_DEST}..."
-    extract_to "$TMPFILE" z "${TMPDIR}"
-    rm -rf "${TU_DEST}"
-    mv "${TMPDIR}" "${TU_DEST}"
-    # Apply local patches
-    if [ -n "$TU_PATCHES" ] && [ -d "$TU_PATCHES" ]; then
+    local tmpfile
+    tmpfile=$(mktemp /tmp/tinyusb-XXXXXX.tar.gz)
+    trap 'rm -f "$tmpfile"' EXIT
+    download_and_verify "tinyusb ${version}" "$url" "$sha" "$tmpfile"
+    echo "==> Extracting tinyusb to ${dest}..."
+    rm -rf "$dest"
+    extract_to "$tmpfile" z "$dest"
+
+    if [ -n "$patches" ] && [ -d "${REPO_ROOT}/${patches}" ]; then
         echo "==> Applying local patches..."
-        for patch in "${TU_PATCHES}"/*.patch; do
+        for patch in "${REPO_ROOT}/${patches}"/*.patch; do
             [ -f "$patch" ] || continue
             echo "  ${patch}"
-            git -C "${TU_DEST}" apply "$patch"
+            git -C "$dest" apply --recount --ignore-space-change "$patch"
         done
     fi
+
     trap - EXIT
-    rm -f "$TMPFILE"
-    echo "OK: tinyusb at ${TU_DEST}"
-fi
+    rm -f "$tmpfile"
+    echo "OK: tinyusb at ${dest}"
+}
 
-# ---------------------------------------------------------------------------
-# esp-at (source only, not built — firmware binary is separate)
-# ---------------------------------------------------------------------------
-if [ -n "$SINGLE" ] && [ "$SINGLE" != "esp_at" ]; then exit 0; fi
+install_esp_at() {
+    local version url sha dest
+    version=$(lock_get esp_at version)
+    url=$(lock_get esp_at url)
+    sha=$(lock_get esp_at sha256)
+    dest="${REPO_ROOT}/fw/ext/src/esp-at"
 
-EA_VERSION=$(lock_get esp_at version)
-EA_URL=$(lock_get esp_at url)
-EA_SHA=$(lock_get esp_at sha256)
-EA_DEST="${REPO_ROOT}/fw/ext/src/esp-at"
+    if dep_done "${dest}/README.md"; then
+        return
+    fi
 
-if dep_done "${EA_DEST}/README.md"; then
-    :
-else
-    TMPFILE=$(mktemp /tmp/esp-at-XXXXXX.tar.gz)
-    TMPDIR=$(mktemp -d /tmp/esp-at-src-XXXXXX)
-    trap 'rm -f "$TMPFILE"; rm -rf "$TMPDIR"' EXIT
-    download_and_verify "esp-at ${EA_VERSION}" "$EA_URL" "$EA_SHA" "$TMPFILE"
-    echo "==> Extracting esp-at to ${EA_DEST}..."
-    extract_to "$TMPFILE" z "${TMPDIR}"
-    rm -rf "${EA_DEST}"
-    mv "${TMPDIR}" "${EA_DEST}"
+    local tmpfile
+    tmpfile=$(mktemp /tmp/esp-at-XXXXXX.tar.gz)
+    trap 'rm -f "$tmpfile"' EXIT
+    download_and_verify "esp-at ${version}" "$url" "$sha" "$tmpfile"
+    echo "==> Extracting esp-at to ${dest}..."
+    rm -rf "$dest"
+    extract_to "$tmpfile" z "$dest"
     trap - EXIT
-    rm -f "$TMPFILE"
-    echo "OK: esp-at at ${EA_DEST}"
-fi
+    rm -f "$tmpfile"
+    echo "OK: esp-at at ${dest}"
+}
 
-# ---------------------------------------------------------------------------
-# openMSX (download + build)
-# ---------------------------------------------------------------------------
-if [ -n "$SINGLE" ] && [ "$SINGLE" != "openmsx" ]; then exit 0; fi
+install_openmsx() {
+    local version url sha src dest bin
+    version=$(lock_get openmsx version)
+    url=$(lock_get openmsx url)
+    sha=$(lock_get openmsx sha256)
+    src="${REPO_ROOT}/fw/ext/src/openmsx"
+    dest="${REPO_ROOT}/fw/ext/bin/openmsx"
+    bin="${dest}/bin/openmsx"
 
-OM_VERSION=$(lock_get openmsx version)
-OM_URL=$(lock_get openmsx url)
-OM_SHA=$(lock_get openmsx sha256)
-OM_SRC="${REPO_ROOT}/fw/ext/src/openmsx"
-OM_DEST="${REPO_ROOT}/fw/ext/bin/openmsx"
-OM_BIN="${OM_DEST}/bin/openmsx"
+    if ! dep_done "${src}/GNUmakefile"; then
+        local tmpfile
+        tmpfile=$(mktemp /tmp/openmsx-XXXXXX.tar.gz)
+        trap 'rm -f "$tmpfile"' EXIT
+        download_and_verify "openMSX ${version}" "$url" "$sha" "$tmpfile"
+        echo "==> Extracting openMSX to ${src}..."
+        rm -rf "$src"
+        extract_to "$tmpfile" z "$src"
+        trap - EXIT
+        rm -f "$tmpfile"
+        echo "OK: openMSX source at ${src}"
+    fi
 
-# Download source if missing.
-if dep_done "${OM_SRC}/GNUmakefile"; then
-    :
-else
-    TMPFILE=$(mktemp /tmp/openmsx-XXXXXX.tar.gz)
-    TMPDIR=$(mktemp -d /tmp/openmsx-src-XXXXXX)
-    trap 'rm -f "$TMPFILE"; rm -rf "$TMPDIR"' EXIT
-    download_and_verify "openMSX ${OM_VERSION}" "$OM_URL" "$OM_SHA" "$TMPFILE"
-    echo "==> Extracting openMSX to ${OM_SRC}..."
-    extract_to "$TMPFILE" z "${TMPDIR}"
-    rm -rf "${OM_SRC}"
-    mv "${TMPDIR}" "${OM_SRC}"
-    trap - EXIT
-    rm -f "$TMPFILE"
-    echo "OK: openMSX source at ${OM_SRC}"
-fi
+    if dep_done "$bin"; then
+        return
+    fi
 
-# Build if binary missing.
-if dep_done "${OM_BIN}"; then
-    :
-else
-    # Check system prerequisites.
-    MISSING=()
+    local missing=()
     for hdr in SDL2/SDL.h SDL2/SDL_ttf.h png.h; do
         if ! find /usr/include /usr/local/include -name "$(basename "$hdr")" 2>/dev/null | grep -q .; then
-            MISSING+=("$hdr")
+            missing+=("$hdr")
         fi
     done
-    if [[ ${#MISSING[@]} -gt 0 ]]; then
-        echo "  openMSX build deps missing: ${MISSING[*]}"
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        echo "  openMSX build deps missing: ${missing[*]}"
         echo "  Install: sudo apt-get install libsdl2-dev libsdl2-ttf-dev libpng-dev \\"
         echo "    libogg-dev libvorbis-dev libtcl-dev libao-dev zlib1g-dev \\"
         echo "    libfreetype6-dev python3 g++ make"
-    else
-        echo "==> Building openMSX ${OM_VERSION}..."
-        # GLEW bootstrap (no sudo required).
-        GLEW_TMPDIR=""
-        if ! find /usr/include /usr/local/include -name "glew.h" 2>/dev/null | grep -q .; then
-            GLEW_TMPDIR="${OM_DEST}/glew-bootstrap"
-            if [[ ! -f "$GLEW_TMPDIR/usr/include/GL/glew.h" ]]; then
-                echo "  libglew-dev not found — downloading to $GLEW_TMPDIR (no sudo needed)..."
-                mkdir -p "$GLEW_TMPDIR"
-                (cd "$GLEW_TMPDIR" && apt-get download libglew-dev libglew2.2 libglu1-mesa-dev 2>&1 | grep -v "^$")
-                for deb in "$GLEW_TMPDIR"/*.deb; do
-                    dpkg -x "$deb" "$GLEW_TMPDIR"
-                done
-            fi
-            export CPATH="$GLEW_TMPDIR/usr/include${CPATH:+:$CPATH}"
-            PROBE_OUT="${OM_SRC}/derived/x86_64-linux-opt/config"
-            PROBE_MK="${PROBE_OUT}/probed_defs.mk"
-            if [[ ! -f "$PROBE_MK" ]]; then
-                echo "  Running openMSX probe with bootstrapped GLEW paths..."
-                mkdir -p "$PROBE_OUT"
-                (
-                    cd "$OM_SRC"
-                    LIBRARY_PATH="$GLEW_TMPDIR/usr/lib/x86_64-linux-gnu${LIBRARY_PATH:+:$LIBRARY_PATH}" \
-                    python3 build/probe.py "g++ -m64" "$PROBE_OUT" linux SYS_DYN "" 2>&1
-                    touch "$PROBE_MK"
-                )
-            fi
+        return
+    fi
+
+    echo "==> Building openMSX ${version}..."
+    local glew_tmpdir=""
+    if ! find /usr/include /usr/local/include -name "glew.h" 2>/dev/null | grep -q .; then
+        glew_tmpdir="${dest}/glew-bootstrap"
+        if [[ ! -f "$glew_tmpdir/usr/include/GL/glew.h" ]]; then
+            echo "  libglew-dev not found — downloading to $glew_tmpdir (no sudo needed)..."
+            mkdir -p "$glew_tmpdir"
+            (cd "$glew_tmpdir" && apt-get download libglew-dev libglew2.2 libglu1-mesa-dev 2>&1 | grep -v "^$")
+            for deb in "$glew_tmpdir"/*.deb; do
+                dpkg -x "$deb" "$glew_tmpdir"
+            done
         fi
-        NCPU=$(nproc 2>/dev/null || echo 4)
-        if [[ -n "$GLEW_TMPDIR" ]]; then
-            make -C "$OM_SRC" -j"$NCPU" LDFLAGS="-L$GLEW_TMPDIR/usr/lib/x86_64-linux-gnu"
-        else
-            make -C "$OM_SRC" -j"$NCPU"
-        fi
-        # Locate and install binary.
-        BUILT_BIN=""
-        if [[ -x "$OM_SRC/derived/openmsx" ]]; then
-            BUILT_BIN="$OM_SRC/derived/openmsx"
-        else
-            BUILT_BIN="$(find "$OM_SRC/derived" -maxdepth 3 -name "openmsx" -type f 2>/dev/null | head -1)"
-        fi
-        if [[ -n "$BUILT_BIN" ]] && [[ -x "$BUILT_BIN" ]]; then
-            mkdir -p "${OM_DEST}/bin"
-            cp -f "$BUILT_BIN" "$OM_BIN"
-            chmod +x "$OM_BIN"
-            echo "OK: openMSX binary at ${OM_BIN}"
-        else
-            echo "  openMSX build succeeded but binary not found" >&2
+        export CPATH="$glew_tmpdir/usr/include${CPATH:+:$CPATH}"
+        local probe_out="${src}/derived/x86_64-linux-opt/config"
+        local probe_mk="${probe_out}/probed_defs.mk"
+        if [[ ! -f "$probe_mk" ]]; then
+            echo "  Running openMSX probe with bootstrapped GLEW paths..."
+            mkdir -p "$probe_out"
+            (
+                cd "$src"
+                LIBRARY_PATH="$glew_tmpdir/usr/lib/x86_64-linux-gnu${LIBRARY_PATH:+:$LIBRARY_PATH}" \
+                python3 build/probe.py "g++ -m64" "$probe_out" linux SYS_DYN "" 2>&1
+                touch "$probe_mk"
+            )
         fi
     fi
-fi
 
-# ---------------------------------------------------------------------------
-# esp-serial-flasher
-# ---------------------------------------------------------------------------
-if [ -n "$SINGLE" ] && [ "$SINGLE" != "esp_serial_flasher" ]; then exit 0; fi
+    local ncpu
+    ncpu=$(nproc 2>/dev/null || echo 4)
+    if [[ -n "$glew_tmpdir" ]]; then
+        make -C "$src" -j"$ncpu" LDFLAGS="-L$glew_tmpdir/usr/lib/x86_64-linux-gnu"
+    else
+        make -C "$src" -j"$ncpu"
+    fi
 
-EF_VERSION=$(lock_get esp_serial_flasher version)
-EF_URL=$(lock_get esp_serial_flasher url)
-EF_SHA=$(lock_get esp_serial_flasher sha256)
-EF_DEST="${REPO_ROOT}/fw/ext/tools/esp-serial-flasher"
+    local built_bin=""
+    if [[ -x "$src/derived/openmsx" ]]; then
+        built_bin="$src/derived/openmsx"
+    else
+        built_bin="$(find "$src/derived" -maxdepth 3 -name "openmsx" -type f 2>/dev/null | head -1)"
+    fi
+    if [[ -n "$built_bin" ]] && [[ -x "$built_bin" ]]; then
+        mkdir -p "${dest}/bin"
+        cp -f "$built_bin" "$bin"
+        chmod +x "$bin"
+        echo "OK: openMSX binary at ${bin}"
+    else
+        echo "  openMSX build succeeded but binary not found" >&2
+    fi
+}
 
-if dep_done "${EF_DEST}/README.md"; then
-    :
-else
-    TMPFILE=$(mktemp /tmp/esp-serial-flasher-XXXXXX.tar.gz)
-    TMPDIR=$(mktemp -d /tmp/esp-serial-flasher-src-XXXXXX)
-    trap 'rm -f "$TMPFILE"; rm -rf "$TMPDIR"' EXIT
-    download_and_verify "esp-serial-flasher ${EF_VERSION}" "$EF_URL" "$EF_SHA" "$TMPFILE"
-    echo "==> Extracting esp-serial-flasher to ${EF_DEST}..."
-    extract_to "$TMPFILE" z "${TMPDIR}"
-    rm -rf "${EF_DEST}"
-    mv "${TMPDIR}" "${EF_DEST}"
+install_esp_serial_flasher() {
+    local version url sha dest
+    version=$(lock_get esp_serial_flasher version)
+    url=$(lock_get esp_serial_flasher url)
+    sha=$(lock_get esp_serial_flasher sha256)
+    dest="${REPO_ROOT}/fw/ext/tools/esp-serial-flasher"
+
+    if dep_done "${dest}/README.md"; then
+        return
+    fi
+
+    local tmpfile
+    tmpfile=$(mktemp /tmp/esp-serial-flasher-XXXXXX.tar.gz)
+    trap 'rm -f "$tmpfile"' EXIT
+    download_and_verify "esp-serial-flasher ${version}" "$url" "$sha" "$tmpfile"
+    echo "==> Extracting esp-serial-flasher to ${dest}..."
+    rm -rf "$dest"
+    extract_to "$tmpfile" z "$dest"
     trap - EXIT
-    rm -f "$TMPFILE"
-    echo "OK: esp-serial-flasher at ${EF_DEST}"
-fi
+    rm -f "$tmpfile"
+    echo "OK: esp-serial-flasher at ${dest}"
+}
 
 # ---------------------------------------------------------------------------
-# Summary
+# Dispatcher
 # ---------------------------------------------------------------------------
+
+DEPS=(pico_sdk arm_toolchain picotool sdcc tinyusb esp_at openmsx esp_serial_flasher)
+
+if [ -n "$SINGLE" ]; then
+    install_"${SINGLE}"
+else
+    for dep in "${DEPS[@]}"; do
+        install_"${dep}"
+    done
+fi
 
 echo ""
 echo "==> All dependencies installed."
