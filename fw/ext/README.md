@@ -16,16 +16,14 @@ fw/ext/
 │   └── esp-serial-flasher/
 ├── patches/          — local patches applied to downloaded sources
 │   └── tinyusb/
-├── lock.yml          — pinned versions, URLs, SHA256 digests
-├── get_deps.sh       — download all dependencies → fw/ext/
-└── build_openmsx.sh  — build openMSX from src/openmsx/ → bin/openmsx/
+├── lock.yml      — pinned versions, URLs, SHA256 digests
+└── get_deps.sh   — download and install all dependencies
 ```
 
 ## Setup after clone
 
 ```bash
-bash fw/ext/get_deps.sh          # download everything
-bash fw/ext/build_openmsx.sh     # optional, for integration tests
+bash fw/ext/get_deps.sh          # download and build everything
 ```
 
 ---
@@ -90,4 +88,4 @@ python3 fw/ext/tools/at.py modify_bin --baud 115200 --tx-pin 21 --rx-pin 20 --ct
 
 - **Version:** RELEASE_21_0 (pinned in `lock.yml`)
 - **Source:** downloaded to `src/openmsx/`
-- **Build:** `bash fw/ext/build_openmsx.sh` → `bin/openmsx/`
+- **Build:** done by `get_deps.sh` if system deps are present (SDL2, etc.)

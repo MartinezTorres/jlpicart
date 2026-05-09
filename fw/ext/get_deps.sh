@@ -12,7 +12,8 @@
 # After first run:
 #   fw/ext/src/tinyusb/              — tinyusb source (with local patches)
 #   fw/ext/src/esp-at/               — esp-at source (not built)
-#   fw/ext/src/openmsx/              — openMSX source (build separately)
+#   fw/ext/src/openmsx/              — openMSX source (built by default)
+#   fw/ext/bin/openmsx/              — openMSX binary
 #   fw/ext/tools/pico-sdk/sdk/2.2.0/ — Pico SDK
 #   fw/ext/tools/pico-sdk/toolchain/ — ARM GNU toolchain
 #   fw/ext/tools/pico-sdk/picotool/  — picotool binary
@@ -20,7 +21,7 @@
 #   fw/ext/bin/sdcc/                 — SDCC Z80 compiler
 #
 # picotool is built from source and requires cmake + a C++ compiler.
-# openMSX is downloaded but not built — run build_openmsx.sh separately.
+# openMSX is built if system deps are present (SDL2, etc.).
 
 set -euo pipefail
 
@@ -257,29 +258,100 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# openMSX (source only — build with build_openmsx.sh)
+# openMSX (download + build)
 # ---------------------------------------------------------------------------
 if [ -n "$SINGLE" ] && [ "$SINGLE" != "openmsx" ]; then exit 0; fi
 
 OM_VERSION=$(lock_get openmsx version)
 OM_URL=$(lock_get openmsx url)
 OM_SHA=$(lock_get openmsx sha256)
-OM_DEST="${REPO_ROOT}/fw/ext/src/openmsx"
+OM_SRC="${REPO_ROOT}/fw/ext/src/openmsx"
+OM_DEST="${REPO_ROOT}/fw/ext/bin/openmsx"
+OM_BIN="${OM_DEST}/bin/openmsx"
 
-if dep_done "${OM_DEST}/GNUmakefile"; then
+# Download source if missing.
+if dep_done "${OM_SRC}/GNUmakefile"; then
     :
 else
     TMPFILE=$(mktemp /tmp/openmsx-XXXXXX.tar.gz)
     TMPDIR=$(mktemp -d /tmp/openmsx-src-XXXXXX)
     trap 'rm -f "$TMPFILE"; rm -rf "$TMPDIR"' EXIT
     download_and_verify "openMSX ${OM_VERSION}" "$OM_URL" "$OM_SHA" "$TMPFILE"
-    echo "==> Extracting openMSX to ${OM_DEST}..."
+    echo "==> Extracting openMSX to ${OM_SRC}..."
     extract_to "$TMPFILE" z "${TMPDIR}"
-    rm -rf "${OM_DEST}"
-    mv "${TMPDIR}" "${OM_DEST}"
+    rm -rf "${OM_SRC}"
+    mv "${TMPDIR}" "${OM_SRC}"
     trap - EXIT
     rm -f "$TMPFILE"
-    echo "OK: openMSX at ${OM_DEST}"
+    echo "OK: openMSX source at ${OM_SRC}"
+fi
+
+# Build if binary missing.
+if dep_done "${OM_BIN}"; then
+    :
+else
+    # Check system prerequisites.
+    MISSING=()
+    for hdr in SDL2/SDL.h SDL2/SDL_ttf.h png.h; do
+        if ! find /usr/include /usr/local/include -name "$(basename "$hdr")" 2>/dev/null | grep -q .; then
+            MISSING+=("$hdr")
+        fi
+    done
+    if [[ ${#MISSING[@]} -gt 0 ]]; then
+        echo "  openMSX build deps missing: ${MISSING[*]}"
+        echo "  Install: sudo apt-get install libsdl2-dev libsdl2-ttf-dev libpng-dev \\"
+        echo "    libogg-dev libvorbis-dev libtcl-dev libao-dev zlib1g-dev \\"
+        echo "    libfreetype6-dev python3 g++ make"
+    else
+        echo "==> Building openMSX ${OM_VERSION}..."
+        # GLEW bootstrap (no sudo required).
+        GLEW_TMPDIR=""
+        if ! find /usr/include /usr/local/include -name "glew.h" 2>/dev/null | grep -q .; then
+            GLEW_TMPDIR="${OM_DEST}/glew-bootstrap"
+            if [[ ! -f "$GLEW_TMPDIR/usr/include/GL/glew.h" ]]; then
+                echo "  libglew-dev not found — downloading to $GLEW_TMPDIR (no sudo needed)..."
+                mkdir -p "$GLEW_TMPDIR"
+                (cd "$GLEW_TMPDIR" && apt-get download libglew-dev libglew2.2 libglu1-mesa-dev 2>&1 | grep -v "^$")
+                for deb in "$GLEW_TMPDIR"/*.deb; do
+                    dpkg -x "$deb" "$GLEW_TMPDIR"
+                done
+            fi
+            export CPATH="$GLEW_TMPDIR/usr/include${CPATH:+:$CPATH}"
+            PROBE_OUT="${OM_SRC}/derived/x86_64-linux-opt/config"
+            PROBE_MK="${PROBE_OUT}/probed_defs.mk"
+            if [[ ! -f "$PROBE_MK" ]]; then
+                echo "  Running openMSX probe with bootstrapped GLEW paths..."
+                mkdir -p "$PROBE_OUT"
+                (
+                    cd "$OM_SRC"
+                    LIBRARY_PATH="$GLEW_TMPDIR/usr/lib/x86_64-linux-gnu${LIBRARY_PATH:+:$LIBRARY_PATH}" \
+                    python3 build/probe.py "g++ -m64" "$PROBE_OUT" linux SYS_DYN "" 2>&1
+                    touch "$PROBE_MK"
+                )
+            fi
+        fi
+        NCPU=$(nproc 2>/dev/null || echo 4)
+        if [[ -n "$GLEW_TMPDIR" ]]; then
+            make -C "$OM_SRC" -j"$NCPU" LDFLAGS="-L$GLEW_TMPDIR/usr/lib/x86_64-linux-gnu"
+        else
+            make -C "$OM_SRC" -j"$NCPU"
+        fi
+        # Locate and install binary.
+        BUILT_BIN=""
+        if [[ -x "$OM_SRC/derived/openmsx" ]]; then
+            BUILT_BIN="$OM_SRC/derived/openmsx"
+        else
+            BUILT_BIN="$(find "$OM_SRC/derived" -maxdepth 3 -name "openmsx" -type f 2>/dev/null | head -1)"
+        fi
+        if [[ -n "$BUILT_BIN" ]] && [[ -x "$BUILT_BIN" ]]; then
+            mkdir -p "${OM_DEST}/bin"
+            cp -f "$BUILT_BIN" "$OM_BIN"
+            chmod +x "$OM_BIN"
+            echo "OK: openMSX binary at ${OM_BIN}"
+        else
+            echo "  openMSX build succeeded but binary not found" >&2
+        fi
+    fi
 fi
 
 # ---------------------------------------------------------------------------
