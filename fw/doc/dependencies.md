@@ -8,9 +8,8 @@ fw/util/
 ├── lock.yml      — pinned versions, URLs, SHA256 digests
 ├── patches/      — local patches applied to downloaded sources
 │   └── tinyusb/
-├── tools/        — utility scripts
-│   └── at.py     — ESP-AT firmware modifier
-└── README.md
+└── tools/        — utility scripts
+    └── at.py     — ESP-AT firmware modifier
 
 fw/ext/            (gitignored, nuke freely)
 ├── src/           — downloaded source trees
